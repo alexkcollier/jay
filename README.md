@@ -99,7 +99,9 @@ is live at once. Every step can run again safely.
   is a repo with only an idle main checkout: both are dim, and `a` hides them until you press `a`
   again.
 - Git signs after each worktree (Nerd Font Octicons, legend at the end of `?`): uncommitted
-  changes (yellow), commits not in the default branch with their count (green), a merge into the
+  changes (yellow); when the branch is on the remote (its tracking branch, else
+  `origin/<branch>`, as for a PR) the commits to push / to pull (cyan), else the commits not in
+  the default branch (green); a merge into the
   default branch would conflict (red), safe to remove (dim check; the branch is empty or
   integrated, and its name is dim), conflicts now or a rebase/merge in progress (red). The signs
   always show: a long branch name is cut to the list's width, and the task note shows only in the

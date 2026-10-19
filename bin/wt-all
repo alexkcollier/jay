@@ -23,20 +23,36 @@ repos() {
   done | sed 's#/.git$##' | sort -u
 }
 
+# Commits to push / to pull for the worktrees of repo $1 (wt list JSON $2) whose branch has no
+# tracking branch but is on origin (pushed without -u, as a PR branch can be): one JSON object
+# per worktree path. Local refs only, no fetch.
+remote_counts() {
+  local repo=$1 path branch sha counts
+  jq -r '.items[] | select(.worktree.path != null and .upstream == null and .branch != null)
+    | [.worktree.path, .branch, .head.sha] | @tsv' "$2" | while IFS=$'\t' read -r path branch sha; do
+    git -C "$repo" rev-parse --verify -q "refs/remotes/origin/$branch" >/dev/null || continue
+    counts=$(git -C "$repo" rev-list --left-right --count "refs/remotes/origin/$branch...$sha" 2>/dev/null) || continue
+    jq -nc --arg p "$path" --argjson pull "${counts%%[[:space:]]*}" --argjson push "${counts##*[[:space:]]}" \
+      '{path: $p, push: $push, pull: $pull}'
+  done
+}
+
 claude agents --json --all >"$tmp/agents.json" 2>/dev/null || echo '[]' >"$tmp/agents.json" &
 i=0
 while IFS= read -r repo; do
   i=$((i + 1))
   { printf '%s\t%s\n' "$repo" "$(wtl_client "$repo")" >"$tmp/$i.meta"
-    wt -C "$repo" list --format json >"$tmp/$i.json" 2>/dev/null || echo '{"items":[]}' >"$tmp/$i.json"; } &
+    wt -C "$repo" list --format json >"$tmp/$i.json" 2>/dev/null || echo '{"items":[]}' >"$tmp/$i.json"
+    remote_counts "$repo" "$tmp/$i.json" >"$tmp/$i.remote"; } &
 done < <(repos)
 wait
 
 rows=$(
   for meta in "$tmp"/*.meta; do
     IFS=$'\t' read -r repo client <"$meta"
-    jq -c --arg repo "$(basename "$repo")" --arg client "$client" '
-      .items[] | select(.worktree.path != null) | {
+    jq -c --arg repo "$(basename "$repo")" --arg client "$client" --slurpfile remote "${meta%.meta}.remote" '
+      ($remote | map({(.path): .}) | add // {}) as $origin
+      | .items[] | select(.worktree.path != null) | $origin[.worktree.path] as $o | {
         client: $client, repo: $repo, branch: (.branch // "(detached)"),
         path: .worktree.path, main: (.worktree.main // false),
         symbols: (.display.symbols // ""),
@@ -46,7 +62,9 @@ rows=$(
           untracked: (.worktree.changes.untracked // false), conflicted: (.worktree.changes.conflicted // false),
           operation: .worktree.operation, state: (.display.state // ""),
           ahead: (.default_branch.ahead // 0), behind: (.default_branch.behind // 0),
-          push: (.upstream.ahead // 0), pull: (.upstream.behind // 0)
+          # The branch on the remote: its tracking branch, else origin/<branch>.
+          remote: (.upstream != null or $o != null),
+          push: (.upstream.ahead // $o.push // 0), pull: (.upstream.behind // $o.pull // 0)
         },
         task: (.display.columns.Task // .vars.task // "")
       }' "${meta%.meta}.json"
