@@ -27,8 +27,8 @@ agent's turns, yazi for files). Built on [worktrunk](https://github.com/max-sixt
   width, `a` hide/show idle repos, `r` reload, `?` all keys, `q` quit.
 - The list has a heading for each repo with a `.git` folder 1–2 levels under `$WT_ROOTS`
   (default `~/Documents/projects`; `<root>/<repo>` or `<root>/<client>/<repo>`). Under it: the
-  linked worktrees, and the main checkout when an agent runs there. A repo with neither is idle:
-  a dim heading (`N` still works on it), hidden with `a` until you press `a` again.
+  main checkout, then the linked worktrees. A main checkout without an agent is idle, and so is a
+  repo with only an idle main checkout: both are dim, and `a` hides them until you press `a` again.
 - Panes (in `~/.config/zellij/config.kdl`, all sessions): `Ctrl g` then `h`/`l` column left/right,
   `1`/`2`/`3` list/middle/right column, `;` last pane.
 - One pane per column: a picked agent covers the hub Claude, files (yazi) cover review. Leave
