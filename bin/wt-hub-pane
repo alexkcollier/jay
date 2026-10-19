@@ -5,8 +5,8 @@
 # agent:  `claude attach` on the picked agent. It covers the hub Claude; when you leave the
 #         agent, the pane closes and the hub Claude comes back.
 # review: tuicr on the session's turn chain (refs/wt-turns/<session8>), else the newest chain in
-#         the worktree, else tuicr's own target picker. q in tuicr starts it again (back to
-#         the picker or the full chain).
+#         the worktree, else tuicr's own target picker. A chain opens on its last turn; `(`
+#         shows all turns. q in tuicr starts it again (back to the picker or the last turn).
 # files:  yazi in the worktree. It covers review; quit yazi and review comes back.
 set -uo pipefail
 export PATH="$HOME/.local/share/mise/shims:/opt/homebrew/bin:$PATH"
@@ -51,6 +51,22 @@ chain() {
     done
 }
 
+# tuicr opens a turn chain with all turns selected and has no option to start on the newest;
+# `(` selects it (and pressed again, all turns). Wait until the review shows "N commits" in its
+# header, then type `(` into this pane. A retarget kills this helper with tuicr.
+select_last_turn() {
+  local pane="terminal_${ZELLIJ_PANE_ID:-}" i
+  [[ -n "${ZELLIJ_PANE_ID:-}" ]] || return 0
+  for i in $(seq 40); do
+    sleep 0.25
+    [[ "$(target)" == "$1" ]] || return 0
+    if zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" 2>/dev/null | head -3 | grep -qE '· [0-9]+ commits ·'; then
+      zellij -s "$WT_HUB_SESSION" action write-chars -p "$pane" '(' >/dev/null 2>&1
+      return 0
+    fi
+  done
+}
+
 # Run the role's program for target line $1 in the foreground.
 run() {
   local id path session
@@ -64,6 +80,9 @@ run() {
       cd "$path" || return
       session=$(chain "$session")
       if [[ -n "$session" ]]; then
+        if (($(git rev-list --count "refs/wt-turns/$session/base..refs/wt-turns/$session/head") > 1)); then
+          select_last_turn "$1" &
+        fi
         tuicr --no-update-check -r "refs/wt-turns/$session/base..refs/wt-turns/$session/head"
       else
         tuicr --no-update-check
