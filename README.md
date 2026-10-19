@@ -24,7 +24,11 @@ agent's turns, yazi for files). Built on [worktrunk](https://github.com/max-sixt
   middle column. `n` new idle agent in the row's worktree, `N` new worktree (asks the branch) +
   idle agent (`wt new -a`); type the first prompt in the middle column. `v` review, `e` files, `o` own tab, `x` close
   viewer, `d` remove the agent (`claude rm`) or worktree (`wt remove`) after a confirm, `h`/`l`
-  width, `r` reload, `?` all keys, `q` quit.
+  width, `a` hide/show idle repos, `r` reload, `?` all keys, `q` quit.
+- The list has a heading for each repo with a `.git` folder 1–2 levels under `$WT_ROOTS`
+  (default `~/Documents/projects`; `<root>/<repo>` or `<root>/<client>/<repo>`). Under it: the
+  linked worktrees, and the main checkout when an agent runs there. A repo with neither is idle:
+  a dim heading (`N` still works on it), hidden with `a` until you press `a` again.
 - Panes (in `~/.config/zellij/config.kdl`, all sessions): `Ctrl g` then `h`/`l` column left/right,
   `1`/`2`/`3` list/middle/right column, `;` last pane.
 - One pane per column: a picked agent covers the hub Claude, files (yazi) cover review. Leave
@@ -45,4 +49,5 @@ shasum -a 256 ~/.local/share/wt-hub/zjstatus-v0.25.0.wasm  # 282ceab219e56e1908c
 On its first start zellij asks for its permissions in the bar: click the bar and press `y`.
 
 State lives in `~/.local/state/` (`wt-hub.json`, `wt-hub-<role>.target|.pane`, `wt-hub-sidebar.pct`,
+`wt-hub-sidebar.hide-idle`,
 `wt-turns/`).

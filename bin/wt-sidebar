@@ -5,12 +5,14 @@
 # review and files switch to it; "◆ hub" → the hub Claude (closes the agent viewer). Agents and
 # the hub row take the focus to the middle; Enter on a worktree takes it to review. n/N: new agent
 # here / in a new worktree  v: review  e: files  o: own Ghostty tab  x: close the agent viewer
-# d: remove the agent or worktree (asks first)  r: reload  h/l: narrower/wider  ?: keys  q: quit
+# d: remove the agent or worktree (asks first)  a: hide/show idle repos (no worktree, no agent)
+# r: reload  h/l: narrower/wider  ?: keys  q: quit
 set -uo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
 
 STATE="$HOME/.local/state"
 CACHE="$STATE/wt-worktrees.ndjson"
+HIDE_IDLE="$STATE/wt-hub-sidebar.hide-idle"
 mkdir -p "$STATE"
 
 refresh_worktrees() {
@@ -32,8 +34,10 @@ rows() {
   wtl_in_hub && inhub=true
   # The agent in the hub's middle column (empty: the hub Claude), marked with ▸ on the left.
   wtl_hub_role agent >/dev/null && shown=$(cut -f1 "$(wtl_hub_target_file agent)" 2>/dev/null)
+  local hideidle=false
+  [[ -f "$HIDE_IDLE" ]] && hideidle=true
   jq -rs --argjson agents "$agents" --arg hub "$hub" --argjson inhub "$inhub" --arg shown "$shown" \
-    --argjson now "$(date +%s)" '
+    --argjson hideidle "$hideidle" --argjson now "$(date +%s)" '
     def c($code): "\u001b[" + $code + "m";
     def age($ms): (($now - ($ms / 1000)) / 60 | floor) as $m
       | if $m < 60 then "\($m)m" elif $m < 2880 then "\($m / 60 | floor)h" else "\($m / 1440 | floor)d" end;
@@ -54,18 +58,26 @@ rows() {
     | ($ag | map(.phase)) as $phases
     | (["input", "failed", "working", "idle"] | map(. as $p | ($phases | map(select(. == $p)) | length) as $n
         | select($n > 0) | "\($p | glyph) \($n) \($p)") | join("  ")) as $summary
+    # Each repo with its rows: the linked worktrees, and the main checkout when an agent runs
+    # there. A repo without rows is idle: a dim heading, or hidden with $hideidle (key a).
+    | ($wts | map(. as $w | . + {agents: ($ag | map(select(.wt == $w.path)) | sort_by((.phase | rank), -(.startedAt // 0)))})
+        | group_by(.client + "/" + .repo | ascii_downcase)
+        | map({key: (.[0].client + "/" + .[0].repo), name: (.[0].client + " › " + .[0].repo),
+               rows: map(select((.main | not) or (.agents | length > 0)))})) as $repos
+    | ($repos | map(select(.rows == [])) | length) as $idle
     | "sum\tsum\t" + (if $summary == "" then c("2") + "No agents" + c("0") else $summary end),
       (if $inhub then "hub\thub\t" + (if $shown == "" then c("1;36") + "▸ " else "  " end)
          + c("1;36") + "◆ hub" + c("0") + c("2") + "  (this Claude)" + c("0") else empty end),
-      ($wts | map(. as $w | . + {agents: ($ag | map(select(.wt == $w.path)) | sort_by((.phase | rank), -(.startedAt // 0)))})
-        | map(select((.main | not) or (.agents | length > 0)))
-        | group_by(.client + "/" + .repo)[]
-        | (.[0].client + "/" + .[0].repo) as $key
-        | (" \tgap:" + $key + "\t ", "hdr\thdr:" + $key + "\t" + c("1;38;5;173") + .[0].client + " › " + .[0].repo + c("0")),
-          (.[] | ("wt\t" + .path + "\t " + (.branch | split("/") | last) + " " + c("2") + (.symbols | narrow)
+      ($repos[] | select(.rows != [] or ($hideidle | not))
+        | (" \tgap:" + .key + "\t ",
+           "hdr\thdr:" + .key + "\t" + (if .rows == [] then c("2") else c("1;38;5;173") end) + .name + c("0")),
+          (.rows[] | ("wt\t" + .path + "\t " + (.branch | split("/") | last) + " " + c("2") + (.symbols | narrow)
                     + (if .task != "" then " · " + (.task | narrow) else "" end) + c("0")),
                  (.agents[] | "ag\t" + .sessionId + "\t" + mark + (.phase | glyph) + " " + title + " "
                     + c("2") + (if .kind == "background" then "bg " else "" end) + age(.startedAt // 0) + c("0")))),
+      (if $hideidle and $idle > 0 then " \tgap:idle\t ",
+         "idle\tidle\t" + c("2") + "\($idle) idle repo" + (if $idle > 1 then "s" else "" end) + " hidden (a)" + c("0")
+       else empty end),
       ($ag | map(select(.wt == "")) | select(length > 0)
         | (" \tgap:other\t ", "hdr\thdr:other\t" + c("1") + "Other" + c("0")),
           (.[] | "ag\t" + .sessionId + "\t" + mark + (.phase | glyph) + " " + title + " " + c("2") + .cwd + c("0")))
@@ -184,6 +196,7 @@ v / e  review / files
 o      own Ghostty tab
 x      close the agent viewer
 d      remove agent / worktree
+a      hide / show idle repos
 r      reload   j / k  move
 h / l  narrower / wider
 q      quit     ?  fewer keys
@@ -281,8 +294,9 @@ case ${1:-} in
   --remove) shift; remove "$@"; exit 0 ;;
   --new) shift; new_agent "$@"; exit 0 ;;
   --toggle) wtl_hub_locked wtl_hub_toggle_review; exit 0 ;;
+  --idle) if [[ -f "$HIDE_IDLE" ]]; then rm -f "$HIDE_IDLE"; else : >"$HIDE_IDLE"; fi; exit 0 ;;
   --footer) shift; footer "$@"; exit 0 ;;
-  -h|--help) sed -n '2,8s/^# \{0,1\}//p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,9s/^# \{0,1\}//p' "$0"; exit 0 ;;
 esac
 
 sock="$STATE/wt-sidebar.$$.sock"
@@ -351,6 +365,7 @@ rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=
   --bind 'o:execute-silent(wt-sidebar --view open {1} {2})' \
   --bind 'v:execute-silent(wt-sidebar --view review {1} {2})' \
   --bind 't:execute-silent(wt-sidebar --toggle)' \
+  --bind 'a:execute-silent(wt-sidebar --idle)+reload-sync(wt-sidebar --rows)+clear-screen' \
   --bind 'e:execute-silent(wt-sidebar --view files {1} {2})' \
   --bind 'h:execute-silent(zellij action resize -p "$ZELLIJ_PANE_ID" decrease right)' \
   --bind 'l:execute-silent(zellij action resize -p "$ZELLIJ_PANE_ID" increase right)' \
