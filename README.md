@@ -100,7 +100,9 @@ is live at once. Every step can run again safely.
 - Git signs after each worktree (Nerd Font Octicons, legend at the end of `?`): uncommitted
   changes (yellow), commits not in the default branch with their count (green), a merge into the
   default branch would conflict (red), safe to remove (dim check; the branch is empty or
-  integrated, and its name is dim), conflicts now or a rebase/merge in progress (red).
+  integrated, and its name is dim), conflicts now or a rebase/merge in progress (red). The signs
+  always show: a long branch name is cut to the list's width, and the task note shows only in the
+  room left.
 - Panes (in `~/.config/zellij/config.kdl`, all sessions): `Ctrl g` then `h`/`l` column left/right,
   `1`/`2`/`3` list/middle/right column, `;` last pane.
 - One pane per column: a picked agent covers the hub Claude, files (yazi) cover review. Leave

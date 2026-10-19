@@ -48,13 +48,16 @@ rows() {
   wtl_in_hub && inhub=true
   # The agent in the hub's middle column (empty: the hub Claude), marked with ▸ beside it.
   wtl_hub_role agent >/dev/null && shown=$(cut -f1 "$(wtl_hub_target_file agent)" 2>/dev/null)
-  local hideidle=false
+  local hideidle=false width
   [[ -f "$HIDE_IDLE" ]] && hideidle=true
+  # The text width: fzf's (it sets FZF_COLUMNS for reloads) less the pointer column.
+  width=${FZF_COLUMNS:-$(stty size </dev/tty 2>/dev/null | cut -d' ' -f2)}
+  width=$((${width:-40} - 1))
   jq -rs --argjson agents "$agents" --arg hub "$hub" --argjson inhub "$inhub" --arg shown "$shown" \
     --argjson hideidle "$hideidle" --arg roots "$WT_ROOTS" --argjson gone "$(gone_dirs "$agents")" \
     --argjson gl "$(jq -nc --arg diff "$G_DIFF" --arg up "$G_UP" --arg alert "$G_ALERT" --arg ok "$G_OK" \
       --arg merge "$G_MERGE" '$ARGS.named')" \
-    --argjson now "$(date +%s)" '
+    --argjson width "$width" --argjson now "$(date +%s)" '
     def c($code): "\u001b[" + $code + "m";
     def age($ms): (($now - ($ms / 1000)) / 60 | floor) as $m
       | if $m < 60 then "\($m)m" elif $m < 2880 then "\($m / 60 | floor)h" else "\($m / 1440 | floor)d" end;
@@ -112,13 +115,21 @@ rows() {
           (if $g.state == "would_conflict" then c("31") + $gl.alert + c("0") else empty end),
           (if safe then c("2") + $gl.ok + c("0") else empty end)
         ] | join(" ");
-      def info: (if .git then gitsigns else c("2") + (.symbols | narrow) end)
-        + (if .task != "" then c("2") + " · " + (.task | narrow) else "" end);
+      def signs: if .git then gitsigns else c("2") + (.symbols | narrow) + c("0") end;
+      def cells: gsub("\u001b\\[[0-9;]*m"; "") | length;
+      def fit($n): if length > $n then .[:([$n - 1, 1] | max)] + "…" else . end;
+      # A worktree row fits the list ($width): the git signs always show, a long branch name is
+      # cut, and the task note shows only in the room left.
+      def treerow: signs as $s | ($s | cells | if . > 0 then . + 1 else 0 end) as $sw
+        | (.branch | split("/") | last | fit([$width - 2 - $sw, 6] | max)) as $b
+        | ($width - 2 - ($b | length) - $sw - 3) as $room
+        | "wt\t" + .path + "\t  " + (if .idle or (.git and safe) then c("2") else "" end) + $b + c("0")
+          + (if $sw > 0 then " " + $s else "" end)
+          + (if .task != "" and $room >= 6 then c("2") + " · " + (.task | narrow | fit($room)) + c("0") else "" end);
       def reporows: select((.idle and $hideidle) | not)
         | ("repo\t" + .main.path + "\t " + (if .idle then c("2") else c("1") end) + .repo + c("0")),
           (.trees[] | select((.idle and $hideidle) | not)
-            | ("wt\t" + .path + "\t  " + (if .idle or (.git and safe) then c("2") else "" end) + (.branch | split("/") | last)
-                 + c("0") + (info | if . == "" then "" else " " + . end) + c("0")),
+            | treerow,
               (.agents[] | agrow(4; bgage))),
           (.dead[] | ("gone\tgone:" + .path + "\t  " + c("2") + .label + " (gone)" + c("0")),
                      (.agents[] | agrow(4; bgage)));
@@ -435,8 +446,8 @@ loop=$!
 trap 'kill $loop 2>/dev/null; rm -f "$sock" "$WT_SIDEBAR_COUNT" "$WT_SIDEBAR_SUM" "$WT_SIDEBAR_HELP"' EXIT
 
 rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=hidden --no-scrollbar \
-  --delimiter=$'\t' --with-nth=3 --track --id-nth=2 --pointer='' --marker='' --highlight-line \
-  --footer="$(footer)" --color=footer:-1 \
+  --delimiter=$'\t' --with-nth=3 --track --id-nth=2 --pointer='▌' --marker='' --gutter=' ' --highlight-line \
+  --footer="$(footer)" --color=footer:-1,pointer:173,bg+:238 \
   --bind '?:transform-footer(wt-sidebar --footer --toggle)' \
   --bind 'd:execute(wt-sidebar --remove {1} {2})+reload-sync(wt-sidebar --rows)+clear-screen' \
   --bind 'n:execute(wt-sidebar --new here {1} {2})+reload-sync(wt-sidebar --rows --fresh)+clear-screen' \
