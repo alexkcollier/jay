@@ -82,7 +82,8 @@ is live at once. Every step can run again safely.
 - `wt hub` — open the hub tab (starts it fresh when it is not running or does not answer).
 - In the list: a pick of an agent (or "◆ hub") always moves the focus to the middle column; on a
   worktree, Enter moves it to review and a click keeps it in the list. ▸ (beside the agent) marks the agent in the
-  middle column. `n` new idle agent in the row's worktree, `N` new worktree (asks the branch) +
+  middle column. An interactive agent (not `bg`) runs in its own terminal: its pick stays in the
+  hub and acts like a worktree pick, with its turns in review; `o` goes to its Ghostty tab. `n` new idle agent in the row's worktree, `N` new worktree (asks the branch) +
   idle agent (`wt new -a`); type the first prompt in the middle column. `o` own tab,
   `t` review turns ⇄ commits, `d` remove the agent (`claude rm`) or worktree (`wt remove`) after a confirm, `h`/`l`
   width, `a` hide/show idle repos, `p` prune dead agents, `r` reload, `?` all keys (one per line),

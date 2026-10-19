@@ -163,12 +163,26 @@ focus_column() {
   for ((i = 0; i < $1; i++)); do zellij action move-focus right >/dev/null 2>&1; done
 }
 
+# The JSON of the agent with session id $1 (empty when it is gone).
+agent_json() {
+  claude agents --json --all 2>/dev/null | jq -c --arg s "$1" 'first(.[] | select(.sessionId == $s)) // empty'
+}
+
 # Pick row kind $1 with id $2. An agent or the hub row always moves the focus to the middle
 # column (wtl_hub_show); a worktree with --focus (Enter) moves it to review. A repo row acts as
-# its main checkout.
+# its main checkout. An interactive agent runs in its own terminal, so in the hub its pick acts
+# like its worktree's, with its turn chain (named after the session id) in review; `o` goes to
+# its tab.
 act() {
+  local agent
   case $1 in
-    ag) wt-go "$2" >/dev/null 2>&1 ;;
+    ag) agent=$(agent_json "$2")
+        if wtl_in_hub && [[ -n "$agent" && "$(jq -r .kind <<<"$agent")" != background ]]; then
+          wtl_hub_locked wtl_hub_target "$(jq -r .cwd <<<"$agent")" "${2:0:8}"
+          [[ "${3:-}" == --focus ]] && focus_column 2
+        else
+          wt-go "$2" >/dev/null 2>&1
+        fi ;;
     wt|repo) if wtl_in_hub; then
           wtl_hub_locked wtl_hub_target "$2"
           [[ "${3:-}" == --focus ]] && focus_column 2
@@ -189,6 +203,10 @@ path_of() {
 
 view() {
   local path
+  if [[ "$1" == open && "$2" == ag && "$(agent_json "$3" | jq -r '.kind // ""')" == interactive ]]; then
+    wt-go "$3" >/dev/null 2>&1
+    return 0
+  fi
   path=$(path_of "$2" "$3")
   [[ -n "$path" ]] || return 0
   case $1 in
