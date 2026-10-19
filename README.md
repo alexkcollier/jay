@@ -86,10 +86,11 @@ is live at once. Every step can run again safely.
   width, `a` hide/show idle repos, `r` reload, `?` all keys, `q` quit.
 - The list shows each repo with a `.git` folder 1–2 levels under `$WT_ROOTS` (default
   `~/Documents/projects`): `<root>/<client>/<repo>` under a heading for its client,
-  `<root>/<repo>` under "Other" at the bottom (with the agents outside every worktree). A repo row
-  is the repo with its main checkout (`n` starts an agent there); its agents and linked worktrees
-  go under it. A repo with only its main checkout and no agent is idle: dim, and `a` hides it until
-  you press `a` again.
+  `<root>/<repo>` under "Other" at the bottom (with the agents outside every worktree). Under each
+  repo: its worktrees, the main checkout first, and under each worktree its agents. A repo row acts
+  as its main checkout (`N`, `v`, `e`, `o`, click). A main checkout without an agent is idle, and so
+  is a repo with only an idle main checkout: both are dim, and `a` hides them until you press `a`
+  again.
 - Panes (in `~/.config/zellij/config.kdl`, all sessions): `Ctrl g` then `h`/`l` column left/right,
   `1`/`2`/`3` list/middle/right column, `;` last pane.
 - One pane per column: a picked agent covers the hub Claude, files (yazi) cover review. Leave

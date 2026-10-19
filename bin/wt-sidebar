@@ -57,30 +57,32 @@ rows() {
     | ($ag | map(.phase)) as $phases
     | (["input", "failed", "working", "idle"] | map(. as $p | ($phases | map(select(. == $p)) | length) as $n
         | select($n > 0) | "\($p | glyph) \($n) \($p)") | join("  ")) as $summary
-    # Repos under a heading per client (the folder above the repo); repos right under a root
-    # go to "Other" at the bottom, with the agents outside every worktree. A repo row is the
-    # repo with its main checkout; its agents and linked worktrees go under it. A repo with only
-    # its main checkout and no agent is idle: dim, and hidden with $hideidle (key a).
+    # Client › repo › worktree › agent. A client is the folder above the repo; repos right under
+    # a root go to "Other" at the bottom, with the agents outside every worktree. A repo row has
+    # its worktrees under it, the main checkout first. A main checkout without an agent is idle,
+    # and so is a repo with only an idle main checkout: both are dim, and hidden with $hideidle
+    # (key a).
     | ($roots | split(":") | map(rtrimstr("/"))) as $rootdirs
-    | ($wts | map(. as $w | . + {agents: ($ag | map(select(.wt == $w.path)) | sort_by((.phase | rank), -(.startedAt // 0)))})
+    | ($wts | map(. as $w | . + {agents: ($ag | map(select(.wt == $w.path)) | sort_by((.phase | rank), -(.startedAt // 0)))}
+                 | . + {idle: (.main and (.agents | length == 0))})
         | group_by(.client + "/" + .repo | ascii_downcase)
         | map(first(.[] | select(.main)) as $main
-              | {client: .[0].client, repo: .[0].repo, main: $main, wts: map(select(.main | not)),
+              | {client: .[0].client, repo: .[0].repo, main: $main, trees: .,
                  loose: ($rootdirs | index([$main.path // "" | sub("/[^/]*$"; "")]) != null),
-                 idle: all(.[]; .main and (.agents | length == 0))})
+                 idle: all(.[]; .idle)})
         | map(select(.main != null))) as $repos
     | ($repos | map(select(.idle)) | length) as $idle
+    | ($repos | map(select(.idle | not) | .trees[] | select(.idle)) | length) as $idlemain
     | ($ag | map(select(.wt == ""))) as $stray
     | def lead($col): (if shown then c("1;36") + " ▸" + c("0") else "  " end) + (" " * ($col - 2));
-      def agrows($col): .agents[] | "ag\t" + .sessionId + "\t" + lead($col) + (.phase | glyph) + " " + title + " "
-        + c("2") + (if .kind == "background" then "bg " else "" end) + age(.startedAt // 0) + c("0");
       def info: (.symbols | narrow) + (if .task != "" then " · " + (.task | narrow) else "" end);
-      def reporows: . as $r | select(($r.idle and $hideidle) | not)
-        | ("wt\t" + $r.main.path + "\t  " + (if $r.idle then c("2") else c("1") end) + $r.repo + c("0") + "  "
-             + c("2") + ($r.main.branch | split("/") | last) + " " + ($r.main | info) + c("0"),
-           ($r.main | agrows(4)),
-           ($r.wts[] | ("wt\t" + .path + "\t    " + (.branch | split("/") | last) + " " + c("2") + info + c("0")),
-                       agrows(6)));
+      def reporows: select((.idle and $hideidle) | not)
+        | ("repo\t" + .main.path + "\t  " + (if .idle then c("2") else c("1") end) + .repo + c("0")),
+          (.trees[] | select((.idle and $hideidle) | not)
+            | ("wt\t" + .path + "\t    " + (if .idle then c("2") else "" end) + (.branch | split("/") | last) + " "
+                 + c("2") + info + c("0")),
+              (.agents[] | "ag\t" + .sessionId + "\t" + lead(6) + (.phase | glyph) + " " + title + " "
+                 + c("2") + (if .kind == "background" then "bg " else "" end) + age(.startedAt // 0) + c("0")));
       def heading($key; $name; $idle): " \tgap:" + $key + "\t ",
         "hdr\thdr:" + $key + "\t" + (if $idle then c("2") else c("1;38;5;173") end) + $name + c("0");
     "sum\tsum\t" + (if $summary == "" then c("2") + "No agents" + c("0") else $summary end),
@@ -93,8 +95,9 @@ rows() {
         | select((map(select((.idle and $hideidle) | not)) | length) + ($stray | length) > 0)
         | heading("other"; "Other"; all(.[]; .idle) and $stray == []), (.[] | reporows),
           ($stray[] | "ag\t" + .sessionId + "\t" + lead(2) + (.phase | glyph) + " " + title + " " + c("2") + .cwd + c("0"))),
-      (if $hideidle and $idle > 0 then " \tgap:idle\t ",
-         "idle\tidle\t" + c("2") + "a shows \($idle) idle repo" + (if $idle > 1 then "s" else "" end) + c("0")
+      (if $hideidle and $idle + $idlemain > 0 then " \tgap:idle\t ",
+         "idle\tidle\t" + c("2") + "a shows " + ([(if $idle > 0 then "\($idle) idle repo" + (if $idle > 1 then "s" else "" end) else empty end),
+                                     (if $idlemain > 0 then "\($idlemain) idle main" else empty end)] | join(", ")) + c("0")
        else empty end)
   ' "$CACHE" | tee >(wc -l | tr -d ' ' >"${WT_SIDEBAR_COUNT:-/dev/null}") \
     >(head -1 | cut -f3 >"${WT_SIDEBAR_SUM:-/dev/null}")
@@ -109,11 +112,12 @@ focus_column() {
 }
 
 # Pick row kind $1 with id $2. An agent or the hub row always moves the focus to the middle
-# column (wtl_hub_show); a worktree with --focus (Enter) moves it to review.
+# column (wtl_hub_show); a worktree with --focus (Enter) moves it to review. A repo row acts as
+# its main checkout.
 act() {
   case $1 in
     ag) wt-go "$2" >/dev/null 2>&1 ;;
-    wt) if wtl_in_hub; then
+    wt|repo) if wtl_in_hub; then
           wtl_hub_locked wtl_hub_target "$2"
           [[ "${3:-}" == --focus ]] && focus_column 2
         else
@@ -134,7 +138,7 @@ target_and_show() {
 
 path_of() {
   case $1 in
-    wt) printf '%s\n' "$2" ;;
+    wt|repo) printf '%s\n' "$2" ;;
     ag) claude agents --json --all 2>/dev/null | jq -r --arg s "$2" 'first(.[] | select(.sessionId == $s) | .cwd) // empty' ;;
   esac
 }
@@ -154,8 +158,8 @@ view() {
 # new agent shows in the hub's middle column, where you type its first prompt.
 new_agent() {
   local mode=$1 kind=$2 id=$3 path top primary repo branch out agent i
-  if [[ "$kind" == hdr ]]; then
-    pause "Pick a repo or worktree row. n starts an agent there, N a new worktree of its repo."
+  if [[ "$kind" == hdr || ("$mode" == here && "$kind" == repo) ]]; then
+    pause "n starts an agent in a worktree: pick a worktree row. N on a repo or worktree row makes a new worktree of that repo."
     return 0
   fi
   path=$(path_of "$kind" "$id")
