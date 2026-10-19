@@ -40,6 +40,14 @@ rows=$(
         client: $client, repo: $repo, branch: (.branch // "(detached)"),
         path: .worktree.path, main: (.worktree.main // false),
         symbols: (.display.symbols // ""),
+        git: {
+          added: (.worktree.changes.diff.added // 0), deleted: (.worktree.changes.diff.deleted // 0),
+          staged: (.worktree.changes.staged // false), modified: (.worktree.changes.modified // false),
+          untracked: (.worktree.changes.untracked // false), conflicted: (.worktree.changes.conflicted // false),
+          operation: .worktree.operation, state: (.display.state // ""),
+          ahead: (.default_branch.ahead // 0), behind: (.default_branch.behind // 0),
+          push: (.upstream.ahead // 0), pull: (.upstream.behind // 0)
+        },
         task: (.display.columns.Task // .vars.task // "")
       }' "${meta%.meta}.json"
   done | jq -rs --slurpfile agents "$tmp/agents.json" --argjson all "$show_all" --argjson json "$json" '

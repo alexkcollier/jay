@@ -97,6 +97,11 @@ is live at once. Every step can run again safely.
   checkout without an agent is idle, and so
   is a repo with only an idle main checkout: both are dim, and `a` hides them until you press `a`
   again.
+- Git signs after each worktree (Nerd Font Octicons, legend at the end of `?`): uncommitted lines
+  `+N-N` (yellow), untracked files, commits ahead/behind the default branch (green/red), commits
+  to push/to pull (cyan), a merge into the default branch would conflict (red), safe to remove
+  (dim check; the branch is empty or integrated, and its name is dim). Conflicts now and a rebase
+  or merge in progress show too. A clean branch in sync shows nothing.
 - Panes (in `~/.config/zellij/config.kdl`, all sessions): `Ctrl g` then `h`/`l` column left/right,
   `1`/`2`/`3` list/middle/right column, `;` last pane.
 - One pane per column: a picked agent covers the hub Claude, files (yazi) cover review. Leave
