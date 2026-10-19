@@ -5,7 +5,8 @@
 # agent:  `claude attach` on the picked agent. It covers the hub Claude; when you leave the
 #         agent, the pane closes and the hub Claude comes back.
 # review: tuicr on the session's turn chain (refs/wt-turns/<session8>), else the newest chain in
-#         the worktree, else tuicr's own target picker. Quit tuicr, then Enter opens it again.
+#         the worktree, else tuicr's own target picker. q in tuicr starts it again (back to
+#         the picker or the full chain).
 # files:  yazi in the worktree. It covers review; quit yazi and review comes back.
 set -uo pipefail
 export PATH="$HOME/.local/share/mise/shims:/opt/homebrew/bin:$PATH"
@@ -81,9 +82,13 @@ while :; do
     clear
     continue
   fi
+  started=$SECONDS
   run "$now"
   reset_screen
   [[ "$(target)" != "$now" ]] && continue
+  # q in tuicr (q_quits, config/tuicr/config.toml) means "back": start it again at once, so a
+  # review opened from tuicr's start screen returns to it. A quick exit is an error: ask first.
+  [[ "$role" == review ]] && ((SECONDS - started >= 2)) && continue
   # You left the program yourself: the pane closes and the one under it comes back. Review
   # gets its title after that (the delay outlives the pane, so HUP is ignored).
   if [[ "$role" == files ]]; then
