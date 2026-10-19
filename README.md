@@ -85,12 +85,16 @@ is live at once. Every step can run again safely.
   middle column. `n` new idle agent in the row's worktree, `N` new worktree (asks the branch) +
   idle agent (`wt new -a`); type the first prompt in the middle column. `o` own tab,
   `t` review turns ⇄ commits, `d` remove the agent (`claude rm`) or worktree (`wt remove`) after a confirm, `h`/`l`
-  width, `a` hide/show idle repos, `r` reload, `?` all keys (one per line), `q` quit.
+  width, `a` hide/show idle repos, `p` prune dead agents, `r` reload, `?` all keys (one per line),
+  `q` quit.
 - The list shows each repo with a `.git` folder 1–2 levels under `$WT_ROOTS` (default
   `~/Documents/projects`): `<root>/<client>/<repo>` under a heading for its client,
-  `<root>/<repo>` under "Other" at the bottom (with the agents outside every worktree). Under each
-  repo: its worktrees, the main checkout first, and under each worktree its agents. A repo row acts
-  as its main checkout (`N`, `o`, click). A main checkout without an agent is idle, and so
+  `<root>/<repo>` under "Other" at the bottom. Under each repo: its worktrees, the main checkout
+  first, and under each worktree its agents. An agent whose worktree was removed shows under a dim
+  "<branch> (gone)" row of its repo; agents in no repo show under "no repo" at the bottom. `p`
+  prunes the dead agents (background, folder gone, not running) with `claude rm` after a confirm
+  (their transcripts stay). A repo row acts as its main checkout (`N`, `o`, click). A main
+  checkout without an agent is idle, and so
   is a repo with only an idle main checkout: both are dim, and `a` hides them until you press `a`
   again.
 - Panes (in `~/.config/zellij/config.kdl`, all sessions): `Ctrl g` then `h`/`l` column left/right,

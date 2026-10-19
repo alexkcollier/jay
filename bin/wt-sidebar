@@ -6,6 +6,7 @@
 # the hub row take the focus to the middle; Enter on a worktree takes it to review. n/N: new agent
 # here / in a new worktree  o: own Ghostty tab  t: review turns/commits
 # d: remove the agent or worktree (asks first)  a: hide/show idle repos and main checkouts
+# p: prune dead agents (folder gone; asks first)
 # r: reload  h/l: narrower/wider  ?: keys  q: quit  (e for files is a key of the review pane)
 # wt-sidebar --files: show files over review (e in the review pane, through wt-hub-keys).
 set -uo pipefail
@@ -18,6 +19,13 @@ mkdir -p "$STATE"
 
 refresh_worktrees() {
   wt-all --json >"$CACHE.$$" 2>/dev/null && mv "$CACHE.$$" "$CACHE"
+}
+
+# The folders of the agents in JSON $1 that no longer exist (a removed worktree), as a JSON array.
+gone_dirs() {
+  jq -r '.[] | .cwd // empty' <<<"$1" | sort -u | while IFS= read -r dir; do
+    [[ -d "$dir" ]] || printf '%s\n' "$dir"
+  done | jq -Rsc 'split("\n") | map(select(. != ""))'
 }
 
 rows() {
@@ -38,7 +46,8 @@ rows() {
   local hideidle=false
   [[ -f "$HIDE_IDLE" ]] && hideidle=true
   jq -rs --argjson agents "$agents" --arg hub "$hub" --argjson inhub "$inhub" --arg shown "$shown" \
-    --argjson hideidle "$hideidle" --arg roots "$WT_ROOTS" --argjson now "$(date +%s)" '
+    --argjson hideidle "$hideidle" --arg roots "$WT_ROOTS" --argjson gone "$(gone_dirs "$agents")" \
+    --argjson now "$(date +%s)" '
     def c($code): "\u001b[" + $code + "m";
     def age($ms): (($now - ($ms / 1000)) / 60 | floor) as $m
       | if $m < 60 then "\($m)m" elif $m < 2880 then "\($m / 60 | floor)h" else "\($m / 1440 | floor)d" end;
@@ -54,36 +63,46 @@ rows() {
     . as $wts
     | ($wts | map(.path) | sort_by(length) | reverse) as $paths
     | def owner($cwd): first($paths[] | select($cwd == . or ($cwd | startswith(. + "/")))) // "";
-      ($agents | map(select(.state != "stopped" and .sessionId != $hub) | . + {wt: owner(.cwd), phase: phase})) as $ag
+      ($agents | map(select(.state != "stopped" and .sessionId != $hub)
+        | (.cwd as $d | $gone | any(. == $d)) as $g | . + {gone: $g, wt: (if $g then "" else owner(.cwd) end), phase: phase})) as $ag
     | ($ag | map(.phase)) as $phases
     | (["input", "failed", "working", "idle"] | map(. as $p | ($phases | map(select(. == $p)) | length) as $n
         | select($n > 0) | "\($p | glyph) \($n) \($p)") | join("  ")) as $summary
     # Client › repo › worktree › agent. A client is the folder above the repo; repos right under
-    # a root go to "Other" at the bottom, with the agents outside every worktree. A repo row has
-    # its worktrees under it, the main checkout first. A main checkout without an agent is idle,
-    # and so is a repo with only an idle main checkout: both are dim, and hidden with $hideidle
-    # (key a).
+    # a root go to "Other" at the bottom. A repo row has its worktrees under it, the main checkout
+    # first, then the removed worktrees that still have agents (dim, "(gone)": a folder
+    # <repo>.<branch> or one in the repo). Agents in no repo go last, under "no repo". A main
+    # checkout without an agent is idle, and so is a repo with only an idle main checkout: both
+    # are dim, and hidden with $hideidle (key a).
     | ($roots | split(":") | map(rtrimstr("/"))) as $rootdirs
-    | ($wts | map(. as $w | . + {agents: ($ag | map(select(.wt == $w.path)) | sort_by((.phase | rank), -(.startedAt // 0)))}
+    | def byrank: sort_by((.phase | rank), -(.startedAt // 0));
+      ($wts | map(. as $w | . + {agents: ($ag | map(select(.wt == $w.path)) | byrank)}
                  | . + {idle: (.main and (.agents | length == 0))})
         | group_by(.client + "/" + .repo | ascii_downcase)
-        | map(first(.[] | select(.main)) as $main
+        | map(first(.[] | select(.main)) as $main | ($main.path // "//none") as $m
               | {client: .[0].client, repo: .[0].repo, main: $main, trees: .,
-                 loose: ($rootdirs | index([$main.path // "" | sub("/[^/]*$"; "")]) != null),
-                 idle: all(.[]; .idle)})
+                 loose: ($rootdirs | index([$m | sub("/[^/]*$"; "")]) != null),
+                 dead: ($ag | map(select(.gone and (.cwd | startswith($m + ".") or startswith($m + "/")))) | group_by(.cwd)
+                   | map({path: .[0].cwd, agents: byrank,
+                          label: (.[0].cwd | if startswith($m + ".") then .[($m | length) + 1:] else split("/") | last end)}))}
+              | . + {idle: (all(.trees[]; .idle) and .dead == [])})
         | map(select(.main != null))) as $repos
     | ($repos | map(select(.idle)) | length) as $idle
     | ($repos | map(select(.idle | not) | .trees[] | select(.idle)) | length) as $idlemain
-    | ($ag | map(select(.wt == ""))) as $stray
+    | ($repos | [.[].dead[].agents[].sessionId]) as $housed
+    | ($ag | map(select(.wt == "" and (.sessionId as $s | $housed | index([$s]) | not))) | byrank) as $stray
     | def lead($col): (" " * ($col - 2)) + (if shown then c("1;36") + "▸ " + c("0") else "  " end);
+      def agrow($col; $tail): "ag\t" + .sessionId + "\t" + lead($col) + (.phase | glyph) + " " + title + " " + c("2") + $tail + c("0");
+      def bgage: (if .kind == "background" then "bg " else "" end) + age(.startedAt // 0);
       def info: (.symbols | narrow) + (if .task != "" then " · " + (.task | narrow) else "" end);
       def reporows: select((.idle and $hideidle) | not)
         | ("repo\t" + .main.path + "\t  " + (if .idle then c("2") else c("1") end) + .repo + c("0")),
           (.trees[] | select((.idle and $hideidle) | not)
             | ("wt\t" + .path + "\t    " + (if .idle then c("2") else "" end) + (.branch | split("/") | last) + " "
                  + c("2") + info + c("0")),
-              (.agents[] | "ag\t" + .sessionId + "\t" + lead(6) + (.phase | glyph) + " " + title + " "
-                 + c("2") + (if .kind == "background" then "bg " else "" end) + age(.startedAt // 0) + c("0")));
+              (.agents[] | agrow(6; bgage))),
+          (.dead[] | ("gone\tgone:" + .path + "\t    " + c("2") + .label + " (gone)" + c("0")),
+                     (.agents[] | agrow(6; bgage)));
       def heading($key; $name; $idle): " \tgap:" + $key + "\t ",
         "hdr\thdr:" + $key + "\t" + (if $idle then c("2") else c("1;38;5;173") end) + $name + c("0");
     "sum\tsum\t" + (if $summary == "" then c("2") + "No agents" + c("0") else $summary end),
@@ -95,7 +114,9 @@ rows() {
       ($repos | map(select(.loose))
         | select((map(select((.idle and $hideidle) | not)) | length) + ($stray | length) > 0)
         | heading("other"; "Other"; all(.[]; .idle) and $stray == []), (.[] | reporows),
-          ($stray[] | "ag\t" + .sessionId + "\t" + lead(2) + (.phase | glyph) + " " + title + " " + c("2") + .cwd + c("0"))),
+          ($stray | select(length > 0)
+            | ("hdr\thdr:norepo\t  " + c("2") + "no repo" + c("0")),
+              (.[] | agrow(4; .cwd + (if .gone then " (gone)" else "" end))))),
       (if $hideidle and $idle + $idlemain > 0 then " \tgap:idle\t ",
          "idle\tidle\t" + c("2") + "a shows " + ([(if $idle > 0 then "\($idle) idle repo" + (if $idle > 1 then "s" else "" end) else empty end),
                                      (if $idlemain > 0 then "\($idlemain) idle main" else empty end)] | join(", ")) + c("0")
@@ -200,6 +221,7 @@ ${KEY}o${OFF}      own Ghostty tab
 ${KEY}d${OFF}      remove agent/worktree
 ${KEY}t${OFF}      turns ⇄ commits
 ${KEY}a${OFF}      hide/show idle repos
+${KEY}p${OFF}      prune dead agents
 ${KEY}r${OFF}      reload
 ${KEY}j k${OFF}    move
 ${KEY}h l${OFF}    narrower / wider
@@ -296,8 +318,35 @@ $out"
   return 0
 }
 
+# Remove the dead agents, after a confirm: background agents whose folder is gone (a removed
+# worktree) and that do not run now. `claude rm` deletes the session.
+prune() {
+  local agents dead id name failed="" out
+  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  dead=$(jq -r --argjson gone "$(gone_dirs "$agents")" '.[]
+    | select(.kind == "background" and .id != null and .state != "stopped"
+        and (.state | IN("working", "blocked") | not) and (.status | IN("busy", "waiting") | not))
+    | (.cwd // "") as $d | select($gone | index([$d]))
+    | [.id, (.name // .id)] | @tsv' <<<"$agents")
+  if [[ -z "$dead" ]]; then
+    pause "No dead agents: every agent's folder exists, or the agent still runs."
+    return 0
+  fi
+  confirm "Remove these agents? Their folders are gone.
+
+$(cut -f2 <<<"$dead" | sed 's/^/  /')" || return 0
+  while IFS=$'\t' read -r id name; do
+    out=$(claude rm "$id" 2>&1) || failed+="  $name: $out"$'\n'
+  done <<<"$dead"
+  [[ -z "$failed" ]] || pause "Not removed:
+
+$failed"
+  return 0
+}
+
 case ${1:-} in
   --rows) shift; rows "$@"; exit 0 ;;
+  --prune) prune; exit 0 ;;
   --act) shift; act "$@"; exit 0 ;;
   --view) shift; view "$@"; exit 0 ;;
   --remove) shift; remove "$@"; exit 0 ;;
@@ -306,7 +355,7 @@ case ${1:-} in
   --files) wtl_hub_locked wtl_hub_show_files; exit 0 ;;
   --idle) if [[ -f "$HIDE_IDLE" ]]; then rm -f "$HIDE_IDLE"; else : >"$HIDE_IDLE"; fi; exit 0 ;;
   --footer) shift; footer "$@"; exit 0 ;;
-  -h|--help) sed -n '2,10s/^# \{0,1\}//p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,11s/^# \{0,1\}//p' "$0"; exit 0 ;;
 esac
 
 sock="$STATE/wt-sidebar.$$.sock"
@@ -374,6 +423,7 @@ rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=
   --bind 'o:execute-silent(wt-sidebar --view open {1} {2})' \
   --bind 't:execute-silent(wt-sidebar --toggle)' \
   --bind 'a:execute-silent(wt-sidebar --idle)+reload-sync(wt-sidebar --rows)+clear-screen' \
+  --bind 'p:execute(wt-sidebar --prune)+reload-sync(wt-sidebar --rows)+clear-screen' \
   --bind 'h:execute-silent(zellij action resize -p "$ZELLIJ_PANE_ID" decrease right)' \
   --bind 'l:execute-silent(zellij action resize -p "$ZELLIJ_PANE_ID" increase right)' \
   --bind 'j:down,k:up,q:abort,esc:ignore'
