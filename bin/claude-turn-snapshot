@@ -39,7 +39,10 @@ snapshot() {
   tree=$(GIT_INDEX_FILE="$index" git -C "$top" write-tree 2>/dev/null)
   rm -f "$index"
   [[ -n "$tree" ]] || return 0
-  if ! parent=$(git -C "$top" rev-parse -q --verify "$head_ref"); then
+  # The chain starts at the base, set once. Before the first turn commit there is no head, and
+  # an agent that commits its work leaves a clean tree, so the turn shows only against the base.
+  if ! parent=$(git -C "$top" rev-parse -q --verify "$head_ref") \
+    && ! parent=$(git -C "$top" rev-parse -q --verify "$base_ref"); then
     parent=$(git -C "$top" rev-parse -q --verify HEAD) || return 0
     git -C "$top" update-ref "$base_ref" "$parent"
     printf '%s\n' "$top" >"$state/$short.worktree"
