@@ -37,7 +37,7 @@ rows() {
   local hideidle=false
   [[ -f "$HIDE_IDLE" ]] && hideidle=true
   jq -rs --argjson agents "$agents" --arg hub "$hub" --argjson inhub "$inhub" --arg shown "$shown" \
-    --argjson hideidle "$hideidle" --argjson now "$(date +%s)" '
+    --argjson hideidle "$hideidle" --arg roots "$WT_ROOTS" --argjson now "$(date +%s)" '
     def c($code): "\u001b[" + $code + "m";
     def age($ms): (($now - ($ms / 1000)) / 60 | floor) as $m
       | if $m < 60 then "\($m)m" elif $m < 2880 then "\($m / 60 | floor)h" else "\($m / 1440 | floor)d" end;
@@ -49,7 +49,6 @@ rows() {
     def narrow: [8986,8987,9001,9002,9193,9194,9195,9196,9200,9203,9725,9726,9748,9749,9800,9801,9802,9803,9804,9805,9806,9807,9808,9809,9810,9811,9855,9875,9889,9898,9899,9917,9918,9924,9925,9934,9940,9962,9970,9971,9973,9978,9981,9989,9994,9995,10024,10060,10062,10067,10068,10069,10071,10133,10134,10135,10160,10175,11035,11036,11088,11093,11904,11905,11906,11907,11908,11909,11910,11911,11912,11913,11914,11915,11916,11917,11918,11919,11920,11921,11922,11923,11924,11925,11926,11927,11928,11929,11931,11932,11933,11934,11935,11936,11937,11938,11939,11940,11941,11942,11943,11944,11945,11946,11947,11948,11949,11950,11951,11952,11953,11954,11955,11956,11957,11958,11959,11960,11961,11962,11963,11964,11965,11966,11967,11968,11969,11970,11971,11972,11973,11974,11975,11976,11977,11978,11979,11980,11981,11982,11983,11984,11985,11986,11987,11988,11989,11990,11991,11992,11993,11994,11995,11996,11997,11998,11999,12000,12001,12002,12003,12004,12005,12006,12007,12008,12009,12010,12011,12012,12013,12014,12015,12016,12017,12018,12019,12032,12033,12034,12035,12036,12037,12038,12039,12040,12041,12042,12043,12044,12045,12046,12047,12048,12049,12050,12051,12052,12053,12054,12055,12056,12057,12058,12059,12060,12061,12062,12063,12064,12065,12066,12067,12068,12069,12070,12071,12072,12073,12074,12075,12076,12077,12078,12079,12080,12081,12082,12083,12084,12085,12086,12087,12088,12089,12090,12091,12092,12093,12094,12095,12096,12097,12098,12099,12100,12101,12102,12103,12104,12105,12106,12107,12108,12109,12110,12111,12112,12113,12114,12115,12116,12117,12118,12119,12120,12121,12122,12123,12124,12125,12126,12127,12128,12129,12130,12131,12132,12133,12134,12135,12136,12137,12138,12139,12140,12141,12142,12143,12144,12145,12146,12147,12148,12149,12150,12151,12152,12153,12154,12155,12156,12157,12158,12159,12160,12161,12162,12163,12164,12165,12166,12167,12168,12169,12170,12171,12172,12173,12174,12175,12176,12177,12178,12179,12180,12181,12182,12183,12184,12185,12186,12187,12188,12189,12190,12191,12192,12193,12194,12195,12196,12197,12198,12199,12200,12201,12202,12203,12204,12205,12206,12207,12208,12209,12210,12211,12212,12213,12214,12215,12216,12217,12218,12219,12220,12221,12222,12223,12224,12225,12226,12227,12228,12229,12230,12231,12232,12233,12234,12235,12236,12237,12238,12239,12240,12241,12242,12243,12244,12245,12272,12273,12274,12275,12276,12277,12278,12279,12280,12281,12282,12283] as $wide | explode | map(select(. < 4352 or (. > 4447 and . < 11904) or (. > 42191 and . < 44032) or (. > 55203 and . < 63744) or (. > 64255 and . < 65040) or (. > 65049 and . < 65072) or (. > 65135 and . < 65280) or (. > 65376 and . < 65504) or (. > 65510 and . < 126976)) | select(. != 65039) | select(. as $c | $wide | index([$c]) | not)) | implode;
     def rank: {input: 0, failed: 1, working: 2, idle: 3}[.];
     def shown: $shown != "" and .id == $shown;
-    def mark: if shown then c("1;36") + " ▸ " + c("0") else "   " end;
     def title: if shown then c("1;36") + (.name | narrow) + c("0") else (.name | narrow) end;
     . as $wts
     | ($wts | map(.path) | sort_by(length) | reverse) as $paths
@@ -58,34 +57,45 @@ rows() {
     | ($ag | map(.phase)) as $phases
     | (["input", "failed", "working", "idle"] | map(. as $p | ($phases | map(select(. == $p)) | length) as $n
         | select($n > 0) | "\($p | glyph) \($n) \($p)") | join("  ")) as $summary
-    # Each repo with all its worktrees, the main checkout first. A main checkout without an
-    # agent is idle, and so is a repo with only an idle main checkout: both are dim, and
-    # hidden with $hideidle (key a).
-    | ($wts | map(. as $w | . + {agents: ($ag | map(select(.wt == $w.path)) | sort_by((.phase | rank), -(.startedAt // 0)))}
-                 | . + {idle: (.main and (.agents | length == 0))})
+    # Repos under a heading per client (the folder above the repo); repos right under a root
+    # go to "Other" at the bottom, with the agents outside every worktree. A repo row is the
+    # repo with its main checkout; its agents and linked worktrees go under it. A repo with only
+    # its main checkout and no agent is idle: dim, and hidden with $hideidle (key a).
+    | ($roots | split(":") | map(rtrimstr("/"))) as $rootdirs
+    | ($wts | map(. as $w | . + {agents: ($ag | map(select(.wt == $w.path)) | sort_by((.phase | rank), -(.startedAt // 0)))})
         | group_by(.client + "/" + .repo | ascii_downcase)
-        | map({key: (.[0].client + "/" + .[0].repo), name: (.[0].client + " › " + .[0].repo),
-               rows: ., idle: all(.[]; .idle)})) as $repos
+        | map(first(.[] | select(.main)) as $main
+              | {client: .[0].client, repo: .[0].repo, main: $main, wts: map(select(.main | not)),
+                 loose: ($rootdirs | index([$main.path // "" | sub("/[^/]*$"; "")]) != null),
+                 idle: all(.[]; .main and (.agents | length == 0))})
+        | map(select(.main != null))) as $repos
     | ($repos | map(select(.idle)) | length) as $idle
-    | ($repos | map(select(.idle | not) | .rows[] | select(.idle)) | length) as $idlemain
-    | "sum\tsum\t" + (if $summary == "" then c("2") + "No agents" + c("0") else $summary end),
+    | ($ag | map(select(.wt == ""))) as $stray
+    | def lead($col): (if shown then c("1;36") + " ▸" + c("0") else "  " end) + (" " * ($col - 2));
+      def agrows($col): .agents[] | "ag\t" + .sessionId + "\t" + lead($col) + (.phase | glyph) + " " + title + " "
+        + c("2") + (if .kind == "background" then "bg " else "" end) + age(.startedAt // 0) + c("0");
+      def info: (.symbols | narrow) + (if .task != "" then " · " + (.task | narrow) else "" end);
+      def reporows: . as $r | select(($r.idle and $hideidle) | not)
+        | ("wt\t" + $r.main.path + "\t  " + (if $r.idle then c("2") else c("1") end) + $r.repo + c("0") + "  "
+             + c("2") + ($r.main.branch | split("/") | last) + " " + ($r.main | info) + c("0"),
+           ($r.main | agrows(4)),
+           ($r.wts[] | ("wt\t" + .path + "\t    " + (.branch | split("/") | last) + " " + c("2") + info + c("0")),
+                       agrows(6)));
+      def heading($key; $name; $idle): " \tgap:" + $key + "\t ",
+        "hdr\thdr:" + $key + "\t" + (if $idle then c("2") else c("1;38;5;173") end) + $name + c("0");
+    "sum\tsum\t" + (if $summary == "" then c("2") + "No agents" + c("0") else $summary end),
       (if $inhub then "hub\thub\t" + (if $shown == "" then c("1;36") + "▸ " else "  " end)
          + c("1;36") + "◆ hub" + c("0") + c("2") + "  (this Claude)" + c("0") else empty end),
-      ($repos[] | select((.idle and $hideidle) | not)
-        | (" \tgap:" + .key + "\t ",
-           "hdr\thdr:" + .key + "\t" + (if .idle then c("2") else c("1;38;5;173") end) + .name + c("0")),
-          (.rows[] | select((.idle and $hideidle) | not)
-            | ("wt\t" + .path + "\t " + (if .idle then c("2") else "" end) + (.branch | split("/") | last) + " "
-                 + c("2") + (.symbols | narrow) + (if .task != "" then " · " + (.task | narrow) else "" end) + c("0")),
-              (.agents[] | "ag\t" + .sessionId + "\t" + mark + (.phase | glyph) + " " + title + " "
-                 + c("2") + (if .kind == "background" then "bg " else "" end) + age(.startedAt // 0) + c("0")))),
-      (if $hideidle and $idle + $idlemain > 0 then " \tgap:idle\t ",
-         "idle\tidle\t" + c("2") + "a shows " + ([(if $idle > 0 then "\($idle) idle repo" + (if $idle > 1 then "s" else "" end) else empty end),
-                                     (if $idlemain > 0 then "\($idlemain) idle main" else empty end)] | join(", ")) + c("0")
-       else empty end),
-      ($ag | map(select(.wt == "")) | select(length > 0)
-        | (" \tgap:other\t ", "hdr\thdr:other\t" + c("1") + "Other" + c("0")),
-          (.[] | "ag\t" + .sessionId + "\t" + mark + (.phase | glyph) + " " + title + " " + c("2") + .cwd + c("0")))
+      ($repos | map(select(.loose | not)) | group_by(.client | ascii_downcase)[]
+        | select((all(.[]; .idle) and $hideidle) | not)
+        | heading(.[0].client; .[0].client; all(.[]; .idle)), (.[] | reporows)),
+      ($repos | map(select(.loose))
+        | select((map(select((.idle and $hideidle) | not)) | length) + ($stray | length) > 0)
+        | heading("other"; "Other"; all(.[]; .idle) and $stray == []), (.[] | reporows),
+          ($stray[] | "ag\t" + .sessionId + "\t" + lead(2) + (.phase | glyph) + " " + title + " " + c("2") + .cwd + c("0"))),
+      (if $hideidle and $idle > 0 then " \tgap:idle\t ",
+         "idle\tidle\t" + c("2") + "a shows \($idle) idle repo" + (if $idle > 1 then "s" else "" end) + c("0")
+       else empty end)
   ' "$CACHE" | tee >(wc -l | tr -d ' ' >"${WT_SIDEBAR_COUNT:-/dev/null}") \
     >(head -1 | cut -f3 >"${WT_SIDEBAR_SUM:-/dev/null}")
 }
@@ -144,18 +154,15 @@ view() {
 # new agent shows in the hub's middle column, where you type its first prompt.
 new_agent() {
   local mode=$1 kind=$2 id=$3 path top primary repo branch out agent i
-  case $kind in
-    wt|ag) path=$(path_of "$kind" "$id") ;;
-    hdr) path=$(jq -r --arg k "${id#hdr:}" 'select(.main and (.client + "/" + .repo) == $k) | .path' "$CACHE" | head -1) ;;
-  esac
+  if [[ "$kind" == hdr ]]; then
+    pause "Pick a repo or worktree row. n starts an agent there, N a new worktree of its repo."
+    return 0
+  fi
+  path=$(path_of "$kind" "$id")
   [[ -n "$path" ]] || return 0
   top=$(wtl_toplevel "$path")
   primary=$(wtl_primary "$top")
   IFS=$'\t' read -r _ repo branch _ < <(wtl_describe "$top")
-  if [[ "$mode" == here && "$kind" == hdr ]]; then
-    pause "n starts an agent in a worktree: pick a worktree row. N makes a new worktree."
-    return 0
-  fi
   if [[ "$mode" == worktree ]]; then
     say "New worktree and agent in $repo."
     printf 'Branch, empty to cancel: '
