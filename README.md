@@ -23,7 +23,7 @@ agent's turns, yazi for files). Built on [worktrunk](https://github.com/max-sixt
   worktree, Enter moves it to review and a click keeps it in the list. ▸ (left) marks the agent in the
   middle column. `n` new idle agent in the row's worktree, `N` new worktree (asks the branch) +
   idle agent (`wt new -a`); type the first prompt in the middle column. `v` review, `e` files, `o` own tab,
-  `t` review turns ⇄ commits, `x` close viewer, `d` remove the agent (`claude rm`) or worktree (`wt remove`) after a confirm, `h`/`l`
+  `t` review turns ⇄ commits, `d` remove the agent (`claude rm`) or worktree (`wt remove`) after a confirm, `h`/`l`
   width, `a` hide/show idle repos, `r` reload, `?` all keys, `q` quit.
 - The list has a heading for each repo with a `.git` folder 1–2 levels under `$WT_ROOTS`
   (default `~/Documents/projects`; `<root>/<repo>` or `<root>/<client>/<repo>`). Under it: the
@@ -32,7 +32,7 @@ agent's turns, yazi for files). Built on [worktrunk](https://github.com/max-sixt
 - Panes (in `~/.config/zellij/config.kdl`, all sessions): `Ctrl g` then `h`/`l` column left/right,
   `1`/`2`/`3` list/middle/right column, `;` last pane.
 - One pane per column: a picked agent covers the hub Claude, files (yazi) cover review. Leave
-  the top program (detach, `q` in yazi), `x`, or the "◆ hub" row, and the pane under it comes back.
+  the top program (detach, `q` in yazi) or pick the "◆ hub" row, and the pane under it comes back.
 - Review (tuicr) has two modes; the pane title starts with the mode. **turns**: the agent's turn
   chain, one commit per turn plus "between turns" commits for your own edits, opened on the last
   turn. **commits**: merge-base with `origin/HEAD`/`main`/`master` up to `HEAD`. `t` in tuicr (in

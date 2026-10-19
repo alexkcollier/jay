@@ -11,7 +11,7 @@ Alex's to-do list, in his words (2026-10-19):
 
 ## Item 5: what we know
 
-- Symptom: in the agent viewer the wheel moves the cursor (zellij sends arrow keys), a drag makes zellij's green selection, and the other panes still take the mouse. `x` and a new pick do not fix it.
+- Symptom: in the agent viewer the wheel moves the cursor (zellij sends arrow keys), a drag makes zellij's green selection, and the other panes still take the mouse. Closing the viewer and a new pick do not fix it.
 - Not a Claude problem: `claude attach` turns the mouse modes on at start and sends them again every few seconds. Writing `?1000/1002/1003/1006h` straight to the viewer's tty did not help, so zellij ignores mouse mode for that pane.
 - Not reproduced in throwaway hubs (fake HOME, real claude through a shim): the wheel works after the first pick, after a retarget, after a list click, and with a real Claude in the suspended hub pane.
 - Possible cause, fixed: Ghostty passed an agent's CLAUDE_* env into every tab, and the hub server inherited it (0e14fec: `wt hub --here` removes CLAUDE*/ANTHROPIC* before zellij starts). After a clean restart Alex said "all seems to be working".
@@ -36,7 +36,7 @@ Alex's to-do list, in his words (2026-10-19):
 ## How to work
 
 - Taste items: first show Alex 2–3 concrete options (short ASCII previews, what each costs), let him pick, then build. Key items: propose the keys in one message, then build. Alex wants idiomatic keys ("q means quit").
-- Removing a worktree is destructive: confirm in the UI first, use `wt remove`, never remove a main checkout, never run `wt step prune` in one client repo. Removing an agent: `claude rm <id>` after a confirm; closing a viewer stays `x`.
+- Removing a worktree is destructive: confirm in the UI first, use `wt remove`, never remove a main checkout, never run `wt step prune` in one client repo. Removing an agent: `claude rm <id>` after a confirm. There is no close key: the "◆ hub" row closes the agent viewer (Alex dropped `x`, 2026-10-19).
 - Test zellij behaviour in a throwaway session as CLAUDE.md says, never on Alex's live hub. Apply to the live hub only when an item is done, and restart a live pane in place (focus it, `zellij -s hub run --in-place --close-replaced-pane ... -- env -u CLAUDE_JOB_DIR <cmd>`, refocus) — never quit the hub session.
 - Edit running scripts write-then-mv. Commit each finished item in this repo (no Claude-Session trailer, no ticket ids); there is no remote.
 - Respond in Simplified Technical English. End each item with what changed and how Alex uses it.

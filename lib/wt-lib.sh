@@ -361,14 +361,6 @@ wtl_hub_show() {
   wtl_hub_focus_middle
 }
 
-# Close the agent viewer when it shows agent $1 (short id); the hub Claude comes back.
-wtl_hub_close() {
-  local pane
-  IFS=$'\t' read -r pane _ < <(wtl_hub_role agent) || return 0
-  [[ "$(cut -f1 "$(wtl_hub_target_file agent)" 2>/dev/null)" == "$1" ]] || return 0
-  zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "$pane"
-}
-
 # --- Hub review (tuicr) and files (yazi) panes, following the picked worktree ---
 
 WT_HUB_NVIM="$HOME/.local/state/wt-hub-nvim.sock"
