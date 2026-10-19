@@ -20,8 +20,9 @@ agent's turns, yazi for files). Built on [worktrunk](https://github.com/max-sixt
 
 - `wt hub` — open the hub tab (starts it fresh when it is not running or does not answer).
 - In the list: a pick of an agent (or "◆ hub") always moves the focus to the middle column; on a
-  worktree, Enter moves it to review and a click keeps it in the list. `n` new agent in the row's
-  worktree, `N` new worktree + agent (`wt new`), `v` review, `e` files, `o` own tab, `x` close
+  worktree, Enter moves it to review and a click keeps it in the list. ◂ marks the agent in the
+  middle column. `n` new idle agent in the row's worktree, `N` new worktree (asks the branch) +
+  idle agent (`wt new -a`); type the first prompt in the middle column. `v` review, `e` files, `o` own tab, `x` close
   viewer, `d` remove the agent (`claude rm`) or worktree (`wt remove`) after a confirm, `h`/`l`
   width, `r` reload, `?` all keys, `q` quit.
 - Panes (in `~/.config/zellij/config.kdl`, all sessions): `Ctrl g` then `h`/`l` column left/right,

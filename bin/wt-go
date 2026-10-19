@@ -37,7 +37,8 @@ cwd=$(jq -r .cwd <<<"$agent")
 pid=$(jq -r '.pid // empty' <<<"$agent")
 
 if [[ "$kind" == background ]] && { wtl_in_hub || wtl_hub_live; }; then
-  hub_pick() { wtl_hub_show "$id" "$(jq -r '.name // .id' <<<"$agent")" "$cwd" && wtl_hub_target "$cwd" "$sid"; }
+  # The turn chain of a background agent is named after its id (see claude-turn-snapshot).
+  hub_pick() { wtl_hub_show "$id" "$(jq -r '.name // .id' <<<"$agent")" "$cwd" && wtl_hub_target "$cwd" "$id"; }
   wtl_hub_locked hub_pick || { echo "Could not show $id in the hub." >&2; exit 1; }
   if ! wtl_in_hub && tab=$(wtl_gh_tab_for_session "$WT_HUB_SESSION"); then
     wtl_gh_select "$tab"

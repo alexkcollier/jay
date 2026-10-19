@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# wt new <branch|pr:N> [-b base] [-t "task note"] [-- prompt...]
-# Create (or reuse) the worktree and store the task note. With a prompt, start a
-# background Claude agent there (see it in the hub sidebar or `claude agents`).
+# wt new <branch|pr:N> [-b base] [-t "task note"] [-a] [-- prompt...]
+# Create (or reuse) the worktree and store the task note. With a prompt, or -a for an idle
+# one, start a background Claude agent there (see it in the hub list or `claude agents`).
 # Without -t, the first line of the prompt becomes the task note.
 set -euo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
 
 usage() { sed -n '2,5s/^# \{0,1\}//p' "$0"; }
-branch="" base="" task="" prompt=()
+branch="" base="" task="" agent=false prompt=()
 while (($#)); do
   case $1 in
     -b|--base) base=$2; shift 2 ;;
     -t|--task) task=$2; shift 2 ;;
+    -a|--agent) agent=true; shift ;;
     --) shift; prompt=("$@"); break ;;
     -h|--help) usage; exit 0 ;;
     *) branch=$1; shift ;;
@@ -37,6 +38,8 @@ fi
 IFS=$'\t' read -r _ repo branch _ < <(wtl_describe "$path")
 if ((${#prompt[@]})); then
   (cd "$path" && claude --bg --name "$(wtl_tab_name "$repo" "$branch")" "${prompt[*]}")
+elif [[ "$agent" == true ]]; then
+  (cd "$path" && claude --bg --name "$(wtl_tab_name "$repo" "$branch")")
 else
   echo "Worktree ready: $path"
   echo "Open it with: wt open $branch"

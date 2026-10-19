@@ -4,7 +4,7 @@
 # the running program, so the pane starts it again for the new target).
 # agent:  `claude attach` on the picked agent. It covers the hub Claude; when you leave the
 #         agent, the pane closes and the hub Claude comes back.
-# review: tuicr on the session's turn chain (refs/wt-turns/<session8>), else the newest chain in
+# review: tuicr on the agent's turn chain (refs/wt-turns/<agent id or session8>), else the newest chain in
 #         the worktree, else tuicr's own target picker. A chain opens on its last turn; `(`
 #         shows all turns. q in tuicr starts it again (back to the picker or the last turn).
 # files:  yazi in the worktree. It covers review; quit yazi and review comes back.

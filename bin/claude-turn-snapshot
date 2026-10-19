@@ -24,7 +24,13 @@ sid=$(jq -r '.session_id // ""' <<<"$input")
 [[ -n "$cwd" && -n "$sid" ]] || exit 0
 top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
 
+# A background agent keeps its id when its session id changes (a resume, /clear), so its chain
+# is named after the agent: the job folder's id, when the job's state names this session.
 short=${sid:0:8}
+job=${CLAUDE_JOB_DIR:-}
+if [[ -n "$job" ]] && jq -e --arg s "$sid" '.sessionId == $s or .resumeSessionId == $s' "$job/state.json" >/dev/null 2>&1; then
+  short=$(basename "$job")
+fi
 state="$HOME/.local/state/wt-turns"
 mkdir -p "$state"
 prompt_file="$state/$short.prompt"
