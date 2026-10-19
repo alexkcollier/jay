@@ -33,7 +33,7 @@ rows() {
   [[ -f "$STATE/wt-hub.json" ]] && hub=$(jq -r '.sessionId // ""' "$STATE/wt-hub.json" 2>/dev/null)
   local inhub=false shown=""
   wtl_in_hub && inhub=true
-  # The agent in the hub's middle column (empty: the hub Claude), marked with ▸ on the left.
+  # The agent in the hub's middle column (empty: the hub Claude), marked with ▸ beside it.
   wtl_hub_role agent >/dev/null && shown=$(cut -f1 "$(wtl_hub_target_file agent)" 2>/dev/null)
   local hideidle=false
   [[ -f "$HIDE_IDLE" ]] && hideidle=true
@@ -75,7 +75,7 @@ rows() {
     | ($repos | map(select(.idle)) | length) as $idle
     | ($repos | map(select(.idle | not) | .trees[] | select(.idle)) | length) as $idlemain
     | ($ag | map(select(.wt == ""))) as $stray
-    | def lead($col): (if shown then c("1;36") + " ▸" + c("0") else "  " end) + (" " * ($col - 2));
+    | def lead($col): (" " * ($col - 2)) + (if shown then c("1;36") + "▸ " + c("0") else "  " end);
       def info: (.symbols | narrow) + (if .task != "" then " · " + (.task | narrow) else "" end);
       def reporows: select((.idle and $hideidle) | not)
         | ("repo\t" + .main.path + "\t  " + (if .idle then c("2") else c("1") end) + .repo + c("0")),

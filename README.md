@@ -81,7 +81,7 @@ is live at once. Every step can run again safely.
 
 - `wt hub` — open the hub tab (starts it fresh when it is not running or does not answer).
 - In the list: a pick of an agent (or "◆ hub") always moves the focus to the middle column; on a
-  worktree, Enter moves it to review and a click keeps it in the list. ▸ (left) marks the agent in the
+  worktree, Enter moves it to review and a click keeps it in the list. ▸ (beside the agent) marks the agent in the
   middle column. `n` new idle agent in the row's worktree, `N` new worktree (asks the branch) +
   idle agent (`wt new -a`); type the first prompt in the middle column. `o` own tab,
   `t` review turns ⇄ commits, `d` remove the agent (`claude rm`) or worktree (`wt remove`) after a confirm, `h`/`l`
@@ -99,7 +99,8 @@ is live at once. Every step can run again safely.
   the top program (detach, `q` in yazi) or pick the "◆ hub" row, and the pane under it comes back.
 - Review ⇄ files: `e` in tuicr (NORMAL or SELECT mode) shows files over review, `e` (or `q`) in
   yazi goes back. tuicr keeps running under yazi. tuicr's own `e` (exclude filter) is not
-  available in the hub; its `i` (include filter) and `:` commands still work.
+  available in the hub; its `i` (include filter) and `:` commands still work. The pane title
+  ends with the pane's keys (`e files · t commits`, `e review`).
 - Review (tuicr) has two modes; the pane title starts with the mode. **turns**: the agent's turn
   chain, one commit per turn plus "between turns" commits for your own edits, opened on the last
   turn. **commits**: merge-base with `origin/HEAD`/`main`/`master` up to `HEAD`. `t` in tuicr (in
