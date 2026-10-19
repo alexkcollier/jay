@@ -7,6 +7,7 @@ Alex's to-do list, in his words (2026-10-19):
 2. Nicer zellij UI — "the current tabs and hints are meh" (tab-bar and status-bar plugins in the hub layout).
 3. Faster pane switching/navigation.
 4. Keyboard hints in the worktree list, and the ability to remove agents and worktrees from it.
+5. The agent panel sometimes stops responding to the mouse (added 2026-10-19).
 
 How to work:
 - Items 1 and 2 are taste: first show Alex 2–3 concrete options (short ASCII previews, what each costs), let him pick, then build. Items 3 and 4: propose the keys in one message, then build.
