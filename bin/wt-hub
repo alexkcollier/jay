@@ -97,6 +97,9 @@ fi
 if [[ "${1:-}" == --here ]]; then
   hub_answers && exec zellij attach "$SESSION"
   fresh_start
+  # The hub's panes inherit the server's environment. A Ghostty started by an agent passes that
+  # agent's CLAUDE_* variables to every tab, and in the hub they make wtl_in_hub false.
+  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do unset "$var"; done
   exec zellij -s "$SESSION" -n "$layout"
 fi
 
@@ -107,6 +110,5 @@ if hub_answers; then
     wtl_gh_new_tab "$root" "zellij attach $SESSION" >/dev/null
   fi
 else
-  fresh_start
-  wtl_gh_new_tab "$root" "zellij -s $SESSION -n $layout" >/dev/null
+  wtl_gh_new_tab "$root" "$HOME/.local/bin/wt-hub --here" >/dev/null
 fi
