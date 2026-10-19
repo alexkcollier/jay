@@ -4,9 +4,10 @@
 # Claude), and review (tuicr, its turns) and files (yazi, when shown) switch to it; a worktree →
 # review and files switch to it; "◆ hub" → the hub Claude (closes the agent viewer). Agents and
 # the hub row take the focus to the middle; Enter on a worktree takes it to review. n/N: new agent
-# here / in a new worktree  v: review  e: files  o: own Ghostty tab
+# here / in a new worktree  o: own Ghostty tab  t: review turns/commits
 # d: remove the agent or worktree (asks first)  a: hide/show idle repos and main checkouts
-# r: reload  h/l: narrower/wider  ?: keys  q: quit
+# r: reload  h/l: narrower/wider  ?: keys  q: quit  (e for files is a key of the review pane)
+# wt-sidebar --files: show files over review (e in the review pane, through wt-hub-keys).
 set -uo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
 
@@ -128,14 +129,6 @@ act() {
   return 0
 }
 
-target_and_show() {
-  wtl_hub_target "$1"
-  case $2 in
-    files) wtl_hub_show_files ;;
-    review) wtl_hub_show_review ;;
-  esac
-}
-
 path_of() {
   case $1 in
     wt|repo) printf '%s\n' "$2" ;;
@@ -149,7 +142,6 @@ view() {
   [[ -n "$path" ]] || return 0
   case $1 in
     open) wt-open "$path" >/dev/null 2>&1 ;;
-    review|files) wtl_hub_locked target_and_show "$path" "$1"; focus_column 2 ;;
   esac
 }
 
@@ -193,23 +185,32 @@ $out"
   pause "Started $agent, but the hub cannot show it yet. Pick it in the list."
 }
 
-# The key hints under the list; --toggle switches between the short and the full list.
-FOOTER_SHORT=$'\e[2m⏎ open  v review  e files  t turns/commits\nn new  d remove  ? keys\e[0m'
-FOOTER_FULL=$'\e[2m⏎      open (agent: focus goes there)
-click  open (agent: focus goes there)
-n      new agent in this worktree
-N      new worktree + agent
-t      review: turns ⇄ commits (also t in tuicr)
-▸      the agent in the middle pane
-◆ hub  back to the hub Claude
-v / e  review / files
-o      own Ghostty tab
-d      remove agent / worktree
-a      hide / show idle repos, main
-r      reload   j / k  move
-h / l  narrower / wider
-q      quit     ?  fewer keys
-Ctrl g h l 1 2 3 ;  panes\e[0m'
+# The key hints under the list, keys in the headings' orange and labels in the plain text color
+# (--color=footer:-1; fzf's own footer color is a dim blue-gray): short ones grouped, and with ?
+# the full list, one key per line. Lines stay under 30 columns (the list is about 32 wide).
+# --toggle switches between the two.
+KEY=$'\e[38;5;173m' OFF=$'\e[0m'
+FOOTER_SHORT="${KEY}⏎${OFF} open  ${KEY}n${OFF} new  ${KEY}d${OFF} remove
+${KEY}t${OFF} turns/commits  ${KEY}?${OFF} keys"
+FOOTER_FULL="${KEY}⏎${OFF}      open, focus moves
+${KEY}click${OFF}  open
+${KEY}n${OFF}      new agent here
+${KEY}N${OFF}      new worktree + agent
+${KEY}o${OFF}      own Ghostty tab
+${KEY}d${OFF}      remove agent/worktree
+${KEY}t${OFF}      turns ⇄ commits
+${KEY}a${OFF}      hide/show idle repos
+${KEY}r${OFF}      reload
+${KEY}j k${OFF}    move
+${KEY}h l${OFF}    narrower / wider
+${KEY}q${OFF}      quit
+${KEY}?${OFF}      fewer keys
+${KEY}e${OFF}      pane 3: files ⇄ review
+${KEY}^g 1-3${OFF} pane 1 / 2 / 3
+${KEY}^g h l${OFF} pane left / right
+${KEY}^g ;${OFF}   last pane
+${KEY}▸${OFF}      agent in middle pane
+${KEY}◆ hub${OFF}  back to hub Claude"
 footer() {
   local flag=${WT_SIDEBAR_HELP:-/dev/null}
   if [[ "${1:-}" == --toggle ]]; then
@@ -302,9 +303,10 @@ case ${1:-} in
   --remove) shift; remove "$@"; exit 0 ;;
   --new) shift; new_agent "$@"; exit 0 ;;
   --toggle) wtl_hub_locked wtl_hub_toggle_review; exit 0 ;;
+  --files) wtl_hub_locked wtl_hub_show_files; exit 0 ;;
   --idle) if [[ -f "$HIDE_IDLE" ]]; then rm -f "$HIDE_IDLE"; else : >"$HIDE_IDLE"; fi; exit 0 ;;
   --footer) shift; footer "$@"; exit 0 ;;
-  -h|--help) sed -n '2,9s/^# \{0,1\}//p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,10s/^# \{0,1\}//p' "$0"; exit 0 ;;
 esac
 
 sock="$STATE/wt-sidebar.$$.sock"
@@ -360,7 +362,7 @@ trap 'kill $loop 2>/dev/null; rm -f "$sock" "$WT_SIDEBAR_COUNT" "$WT_SIDEBAR_SUM
 
 rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=hidden --no-scrollbar \
   --delimiter=$'\t' --with-nth=3 --track --id-nth=2 --pointer='▌' --gutter=' ' --highlight-line \
-  --footer="$(footer)" \
+  --footer="$(footer)" --color=footer:-1 \
   --bind '?:transform-footer(wt-sidebar --footer --toggle)' \
   --bind 'd:execute(wt-sidebar --remove {1} {2})+reload-sync(wt-sidebar --rows)+clear-screen' \
   --bind 'n:execute(wt-sidebar --new here {1} {2})+reload-sync(wt-sidebar --rows --fresh)+clear-screen' \
@@ -370,10 +372,8 @@ rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=
   --bind 'left-click:execute-silent(wt-sidebar --act {1} {2})+reload-sync(wt-sidebar --rows)' \
   --bind 'r:reload-sync(wt-sidebar --rows --fresh)' \
   --bind 'o:execute-silent(wt-sidebar --view open {1} {2})' \
-  --bind 'v:execute-silent(wt-sidebar --view review {1} {2})' \
   --bind 't:execute-silent(wt-sidebar --toggle)' \
   --bind 'a:execute-silent(wt-sidebar --idle)+reload-sync(wt-sidebar --rows)+clear-screen' \
-  --bind 'e:execute-silent(wt-sidebar --view files {1} {2})' \
   --bind 'h:execute-silent(zellij action resize -p "$ZELLIJ_PANE_ID" decrease right)' \
   --bind 'l:execute-silent(zellij action resize -p "$ZELLIJ_PANE_ID" increase right)' \
   --bind 'j:down,k:up,q:abort,esc:ignore'

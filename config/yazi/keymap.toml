@@ -1,0 +1,6 @@
+# yazi in the hub's files pane only (wt-hub-pane sets YAZI_CONFIG_HOME to
+# ~/.config/wt-hub/yazi). e goes back to review, as e in tuicr shows files.
+[mgr]
+prepend_keymap = [
+  { on = "e", run = "quit", desc = "Back to review (wt-hub)" },
+]

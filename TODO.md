@@ -24,6 +24,8 @@ Alex's to-do list, in his words (2026-10-19):
 - List: `n` new idle agent in the row's worktree, `N` new worktree + idle agent; ▸ marks the shown agent.
 - Turn chains are per agent (a bg agent keeps its chain after resume or /clear).
 - Turn snapshots: committing agents now get turns (the base stays until the first turn commit).
+- Key hints: keys in orange, labels in plain text; short hints grouped, `?` one key per line,
+  all under 30 columns. `v`/`e` left the list: `e` in tuicr shows files, `e` in yazi goes back.
 
 ## Other open items
 

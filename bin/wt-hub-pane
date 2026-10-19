@@ -10,8 +10,9 @@
 #         chain in the worktree, else tuicr's own target picker. A chain opens on its last
 #         turn; `(` shows all turns.
 #         commits: the branch's own commits (since it left main), else tuicr's picker.
-#         q in tuicr starts it again (back to the picker or the last turn).
-# files:  yazi in the worktree. It covers review; quit yazi and review comes back.
+#         q in tuicr starts it again (back to the picker or the last turn). e shows files.
+# files:  yazi in the worktree. It covers review; e or q quits yazi and review comes back
+#         (e from the hub's yazi keymap, config/yazi).
 set -uo pipefail
 export PATH="$HOME/.local/share/mise/shims:/opt/homebrew/bin:$PATH"
 WT_HUB_SESSION=${ZELLIJ_SESSION_NAME:-${WT_HUB_SESSION:-hub}}
@@ -120,14 +121,14 @@ run() {
       fi ;;
     files)
       cd "$1" || return
-      yazi "$1" ;;
+      YAZI_CONFIG_HOME="$HOME/.config/wt-hub/yazi" yazi "$1" ;;
   esac
 }
 
 while :; do
   now=$(target)
   if [[ -z "$now" ]]; then
-    printf '\n  Review\n\n  Pick a worktree or an agent in the list.\n  tuicr opens here for its turns; e shows the files (yazi).\n'
+    printf '\n  Review\n\n  Pick a worktree or an agent in the list.\n  tuicr opens here for its turns.\n  e in tuicr: files (yazi); e in files: review.\n'
     wait_change "" || true
     clear
     continue

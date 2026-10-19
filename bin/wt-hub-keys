@@ -1,8 +1,10 @@
 #!/usr/bin/python3 -I
-# wt-hub-keys CMD... — run CMD (tuicr) in a pty and pass all input to it, except `t` typed while
-# tuicr's status line shows NORMAL or SELECT: then stop CMD and exit 99 (the review pane toggles
-# turns ⇄ commits). tuicr has no key mapping, so the hub adds this key in front of it.
-# A `t` in a comment, a `:` or `/` prompt or a paste goes to tuicr as usual.
+# wt-hub-keys CMD... — run CMD (tuicr) in a pty and pass all input to it, except two keys typed
+# while tuicr's status line shows NORMAL or SELECT:
+#   t: stop CMD and exit 99 (the review pane toggles turns ⇄ commits);
+#   e: show files (yazi) over review; tuicr keeps running under it (its own e filter is lost).
+# tuicr has no key mapping, so the hub adds these keys in front of it.
+# A `t` or `e` in a comment, a `:` or `/` prompt or a paste goes to tuicr as usual.
 import os, pty, select, signal, subprocess, sys, termios, tty, fcntl, struct
 
 TOGGLE = 99
@@ -60,6 +62,11 @@ try:
                 os.kill(pid, signal.SIGTERM)
                 code = TOGGLE
                 break
+            if data == b"e" and normal_mode():
+                subprocess.Popen([os.path.expanduser("~/.local/bin/wt-sidebar"), "--files"],
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, start_new_session=True)
+                continue
             os.write(fd, data)
 finally:
     termios.tcsetattr(stdin, termios.TCSADRAIN, saved)

@@ -12,6 +12,7 @@ agent's turns, yazi for files). Built on [worktrunk](https://github.com/max-sixt
 | `lib/wt-lib.sh` | `~/.local/lib/wt-lib.sh` | shared helpers (Ghostty, zellij, hub panes) |
 | `mod/` | `~/mods/wt-hub` (folder marketplace `alex-wt-hub`) | Claude Code mod: `/wt`, toasts, status line |
 | `config/worktrunk/config.toml` | `~/.config/worktrunk/config.toml` | worktree path, `pre-start = "wt-setup"`, Task column, aliases |
+| `config/yazi/keymap.toml` | `~/.config/wt-hub/yazi/` (folder link) | hub-only yazi keys: `e` back to review |
 | `config/tuicr/config.toml` | `~/.config/tuicr/config.toml` | `q_quits`: in the hub's review pane `q` goes back (the pane starts tuicr again) |
 | `config/zellij/wt-hub.kdl` | `~/.config/zellij/layouts/wt-hub.kdl` | saved hub layout (`wt hub` writes its own copy) |
 | `config/claude-settings-hooks.json` | merged into `~/.claude/settings.json` by hand | Stop / UserPromptSubmit / Notification hooks |
@@ -29,12 +30,13 @@ is live at once. Every step can run again safely.
 
    ```sh
    cd ~/Documents/projects/wt-hub
-   mkdir -p ~/.local/bin ~/.local/lib ~/mods ~/.config/worktrunk ~/.config/tuicr ~/.config/zellij/layouts
+   mkdir -p ~/.local/bin ~/.local/lib ~/mods ~/.config/worktrunk ~/.config/tuicr ~/.config/zellij/layouts ~/.config/wt-hub
    for f in bin/*; do [ -f "$f" ] && ln -sfn "$PWD/$f" ~/.local/bin/; done
    ln -sfn "$PWD/lib/wt-lib.sh" ~/.local/lib/wt-lib.sh
    ln -sfn "$PWD/mod" ~/mods/wt-hub
    ln -sfn "$PWD/config/worktrunk/config.toml" ~/.config/worktrunk/config.toml
    ln -sfn "$PWD/config/tuicr/config.toml" ~/.config/tuicr/config.toml
+   ln -sfn "$PWD/config/yazi" ~/.config/wt-hub/yazi
    ln -sfn "$PWD/config/zellij/wt-hub.kdl" ~/.config/zellij/layouts/wt-hub.kdl
    ```
 
@@ -81,20 +83,23 @@ is live at once. Every step can run again safely.
 - In the list: a pick of an agent (or "◆ hub") always moves the focus to the middle column; on a
   worktree, Enter moves it to review and a click keeps it in the list. ▸ (left) marks the agent in the
   middle column. `n` new idle agent in the row's worktree, `N` new worktree (asks the branch) +
-  idle agent (`wt new -a`); type the first prompt in the middle column. `v` review, `e` files, `o` own tab,
+  idle agent (`wt new -a`); type the first prompt in the middle column. `o` own tab,
   `t` review turns ⇄ commits, `d` remove the agent (`claude rm`) or worktree (`wt remove`) after a confirm, `h`/`l`
-  width, `a` hide/show idle repos, `r` reload, `?` all keys, `q` quit.
+  width, `a` hide/show idle repos, `r` reload, `?` all keys (one per line), `q` quit.
 - The list shows each repo with a `.git` folder 1–2 levels under `$WT_ROOTS` (default
   `~/Documents/projects`): `<root>/<client>/<repo>` under a heading for its client,
   `<root>/<repo>` under "Other" at the bottom (with the agents outside every worktree). Under each
   repo: its worktrees, the main checkout first, and under each worktree its agents. A repo row acts
-  as its main checkout (`N`, `v`, `e`, `o`, click). A main checkout without an agent is idle, and so
+  as its main checkout (`N`, `o`, click). A main checkout without an agent is idle, and so
   is a repo with only an idle main checkout: both are dim, and `a` hides them until you press `a`
   again.
 - Panes (in `~/.config/zellij/config.kdl`, all sessions): `Ctrl g` then `h`/`l` column left/right,
   `1`/`2`/`3` list/middle/right column, `;` last pane.
 - One pane per column: a picked agent covers the hub Claude, files (yazi) cover review. Leave
   the top program (detach, `q` in yazi) or pick the "◆ hub" row, and the pane under it comes back.
+- Review ⇄ files: `e` in tuicr (NORMAL or SELECT mode) shows files over review, `e` (or `q`) in
+  yazi goes back. tuicr keeps running under yazi. tuicr's own `e` (exclude filter) is not
+  available in the hub; its `i` (include filter) and `:` commands still work.
 - Review (tuicr) has two modes; the pane title starts with the mode. **turns**: the agent's turn
   chain, one commit per turn plus "between turns" commits for your own edits, opened on the last
   turn. **commits**: merge-base with `origin/HEAD`/`main`/`master` up to `HEAD`. `t` in tuicr (in
