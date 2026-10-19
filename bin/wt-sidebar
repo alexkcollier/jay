@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # wt sidebar — live list of worktrees and Claude agents for a narrow left pane.
-# Click, double-click or Enter: an agent → its pane in the hub's middle column, and review
-# (tuicr, its turns) + files (yazi) switch to it; a worktree → review + files switch to it;
-# "◆ hub" → the hub Claude.
-# v: review  e: files  o: the worktree's own Ghostty tab  x: close an agent pane
+# Click, double-click or Enter: an agent → shown in the hub's middle column (over the hub
+# Claude), and review (tuicr, its turns) and files (yazi, when shown) switch to it; a worktree →
+# review and files switch to it; "◆ hub" → the hub Claude (closes the agent viewer).
+# v: review  e: files (over review)  o: the worktree's own Ghostty tab  x: close the agent viewer
 # r: reload worktrees  j/k: move  h/l: narrower/wider (the hub keeps the width)  q: quit
 set -uo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
@@ -67,14 +67,17 @@ rows() {
 act() {
   case $1 in
     ag) wt-go "$2" >/dev/null 2>&1 ;;
-    wt) if wtl_in_hub; then wtl_hub_locked target_and_focus "$2"; else wt-open "$2" >/dev/null 2>&1; fi ;;
-    hub) wtl_hub_focus_claude >/dev/null 2>&1 ;;
+    wt) if wtl_in_hub; then wtl_hub_locked wtl_hub_target "$2"; else wt-open "$2" >/dev/null 2>&1; fi ;;
+    hub) wtl_hub_locked wtl_hub_show_claude >/dev/null 2>&1 ;;
   esac
 }
 
-target_and_focus() {
+target_and_show() {
   wtl_hub_target "$1"
-  wtl_hub_focus_role "${2:-$(wtl_hub_open_role)}"
+  case $2 in
+    files) wtl_hub_show_files ;;
+    review) wtl_hub_show_review ;;
+  esac
 }
 
 path_of() {
@@ -90,7 +93,7 @@ view() {
   [[ -n "$path" ]] || return 0
   case $1 in
     open) wt-open "$path" >/dev/null 2>&1 ;;
-    review|files) wtl_hub_locked target_and_focus "$path" "$1" ;;
+    review|files) wtl_hub_locked target_and_show "$path" "$1" ;;
   esac
 }
 

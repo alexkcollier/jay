@@ -31,7 +31,7 @@ layout {
             args "WT_HUB=1" "$HOME/.local/bin/claude" "-n" "hub"$resume
         }
         pane size="$right%" name="review" command="$HOME/.local/bin/wt-hub-pane" {
-            args "idle" "$root"
+            args "review"
         }
     }
     pane size=2 borderless=true {
@@ -52,7 +52,7 @@ fresh_start() {
   pkill -9 -f "zellij --server .*/$SESSION\$" 2>/dev/null || true
   zellij delete-session --force "$SESSION" >/dev/null 2>&1 || true
   write_layout
-  rm -f "$WT_HUB_TARGET"
+  wtl_hub_reset
 }
 
 if [[ "${1:-}" == --here ]]; then

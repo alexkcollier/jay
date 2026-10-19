@@ -9,7 +9,7 @@ layout {
             args "WT_HUB=1" "/Users/alexcollier/.local/bin/claude" "-n" "hub"
         }
         pane size="35%" name="review" command="/Users/alexcollier/.local/bin/wt-hub-pane" {
-            args "idle" "/Users/alexcollier/Documents/projects"
+            args "review"
         }
     }
     pane size=2 borderless=true {

@@ -219,7 +219,12 @@ wtl_session_for_worktree() {
   return 1
 }
 
-# --- Hub stack: agents attached in the hub's right column (zellij session "hub") ---
+# --- Hub panes (zellij session "hub"): hub Claude ⇄ agent viewer, review ⇄ files ---
+# One pane in each column. The agent viewer opens in place over the hub Claude, and files in
+# place over review: zellij keeps the pane under it suspended and shows it again when the top
+# pane closes. The viewer, review and files panes run `wt-hub-pane <role>`, which follows the
+# target in wt-hub-<role>.target; a pick writes the target and stops the running program, so
+# the pane stays where it is and only its program and title change.
 
 WT_HUB_SESSION=${WT_HUB_SESSION:-hub}
 
@@ -241,28 +246,79 @@ wtl_hub_claude_pane() {
   wtl_hub_panes | jq -r 'select((.exited | not) and ((.title // "") == "hub" or ((.pane_command // "") | test("claude -n hub")))) | .id' | head -1
 }
 
-# Pane id that attaches to background agent $1 (short id), still running.
-wtl_hub_agent_pane() {
-  wtl_hub_panes | jq -r --arg id "$1" 'select((.exited | not) and ((.pane_command // "") | test("claude attach " + $id))) | .id' | head -1
+wtl_hub_target_file() { printf '%s/.local/state/wt-hub-%s.target\n' "$HOME" "$1"; }
+wtl_hub_pane_file() { printf '%s/.local/state/wt-hub-%s.pane\n' "$HOME" "$1"; }
+
+# Forget all hub pane targets (a fresh hub).
+wtl_hub_reset() {
+  local role
+  for role in agent review files; do rm -f "$(wtl_hub_target_file $role)" "$(wtl_hub_pane_file $role)"; done
 }
 
-wtl_hub_focus_claude() {
-  local pane
-  pane=$(wtl_hub_claude_pane)
-  [[ -n "$pane" ]] && zellij -s "$WT_HUB_SESSION" action focus-pane-id "terminal_$pane" >/dev/null 2>&1
+# wt-hub-pane $1 (pid $2) ends.
+wtl_hub_pane_gone() {
+  local file pid
+  file=$(wtl_hub_pane_file "$1")
+  IFS=$'\t' read -r _ pid 2>/dev/null <"$file"
+  [[ "${pid:-}" == "$2" ]] && rm -f "$file"
   return 0
 }
 
-# Agent viewer panes as "id<TAB>exited": every other pane in the hub Claude's column, live or
-# held, and any `claude attach` pane. pane_command is not reliable (it can be null), so the
-# column is the main test.
-wtl_hub_viewers() {
-  wtl_hub_panes | jq -rs '
-    (map(select((.title // "") == "hub" and (.exited | not))) | first) as $hub
-    | .[] | select((.is_floating | not) and .id != $hub.id)
-    | select(((.pane_command // "") | test("^claude attach "))
-        or ($hub != null and .tab_id == $hub.tab_id and .pane_x == $hub.pane_x))
-    | "\(.id)\t\(.exited)"'
+# "terminal_<id><TAB>pid" of the running wt-hub-pane for role $1; fails when there is none.
+wtl_hub_role() {
+  local pane pid
+  IFS=$'\t' read -r pane pid 2>/dev/null <"$(wtl_hub_pane_file "$1")" || return 1
+  [[ -n "$pane" && -n "$pid" ]] || return 1
+  ps -o command= -p "$pid" 2>/dev/null | grep -q "wt-hub-pane $1" || return 1
+  printf 'terminal_%s\t%s\n' "$pane" "$pid"
+}
+
+wtl_hub_write_target() {
+  local file
+  file=$(wtl_hub_target_file "$1")
+  printf '%s\n' "$2" >"$file.$$" && mv "$file.$$" "$file"
+}
+
+# Wait up to 2 s for the new wt-hub-pane of role $1 to start.
+wtl_hub_role_ready() {
+  local i
+  for i in $(seq 40); do wtl_hub_role "$1" >/dev/null && return 0; sleep 0.05; done
+  return 1
+}
+
+wtl_kill_children() {
+  local child
+  for child in $(pgrep -P "$1"); do
+    wtl_kill_children "$child"
+    kill -TERM "$child" 2>/dev/null
+  done
+  return 0
+}
+
+# Point the running hub pane of role $1 at target line $2. Prints "terminal_<id><TAB>changed",
+# changed being 1 when the pane restarts its program for the new target, else 0.
+# Fails when no pane of that role runs.
+wtl_hub_point() {
+  local pane pid
+  IFS=$'\t' read -r pane pid < <(wtl_hub_role "$1") || return 1
+  if [[ "$(cat "$(wtl_hub_target_file "$1")" 2>/dev/null)" == "$2" ]]; then
+    printf '%s\t0\n' "$pane"
+    return 0
+  fi
+  wtl_hub_write_target "$1" "$2"
+  wtl_kill_children "$pid"
+  printf '%s\t1\n' "$pane"
+}
+
+# No hub function moves the focus: in zellij 0.45 `focus-pane-id` from the CLI sets a focus of
+# its own, not the terminal's, and on a suspended pane it makes that pane float.
+
+# Show the hub Claude: close the agent viewer over it (the agent keeps running).
+wtl_hub_show_claude() {
+  local pane
+  IFS=$'\t' read -r pane _ < <(wtl_hub_role agent) || return 0
+  zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "$pane" >/dev/null 2>&1
+  return 0
 }
 
 # Run "$@" holding the hub lock, so two picks (sidebar, /wt go, a notice click) never move
@@ -276,60 +332,36 @@ wtl_hub_locked() {
   return $rc
 }
 
-# Show background agent $1 (short id) named $2 from folder $3 in the hub's agent slot:
-# one viewer pane stacked with the hub Claude, replaced in place on each pick.
-# Held (exited) viewers and extra viewers are closed, so the column keeps one viewer.
+# Show background agent $1 (short id) named $2 from folder $3 in the hub's middle column: the
+# viewer pane follows the new agent, or opens in place over the hub Claude.
 wtl_hub_show() {
-  local id=$1 name=$2 cwd=$3 agent keep hub new viewer exited
-  agent=$(wtl_hub_agent_pane "$id")
-  keep=$agent
-  while IFS=$'\t' read -r viewer exited; do
-    [[ "$viewer" == "$keep" ]] && continue
-    if [[ "$exited" == false && -z "$keep" ]]; then keep=$viewer; continue; fi
-    zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "terminal_$viewer" >/dev/null 2>&1
-  done < <(wtl_hub_viewers)
-  if [[ -n "$keep" ]]; then
-    zellij -s "$WT_HUB_SESSION" action focus-pane-id "terminal_$keep" >/dev/null 2>&1
-    [[ -n "$agent" ]] && return 0
-    zellij -s "$WT_HUB_SESSION" run --in-place --close-replaced-pane --name "$name" --cwd "$cwd" -- claude attach "$id" >/dev/null 2>&1
-    return 0
+  local id=$1 name=$2 cwd=$3 line viewer changed hub
+  line=$(printf '%s\t%s' "$id" "$cwd")
+  if IFS=$'\t' read -r viewer changed < <(wtl_hub_point agent "$line"); then
+    [[ "$changed" == 1 ]] && zellij -s "$WT_HUB_SESSION" action rename-pane -p "$viewer" "$name" >/dev/null 2>&1
+  else
+    hub=$(wtl_hub_claude_pane)
+    [[ -n "$hub" ]] || return 1
+    wtl_hub_write_target agent "$line"
+    viewer=$(zellij -s "$WT_HUB_SESSION" action new-pane --in-place --pane-id "terminal_$hub" --close-on-exit \
+      --name "$name" --cwd "$cwd" -- "$HOME/.local/bin/wt-hub-pane" agent)
+    [[ "$viewer" == terminal_* ]] || return 1
+    wtl_hub_role_ready agent
   fi
-  hub=$(wtl_hub_claude_pane)
-  [[ -n "$hub" ]] || return 1
-  zellij -s "$WT_HUB_SESSION" action focus-pane-id "terminal_$hub" >/dev/null 2>&1
-  new=$(zellij -s "$WT_HUB_SESSION" run --name "$name" --cwd "$cwd" -- claude attach "$id")
-  [[ "$new" == terminal_* ]] || return 1
-  zellij -s "$WT_HUB_SESSION" action stack-panes -- "terminal_$hub" "$new" >/dev/null 2>&1
-  zellij -s "$WT_HUB_SESSION" action focus-pane-id "$new" >/dev/null 2>&1
   return 0
 }
 
+# Close the agent viewer when it shows agent $1 (short id); the hub Claude comes back.
 wtl_hub_close() {
   local pane
-  pane=$(wtl_hub_agent_pane "$1")
-  [[ -n "$pane" ]] && zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "terminal_$pane"
+  IFS=$'\t' read -r pane _ < <(wtl_hub_role agent) || return 0
+  [[ "$(cut -f1 "$(wtl_hub_target_file agent)" 2>/dev/null)" == "$1" ]] || return 0
+  zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "$pane"
 }
 
-# --- Hub review (lazygit) and files (Neovim) panes, following the picked worktree ---
+# --- Hub review (tuicr) and files (yazi) panes, following the picked worktree ---
 
 WT_HUB_NVIM="$HOME/.local/state/wt-hub-nvim.sock"
-WT_HUB_TARGET="$HOME/.local/state/wt-hub-target"
-
-wtl_hub_role_pane() {
-  wtl_hub_panes | jq -r --arg role "$1" '
-    ({review: "^review", files: "^files$"}[$role]) as $title
-    | select((.exited | not) and ((.title // "") | test($title))) | .id' | head -1
-}
-
-wtl_hub_restack() {
-  local hub ids
-  hub=$(wtl_hub_claude_pane)
-  [[ -n "$hub" ]] || return 0
-  ids=$(wtl_hub_panes | jq -r 'select((.exited | not) and (((.pane_command // "") | test("^claude attach |wt-hub-pane |lazygit-hub\\.yml|wt-hub-nvim\\.sock")) or ((.title // "") | test("^review · |^files$")))) | "terminal_\(.id)"' | tr '\n' ' ')
-  # shellcheck disable=SC2086
-  [[ -n "$ids" ]] && zellij -s "$WT_HUB_SESSION" action stack-panes -- "terminal_$hub" $ids >/dev/null 2>&1
-  return 0
-}
 
 wtl_nvim_alive() {
   [[ -S "$WT_HUB_NVIM" ]] && nvim --server "$WT_HUB_NVIM" --remote-expr '1' >/dev/null 2>&1
@@ -339,88 +371,56 @@ wtl_nvim_send() {
   nvim --server "$WT_HUB_NVIM" --remote-send "<C-\\><C-n>$1" >/dev/null 2>&1
 }
 
-wtl_hub_focused() {
-  zellij -s "$WT_HUB_SESSION" action list-clients 2>/dev/null | awk 'NR == 2 { print $2 }'
+# "repo/branch" of the worktree $1, for pane titles.
+wtl_hub_title() {
+  local client repo branch top
+  IFS=$'\t' read -r client repo branch top < <(wtl_describe "$1")
+  printf '%s/%s\n' "$repo" "${branch##*/}"
 }
 
-# Run the hub pane role $1 for worktree $2 in place of pane $3, keeping the focus where it was.
-wtl_hub_replace_role() {
-  local role=$1 path=$2 pane=$3 name=$4 session=${5:-} before
-  before=$(wtl_hub_focused)
-  zellij -s "$WT_HUB_SESSION" action focus-pane-id "terminal_$pane" >/dev/null 2>&1
-  zellij -s "$WT_HUB_SESSION" run --in-place --close-replaced-pane --name "$name" --cwd "$path" -- "$HOME/.local/bin/wt-hub-pane" "$role" "$path" $session >/dev/null 2>&1
-  [[ -n "$before" && "$before" != "terminal_$pane" ]] && zellij -s "$WT_HUB_SESSION" action focus-pane-id "$before" >/dev/null 2>&1
-  return 0
-}
-
-# Open the files Neovim stacked with the review pane, keeping the focus where it was.
-wtl_hub_open_files() {
-  local path=$1 review before new
-  review=$(wtl_hub_role_pane review)
-  [[ -n "$review" ]] || return 0
-  before=$(wtl_hub_focused)
-  zellij -s "$WT_HUB_SESSION" action focus-pane-id "terminal_$review" >/dev/null 2>&1
-  new=$(zellij -s "$WT_HUB_SESSION" run --name files --cwd "$path" -- "$HOME/.local/bin/wt-hub-pane" files "$path")
-  [[ "$new" == terminal_* ]] && zellij -s "$WT_HUB_SESSION" action stack-panes -- "terminal_$review" "$new" >/dev/null 2>&1
-  zellij -s "$WT_HUB_SESSION" action focus-pane-id "terminal_$review" >/dev/null 2>&1
-  [[ -n "$before" ]] && zellij -s "$WT_HUB_SESSION" action focus-pane-id "$before" >/dev/null 2>&1
-  return 0
-}
-
-# Start the files Neovim in $1 if it is not running.
-wtl_hub_files_ready() {
-  if ! wtl_nvim_alive || [[ -z "$(wtl_hub_role_pane files)" ]]; then
-    wtl_hub_open_files "$1"
-    local i
-    for i in 1 2 3 4 5 6 7 8 9 10; do wtl_nvim_alive && return 0; sleep 0.3; done
-  fi
-  return 0
-}
-
-wtl_hub_focus_role() {
-  local pane
-  pane=$(wtl_hub_role_pane "$1")
-  [[ -n "$pane" ]] && zellij -s "$WT_HUB_SESSION" action focus-pane-id "terminal_$pane" >/dev/null 2>&1
-  return 0
-}
-wtl_hub_focus_files() { wtl_hub_focus_role files; }
-wtl_hub_focus_review() { wtl_hub_focus_role review; }
-
-# Point the hub's review (tuicr) and files (yazi) panes at the worktree that holds $1.
+# Point review (and files, when shown) at the worktree that holds $1.
 # $2: the agent's session id, to review that agent's turns; empty for a worktree pick.
 wtl_hub_target() {
-  local top client repo branch review files session=${2:-} key
-  IFS=$'\t' read -r client repo branch top < <(wtl_describe "$1")
-  wtl_hub_panes | jq -rs '
-    map(select((.title // "") | test("^review|^files$")) | . + {role: (.title | sub(" .*"; ""))})
-    | (map(select(.exited)) + (map(select(.exited | not)) | group_by(.role) | map(.[1:]) | add // []))
-    | .[].id' | while read -r extra; do
-    zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "terminal_$extra" >/dev/null 2>&1
-  done
-  review=$(wtl_hub_role_pane review)
-  [[ -n "$review" ]] || return 0
-  key="$top|$session"
-  [[ "$(cat "$WT_HUB_TARGET" 2>/dev/null)" == "$key|$review" ]] && return 0
-  local open before
-  open=$(wtl_hub_open_role)
-  before=$(wtl_hub_focused)
-  wtl_hub_replace_role review "$top" "$review" "review · $repo/${branch##*/}" "$session"
-  files=$(wtl_hub_role_pane files)
-  if [[ -n "$files" ]]; then
-    wtl_hub_replace_role files "$top" "$files" "files"
-  else
-    wtl_hub_open_files "$top"
+  local top title pane changed
+  top=$(wtl_toplevel "$1")
+  title=$(wtl_hub_title "$top")
+  if IFS=$'\t' read -r pane changed < <(wtl_hub_point review "$(printf '%s\t%s' "$top" "${2:-}")"); then
+    [[ "$changed" == 1 ]] && zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "review · $title" >/dev/null 2>&1
   fi
-  wtl_hub_focus_role "$open"
-  [[ -n "$before" ]] && zellij -s "$WT_HUB_SESSION" action focus-pane-id "$before" >/dev/null 2>&1
-  printf '%s|%s\n' "$key" "$(wtl_hub_role_pane review)" >"$WT_HUB_TARGET"
+  if IFS=$'\t' read -r pane changed < <(wtl_hub_point files "$top"); then
+    [[ "$changed" == 1 ]] && zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "files · $title" >/dev/null 2>&1
+  fi
+  return 0
 }
 
-# Which of review/files is expanded in the right column now (review when unknown).
-wtl_hub_open_role() {
-  if zellij -s "$WT_HUB_SESSION" action dump-layout 2>/dev/null | grep -q 'name="files"[^{]*expanded=true'; then
-    printf 'files\n'
-  else
-    printf 'review\n'
-  fi
+# Title the pane of role $1 (review or files) after the worktree in its target. zellij does not
+# rename a suspended pane, so review gets its title again when files closes.
+wtl_hub_retitle() {
+  local pane top
+  IFS=$'\t' read -r pane _ < <(wtl_hub_role "$1") || return 0
+  top=$(cut -f1 "$(wtl_hub_target_file "$1")" 2>/dev/null)
+  [[ -n "$top" ]] || return 0
+  zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "$1 · $(wtl_hub_title "$top")" >/dev/null 2>&1
+}
+
+# Show files (yazi) in place over review, in the review's worktree.
+wtl_hub_show_files() {
+  local review top pane
+  wtl_hub_role files >/dev/null && return 0
+  IFS=$'\t' read -r review _ < <(wtl_hub_role review) || return 0
+  top=$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)
+  [[ -n "$top" ]] || return 0
+  wtl_hub_write_target files "$top"
+  pane=$(zellij -s "$WT_HUB_SESSION" action new-pane --in-place --pane-id "$review" --close-on-exit \
+    --name "files · $(wtl_hub_title "$top")" --cwd "$top" -- "$HOME/.local/bin/wt-hub-pane" files)
+  [[ "$pane" == terminal_* ]] && wtl_hub_role_ready files
+  return 0
+}
+
+# Show review: close files over it.
+wtl_hub_show_review() {
+  local pane
+  IFS=$'\t' read -r pane _ < <(wtl_hub_role files) || return 0
+  zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "$pane" >/dev/null 2>&1
+  wtl_hub_retitle review
 }

@@ -1,19 +1,41 @@
 #!/usr/bin/env bash
-# wt-hub-pane review|files|idle <worktree> [session] — a pane of the hub.
+# wt-hub-pane agent|review|files — a pane of the hub that follows its target.
+# The target is a line in ~/.local/state/wt-hub-<role>.target (wtl_hub_point writes it and stops
+# the running program, so the pane starts it again for the new target).
+# agent:  `claude attach` on the picked agent. It covers the hub Claude; when you leave the
+#         agent, the pane closes and the hub Claude comes back.
 # review: tuicr on the session's turn chain (refs/wt-turns/<session8>), else the newest chain in
 #         the worktree, else tuicr's own target picker. Quit tuicr, then Enter opens it again.
-# files:  yazi in the worktree.
+# files:  yazi in the worktree. It covers review; quit yazi and review comes back.
 set -uo pipefail
 export PATH="$HOME/.local/share/mise/shims:/opt/homebrew/bin:$PATH"
+WT_HUB_SESSION=${ZELLIJ_SESSION_NAME:-${WT_HUB_SESSION:-hub}}
 source "$HOME/.local/lib/wt-lib.sh"
 
-case $1 in
-  idle)
-    printf '\n  Review\n\n  Pick a worktree or an agent in the list.\n  tuicr opens here for its turns; files (yazi) stack under it.\n'
-    exec tail -f /dev/null ;;
-esac
+role=$1
+target_file=$(wtl_hub_target_file "$role")
+printf '%s\t%s\n' "${ZELLIJ_PANE_ID:-}" "$$" >"$(wtl_hub_pane_file "$role")"
+trap 'wtl_hub_pane_gone "$role" $$' EXIT
 
-cd "$2" || exit 1
+target() { cat "$target_file" 2>/dev/null; }
+
+# Programs stopped by a retarget can leave mouse modes or the other screen on.
+reset_screen() {
+  printf '\e[?1000l\e[?1002l\e[?1003l\e[?1006l\e[?2004l\e[?1049l\e[?25h'
+  stty sane 2>/dev/null
+  clear
+}
+
+# Wait until the target changes (0) or Enter is pressed (1).
+wait_change() {
+  local rc
+  while [[ "$(target)" == "$1" ]]; do
+    read -r -t 1 _ && return 1
+    rc=$?
+    ((rc > 128)) || sleep 0.5
+  done
+  return 0
+}
 
 chain() {
   local session=${1:0:8} candidate here
@@ -28,19 +50,47 @@ chain() {
     done
 }
 
-case $1 in
-  review)
-    while :; do
-      session=$(chain "${3:-}")
-      clear
+# Run the role's program for target line $1 in the foreground.
+run() {
+  local id path session
+  case $role in
+    agent)
+      IFS=$'\t' read -r id path <<<"$1"
+      cd "$path" 2>/dev/null || cd "$HOME"
+      claude attach "$id" ;;
+    review)
+      IFS=$'\t' read -r path session <<<"$1"
+      cd "$path" || return
+      session=$(chain "$session")
       if [[ -n "$session" ]]; then
         tuicr --no-update-check -r "refs/wt-turns/$session/base..refs/wt-turns/$session/head"
       else
         tuicr --no-update-check
-      fi
-      printf '\n  tuicr closed. Enter: open it again (it re-reads the turns).\n'
-      read -r _ || exit 0
-    done ;;
-  files)
-    exec yazi "$2" ;;
-esac
+      fi ;;
+    files)
+      cd "$1" || return
+      yazi "$1" ;;
+  esac
+}
+
+while :; do
+  now=$(target)
+  if [[ -z "$now" ]]; then
+    printf '\n  Review\n\n  Pick a worktree or an agent in the list.\n  tuicr opens here for its turns; e shows the files (yazi).\n'
+    wait_change "" || true
+    clear
+    continue
+  fi
+  run "$now"
+  reset_screen
+  [[ "$(target)" != "$now" ]] && continue
+  # You left the program yourself: the pane closes and the one under it comes back. Review
+  # gets its title after that (the delay outlives the pane, so HUP is ignored).
+  if [[ "$role" == files ]]; then
+    (trap '' HUP; sleep 0.5; wtl_hub_retitle review) >/dev/null 2>&1 &
+  fi
+  [[ "$role" == review ]] || exit 0
+  printf '\n  tuicr closed. Enter: open it again (it re-reads the turns).\n'
+  wait_change "$now" || true
+  clear
+done

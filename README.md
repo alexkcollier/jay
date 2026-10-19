@@ -20,8 +20,10 @@ agent's turns, yazi for files). Built on [worktrunk](https://github.com/max-sixt
 - `wt hub` — open the hub tab (starts it fresh when it is not running or does not answer).
 - In the list: click / Enter picks, `v` review, `e` files, `o` own tab, `x` close viewer,
   `h`/`l` width, `r` reload, `q` quit.
+- One pane per column: a picked agent covers the hub Claude, files (yazi) cover review. Leave
+  the top program (detach, `q` in yazi), `x`, or the "◆ hub" row, and the pane under it comes back.
 - `wt go <agent>` — show an agent (id or name) in the hub.
 - `wt new <branch> [-- prompt]` — new worktree, with a prompt a background agent.
 
-State lives in `~/.local/state/` (`wt-hub.json`, `wt-hub-target`, `wt-hub-sidebar.pct`,
+State lives in `~/.local/state/` (`wt-hub.json`, `wt-hub-<role>.target|.pane`, `wt-hub-sidebar.pct`,
 `wt-turns/`).
