@@ -1,0 +1,5 @@
+{
+  "name": "alex-wt-hub",
+  "owner": { "name": "Alex Collier" },
+  "plugins": [{ "name": "wt-hub", "source": "./" }]
+}

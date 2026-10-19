@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# wt-hub-pane review|files|idle <worktree> [session] — a pane of the hub.
+# review: tuicr on the session's turn chain (refs/wt-turns/<session8>), else the newest chain in
+#         the worktree, else tuicr's own target picker. Quit tuicr, then Enter opens it again.
+# files:  yazi in the worktree.
+set -uo pipefail
+export PATH="$HOME/.local/share/mise/shims:/opt/homebrew/bin:$PATH"
+source "$HOME/.local/lib/wt-lib.sh"
+
+case $1 in
+  idle)
+    printf '\n  Review\n\n  Pick a worktree or an agent in the list.\n  tuicr opens here for its turns; files (yazi) stack under it.\n'
+    exec tail -f /dev/null ;;
+esac
+
+cd "$2" || exit 1
+
+chain() {
+  local session=${1:0:8} candidate here
+  if [[ -n "$session" ]]; then
+    git rev-parse -q --verify "refs/wt-turns/$session/head" >/dev/null && printf '%s\n' "$session"
+    return
+  fi
+  here=$(pwd -P)
+  git for-each-ref --sort=-committerdate --format='%(refname)' 'refs/wt-turns/*/head' \
+    | sed -E 's#^refs/wt-turns/([^/]+)/head$#\1#' | while read -r candidate; do
+      [[ "$(cat "$HOME/.local/state/wt-turns/$candidate.worktree" 2>/dev/null)" -ef "$here" ]] && { printf '%s\n' "$candidate"; break; }
+    done
+}
+
+case $1 in
+  review)
+    while :; do
+      session=$(chain "${3:-}")
+      clear
+      if [[ -n "$session" ]]; then
+        tuicr --no-update-check -r "refs/wt-turns/$session/base..refs/wt-turns/$session/head"
+      else
+        tuicr --no-update-check
+      fi
+      printf '\n  tuicr closed. Enter: open it again (it re-reads the turns).\n'
+      read -r _ || exit 0
+    done ;;
+  files)
+    exec yazi "$2" ;;
+esac

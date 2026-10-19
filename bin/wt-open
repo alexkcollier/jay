@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# wt open [branch|path]
+# Select the Ghostty tab that shows the worktree's zellij session, or open a tab
+# in the worktree that attaches to it (created with your default layout if new).
+set -euo pipefail
+source "$HOME/.local/lib/wt-lib.sh"
+
+case ${1:-} in
+  -h|--help) sed -n '2,4s/^# \{0,1\}//p' "$0"; exit 0 ;;
+  "") path=$(git rev-parse --show-toplevel) ;;
+  *) if [[ -d "$1" ]]; then path=$(wtl_toplevel "$1"); else path=$(wt switch "$1" --no-cd --format=json | jq -er .path); fi ;;
+esac
+
+IFS=$'\t' read -r client repo branch path < <(wtl_describe "$path")
+name=$(wtl_session_name "$repo" "$branch")
+
+if session=$(wtl_session_for_worktree "$path" "$name"); then
+  if tab=$(wtl_gh_tab_for_session "$session"); then
+    wtl_gh_select "$tab"
+  else
+    wtl_gh_new_tab "$path" "zellij attach $session" >/dev/null
+  fi
+else
+  wtl_gh_new_tab "$path" "zellij attach -c $name" >/dev/null
+fi

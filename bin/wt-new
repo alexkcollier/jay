@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# wt new <branch|pr:N> [-b base] [-t "task note"] [-- prompt...]
+# Create (or reuse) the worktree and store the task note. With a prompt, start a
+# background Claude agent there (see it in the hub sidebar or `claude agents`).
+# Without -t, the first line of the prompt becomes the task note.
+set -euo pipefail
+source "$HOME/.local/lib/wt-lib.sh"
+
+usage() { sed -n '2,5s/^# \{0,1\}//p' "$0"; }
+branch="" base="" task="" prompt=()
+while (($#)); do
+  case $1 in
+    -b|--base) base=$2; shift 2 ;;
+    -t|--task) task=$2; shift 2 ;;
+    --) shift; prompt=("$@"); break ;;
+    -h|--help) usage; exit 0 ;;
+    *) branch=$1; shift ;;
+  esac
+done
+[[ -n "$branch" ]] || { usage >&2; exit 2; }
+
+switch_args=("$branch" --no-cd --format=json)
+if [[ "$branch" != pr:* && "$branch" != http* ]] \
+  && ! git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null \
+  && ! git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null; then
+  switch_args+=(--create)
+  [[ -n "$base" ]] && switch_args+=(--base "$base")
+fi
+
+path=$(wt switch "${switch_args[@]}" | jq -er .path)
+
+if [[ -z "$task" ]] && ((${#prompt[@]})); then
+  task=$(printf '%s' "${prompt[*]}" | head -1 | cut -c1-60)
+fi
+[[ -n "$task" ]] && wt -C "$path" config state vars set task="$task" >/dev/null 2>&1
+
+IFS=$'\t' read -r _ repo branch _ < <(wtl_describe "$path")
+if ((${#prompt[@]})); then
+  (cd "$path" && claude --bg --name "$(wtl_tab_name "$repo" "$branch")" "${prompt[*]}")
+else
+  echo "Worktree ready: $path"
+  echo "Open it with: wt open $branch"
+fi

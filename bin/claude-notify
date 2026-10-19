@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# claude-notify — Claude Code hook (Stop, Notification) that posts a macOS notice
+# naming client › repo · branch, the task note and the agent's message.
+# No notice while Ghostty is in front showing that agent, or the hub (its sidebar shows it).
+# Click: `wt go <session>` brings the agent in front.
+set -uo pipefail
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
+source "$HOME/.local/lib/wt-lib.sh"
+NOTIFIER=/opt/homebrew/bin/terminal-notifier
+HUB_FILE="$HOME/.local/state/wt-hub.json"
+
+input=$(cat)
+event=$(jq -r '.hook_event_name // ""' <<<"$input")
+cwd=$(jq -r '.cwd // ""' <<<"$input")
+sid=$(jq -r '.session_id // ""' <<<"$input")
+type=""
+
+case $event in
+  Notification)
+    type=$(jq -r '.notification_type // ""' <<<"$input")
+    case $type in
+      permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input) ;;
+      *) exit 0 ;;
+    esac
+    icon="✋" headline="Needs input"
+    text=$(jq -r '.message // ""' <<<"$input")
+    ;;
+  Stop)
+    jq -e '(.background_tasks // []) | length > 0' <<<"$input" >/dev/null && exit 0
+    icon="✓" headline="Turn finished"
+    text=$(jq -r '.last_assistant_message // ""' <<<"$input" | awk '
+      /^(result|needs input|failed):/ { flagged = $0 }
+      NF && !first { first = $0 }
+      END { print (flagged != "" ? flagged : first) }' | sed -E 's/[*`#>_]+//g; s/^ +//' | cut -c1-160)
+    ;;
+  *) exit 0 ;;
+esac
+
+[[ -n "${WT_NOTIFY_LOG:-}" ]] && printf '%s %s %s %s bg=%s\n' "$(date '+%F %T')" "$event" "$type" "$cwd" "${CLAUDE_JOB_DIR:+yes}" >>"$WT_NOTIFY_LOG"
+
+claude_pid() {
+  local p=${CLAUDE_PID:-$PPID} comm
+  while [[ -n "$p" && "$p" -gt 1 ]]; do
+    comm=$(ps -o comm= -p "$p" 2>/dev/null)
+    [[ "$comm" == *claude* ]] && { printf '%s\n' "$p"; return 0; }
+    p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
+  done
+  return 1
+}
+
+# Ghostty tab id that shows this agent (empty when unknown), and whether its zellij pane has focus.
+agent_tab="" pane_focused=true
+if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
+  agent_tab=$(wtl_gh_tab_for_command "^claude attach ${sid:0:8}" || true)
+elif wtl_in_zellij; then
+  agent_tab=$(wtl_gh_tab_for_session "$ZELLIJ_SESSION_NAME" || true)
+  active=$(zellij -s "$ZELLIJ_SESSION_NAME" action list-tabs -j 2>/dev/null | jq -r '.[] | select(.active) | .tab_id')
+  pane_focused=$(zellij -s "$ZELLIJ_SESSION_NAME" action list-panes -j 2>/dev/null | jq -r --argjson p "${ZELLIJ_PANE_ID:-0}" --arg t "$active" \
+    'any(.[]; .id == $p and (.is_plugin | not) and .is_focused and ((.tab_id | tostring) == $t))')
+elif pid=$(claude_pid); then
+  tty=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
+  [[ -n "$tty" && "$tty" != "??" ]] && agent_tab=$(wtl_gh_tab_for_tty "$tty" || true)
+fi
+
+hub_tab=""
+hub_sid=$(jq -r '.sessionId // empty' "$HUB_FILE" 2>/dev/null)
+if [[ -n "$hub_sid" ]] && claude agents --json --all 2>/dev/null | jq -e --arg s "$hub_sid" 'any(.[]; .sessionId == $s)' >/dev/null; then
+  hub_session=$(jq -r '.zellijSession // empty' "$HUB_FILE")
+  hub_tty=$(jq -r '.tty // empty' "$HUB_FILE")
+  if [[ -n "$hub_session" ]]; then
+    hub_tab=$(wtl_gh_tab_for_session "$hub_session" || true)
+  elif [[ -n "$hub_tty" ]]; then
+    hub_tab=$(wtl_gh_tab_for_tty "$hub_tty" || true)
+  fi
+fi
+
+if [[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
+  selected=$(wtl_gh_tabs | awk -F'\t' '$2 == "true" && $3 == "true" { print $1; exit }')
+  [[ -n "$selected" && "$selected" == "$agent_tab" && "$pane_focused" == true ]] && exit 0
+  [[ -n "$selected" && "$selected" == "$hub_tab" ]] && exit 0
+fi
+
+[[ -x "$NOTIFIER" ]] || exit 0
+IFS=$'\t' read -r client repo branch top < <(wtl_describe "${cwd:-$PWD}")
+task=$(wt -C "$top" config state vars get task 2>/dev/null)
+sound=()
+[[ "$headline" == "Needs input" ]] && sound=(-sound default)
+
+(
+  "$NOTIFIER" \
+    -title "$icon $headline · $client › $repo" \
+    -subtitle "$branch${task:+ — $task}" \
+    -message "${text:-$headline}" \
+    -group "claude-$sid" \
+    -execute "$(printf '%q ' "$HOME/.local/bin/wt-go" "$sid")" \
+    ${sound[@]+"${sound[@]}"}
+) </dev/null >>"${WT_NOTIFY_LOG:-/dev/null}" 2>&1 &
+disown
+exit 0

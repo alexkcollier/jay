@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# wt all [-a]   worktrees of every repo, grouped by client, with agents and task notes
+# wt pick [-a]  the same list in fzf; Enter runs `wt open` on the row
+# wt all --json one JSON object per worktree (for the hub sidebar); implies -a
+#   -a  also show repos that only have their main checkout and no agent
+set -euo pipefail
+source "$HOME/.local/lib/wt-lib.sh"
+
+show_all=false json=false
+case ${1:-} in
+  -a) show_all=true ;;
+  --json) show_all=true json=true ;;
+esac
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+repos() {
+  local root
+  IFS=: read -ra roots <<<"$WT_ROOTS"
+  for root in "${roots[@]}"; do
+    find "$root" -mindepth 2 -maxdepth 3 -name node_modules -prune -o -type d -name .git -print 2>/dev/null
+  done | sed 's#/.git$##' | sort -u
+}
+
+claude agents --json --all >"$tmp/agents.json" 2>/dev/null || echo '[]' >"$tmp/agents.json" &
+i=0
+while IFS= read -r repo; do
+  i=$((i + 1))
+  { printf '%s\t%s\n' "$repo" "$(wtl_client "$repo")" >"$tmp/$i.meta"
+    wt -C "$repo" list --format json >"$tmp/$i.json" 2>/dev/null || echo '{"items":[]}' >"$tmp/$i.json"; } &
+done < <(repos)
+wait
+
+rows=$(
+  for meta in "$tmp"/*.meta; do
+    IFS=$'\t' read -r repo client <"$meta"
+    jq -c --arg repo "$(basename "$repo")" --arg client "$client" '
+      .items[] | select(.worktree.path != null) | {
+        client: $client, repo: $repo, branch: (.branch // "(detached)"),
+        path: .worktree.path, main: (.worktree.main // false),
+        symbols: (.display.symbols // ""),
+        task: (.display.columns.Task // .vars.task // "")
+      }' "${meta%.meta}.json"
+  done | jq -rs --slurpfile agents "$tmp/agents.json" --argjson all "$show_all" --argjson json "$json" '
+    . as $rows
+    | ($rows | map(.path) | sort_by(length) | reverse) as $paths
+    | def owner($cwd): first($paths[] | select($cwd == . or ($cwd | startswith(. + "/"))));
+      ($agents[0] | map(. + {wt: owner(.cwd)})) as $ag
+    | map(. as $r | ($ag | map(select(.wt == $r.path))) as $mine | $r + {
+        busy: ($mine | map(select(.state == "working" or (.state == null and .status == "busy"))) | length),
+        input: ($mine | map(select(.state == "blocked" or .status == "waiting")) | length),
+        idle: ($mine | map(select(.state == "done" or (.state == null and .status == "idle"))) | length)
+      })
+    | group_by(.client + "/" + .repo)
+    | map(select($all or length > 1 or any(.[]; .busy + .input + .idle > 0)))
+    | flatten
+    | sort_by(.client, .repo, (.main | not), .branch)
+    | .[]
+    | if $json then tojson else . end
+    | if $json then . else (def pad($n): (. + (" " * $n))[:$n];
+      [ (.client | pad(10)), (.repo | pad(18)), (.branch | pad(44)), (.symbols | pad(6)),
+        ([ (if .input > 0 then "\(.input) input" else empty end),
+           (if .busy > 0 then "\(.busy) busy" else empty end),
+           (if .idle > 0 then "\(.idle) idle" else empty end) ] | join(" ") | pad(22)),
+        .task, .path ] | @tsv) end'
+)
+
+if $json; then
+  [[ -n "$rows" ]] && printf '%s\n' "$rows"
+  exit 0
+fi
+[[ -n "$rows" ]] || { echo "No worktrees found under $WT_ROOTS"; exit 0; }
+
+render() {
+  awk -F'\t' '
+    BEGIN { bold = "\033[1m"; dim = "\033[2m"; yellow = "\033[33m"; reset = "\033[0m" }
+    {
+      agents = $5; if (agents ~ /input/) agents = yellow agents reset
+      printf "%s%s%s %s %s %s %s %s%s%s\t%s\n", bold, $1, reset, $2, $3, $4, agents, dim, $6, reset, $7
+    }'
+}
+
+if [[ "$(basename "$0")" == wt-pick ]]; then
+  choice=$(render <<<"$rows" | fzf --ansi --delimiter=$'\t' --with-nth=1 --no-sort --layout=reverse \
+    --header='Enter: open its Ghostty tab   Ctrl-A: agents in this worktree' \
+    --preview='git -C {2} status -sb | head -15; echo; git -C {2} log --oneline -8 --color=always' \
+    --preview-window=down,45% \
+    --bind='ctrl-a:become(wt-agents {2})') || exit 0
+  exec wt-open "$(cut -f2 <<<"$choice")"
+fi
+
+render <<<"$rows" | cut -f1

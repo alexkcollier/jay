@@ -1,0 +1,39 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "WT_NOTIFY_LOG=$HOME/.local/state/claude-notify.log $HOME/.local/bin/claude-notify"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.local/bin/claude-turn-snapshot"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.local/bin/claude-turn-snapshot"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "WT_NOTIFY_LOG=$HOME/.local/state/claude-notify.log $HOME/.local/bin/claude-notify"
+          }
+        ]
+      }
+    ]
+  }
+}

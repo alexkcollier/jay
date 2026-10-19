@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# wt hub — select the hub's Ghostty tab, or open it: zellij session "hub" with the live
+# worktree list (left), the hub Claude / picked agent (middle) and review + files (right).
+# --here: start it in this terminal.
+set -euo pipefail
+source "$HOME/.local/lib/wt-lib.sh"
+[[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,4s/^# \{0,1\}//p' "$0"; exit 0; }
+
+SESSION=$WT_HUB_SESSION
+root=${WT_ROOTS%%:*}
+layout="$HOME/.local/state/wt-hub-layout.kdl"
+
+write_layout() {
+  local resume="" last list middle right
+  last=$(jq -r '.sessionId // empty' "$HOME/.local/state/wt-hub.json" 2>/dev/null || true)
+  if [[ -n "$last" ]] && ! claude agents --json --all 2>/dev/null | jq -e --arg s "$last" 'any(.[]; .sessionId == $s)' >/dev/null; then
+    resume=" \"--resume\" \"$last\""
+  fi
+  list=$(cat "$HOME/.local/state/wt-hub-sidebar.pct" 2>/dev/null || true)
+  [[ "$list" =~ ^[0-9]+$ ]] && ((list >= 10 && list <= 60)) || list=22
+  middle=$(((100 - list) * 43 / 78))
+  right=$((100 - list - middle))
+  cat >"$layout" <<KDL
+layout {
+    pane size=1 borderless=true {
+        plugin location="zellij:tab-bar"
+    }
+    pane split_direction="vertical" {
+        pane size="$list%" name="worktrees" command="$HOME/.local/bin/wt-sidebar"
+        pane size="$middle%" name="hub" focus=true command="/usr/bin/env" {
+            args "WT_HUB=1" "$HOME/.local/bin/claude" "-n" "hub"$resume
+        }
+        pane size="$right%" name="review" command="$HOME/.local/bin/wt-hub-pane" {
+            args "idle" "$root"
+        }
+    }
+    pane size=2 borderless=true {
+        plugin location="zellij:status-bar"
+    }
+}
+KDL
+}
+
+# Only a running hub that answers is reused. An exited copy would come back resurrected (every
+# pane waiting for Enter), and a server that outlived its session hangs, so both are removed
+# and the hub starts fresh from the layout.
+hub_answers() {
+  wtl_live_sessions | grep -qxF "$SESSION" && zellij -s "$SESSION" action list-clients >/dev/null 2>&1
+}
+
+fresh_start() {
+  pkill -9 -f "zellij --server .*/$SESSION\$" 2>/dev/null || true
+  zellij delete-session --force "$SESSION" >/dev/null 2>&1 || true
+  write_layout
+  rm -f "$WT_HUB_TARGET"
+}
+
+if [[ "${1:-}" == --here ]]; then
+  hub_answers && exec zellij attach "$SESSION"
+  fresh_start
+  exec zellij -s "$SESSION" -n "$layout"
+fi
+
+if hub_answers; then
+  if tab=$(wtl_gh_tab_for_session "$SESSION"); then
+    wtl_gh_select "$tab"
+  else
+    wtl_gh_new_tab "$root" "zellij attach $SESSION" >/dev/null
+  fi
+else
+  fresh_start
+  wtl_gh_new_tab "$root" "zellij -s $SESSION -n $layout" >/dev/null
+fi

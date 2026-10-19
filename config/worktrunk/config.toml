@@ -1,0 +1,14 @@
+worktree-path = "{{ repo_path }}/../{{ repo }}.{{ branch | sanitize }}"
+
+pre-start = "wt-setup"
+
+[list.custom-columns.Task]
+template = "{{ vars.task }}"
+width = 40
+priority = 5
+
+[aliases]
+task = "{% if args %}wt config state vars set task={{ args }}{% else %}wt config state vars get task{% endif %}"
+
+[projects."github.com/acme/shop".aliases]
+dev = "pnpm --filter @apps/{{ args }} exec vite --port {{ (args ~ '-' ~ branch) | hash_port }} --strictPort"

@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# claude-turn-snapshot — Claude Code hook (UserPromptSubmit, Stop) that records the worktree
+# as a hidden commit chain per session, one commit per agent turn:
+#   refs/wt-turns/<session8>/base   HEAD when the session's first snapshot was taken
+#   refs/wt-turns/<session8>/head   the latest snapshot; each snapshot's parent is the one before
+# Review one turn with `tuicr -r <turn>~1..<turn>`, all of them with `tuicr -r base..head`.
+# Branch, index and files are never touched: it hashes the tree through a copy of the index.
+# wt-turns <path>          list the turn chains of a worktree
+set -uo pipefail
+
+if [[ "${1:-}" == --list ]]; then
+  top=$(git -C "${2:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
+  git -C "$top" for-each-ref --format='%(refname)' 'refs/wt-turns/*/head' | while read -r ref; do
+    s=${ref#refs/wt-turns/}; s=${s%/head}
+    printf '%s\t%s\n' "$s" "$(git -C "$top" log -1 --format='%ar · %s' "$ref")"
+  done
+  exit 0
+fi
+
+input=$(cat)
+event=$(jq -r '.hook_event_name // ""' <<<"$input")
+cwd=$(jq -r '.cwd // ""' <<<"$input")
+sid=$(jq -r '.session_id // ""' <<<"$input")
+[[ -n "$cwd" && -n "$sid" ]] || exit 0
+top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
+
+short=${sid:0:8}
+state="$HOME/.local/state/wt-turns"
+mkdir -p "$state"
+prompt_file="$state/$short.prompt"
+head_ref="refs/wt-turns/$short/head"
+base_ref="refs/wt-turns/$short/base"
+
+snapshot() {
+  local subject=$1 body=${2:-} index tree parent parent_tree commit
+  index=$(mktemp "$state/index.XXXXXX")
+  cp "$(git -C "$top" rev-parse --path-format=absolute --git-path index)" "$index" 2>/dev/null || true
+  GIT_INDEX_FILE="$index" git -C "$top" add -A >/dev/null 2>&1
+  tree=$(GIT_INDEX_FILE="$index" git -C "$top" write-tree 2>/dev/null)
+  rm -f "$index"
+  [[ -n "$tree" ]] || return 0
+  if ! parent=$(git -C "$top" rev-parse -q --verify "$head_ref"); then
+    parent=$(git -C "$top" rev-parse -q --verify HEAD) || return 0
+    git -C "$top" update-ref "$base_ref" "$parent"
+    printf '%s\n' "$top" >"$state/$short.worktree"
+  fi
+  parent_tree=$(git -C "$top" rev-parse "$parent^{tree}")
+  [[ "$tree" == "$parent_tree" ]] && return 0
+  commit=$(printf '%s\n%s' "$subject" "${body:+$'\n'$body}" | git -C "$top" commit-tree "$tree" -p "$parent") || return 0
+  git -C "$top" update-ref "$head_ref" "$commit"
+}
+
+case $event in
+  UserPromptSubmit)
+    jq -r '.prompt // ""' <<<"$input" | tr '\n' ' ' | cut -c1-100 >"$prompt_file"
+    snapshot "between turns · edits made outside the agent"
+    ;;
+  Stop)
+    prompt=$(cat "$prompt_file" 2>/dev/null)
+    result=$(jq -r '.last_assistant_message // ""' <<<"$input" | awk '
+      /^(result|needs input|failed):/ { flagged = $0 }
+      NF && !first { first = $0 }
+      END { print (flagged != "" ? flagged : first) }' | cut -c1-200)
+    snapshot "turn · ${prompt:-(no prompt)}" "$result"
+    ;;
+esac
+exit 0

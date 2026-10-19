@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# wt-hub-edit <file|dir> [line] — open a file in the hub's Neovim (files pane) and focus it.
+set -uo pipefail
+source "$HOME/.local/lib/wt-lib.sh"
+target=$1 line=${2:-}
+[[ "$target" == /* ]] || target="$PWD/$target"
+wtl_hub_files_ready "$(wtl_toplevel "$PWD")"
+if [[ -d "$target" ]]; then
+  wtl_nvim_send ":cd $(printf '%q' "$target")<CR>"
+else
+  wtl_nvim_send ":drop $(printf '%q' "$target")<CR>${line:+:$line<CR>zz}"
+fi
+wtl_hub_focus_files
