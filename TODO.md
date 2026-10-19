@@ -3,10 +3,10 @@
 Continue Alex's hub to-do list. This repo (~/Documents/projects/wt-hub) is the live install of his worktree hub: ~/.local/bin, ~/.local/lib/wt-lib.sh, ~/mods/wt-hub and the worktrunk/zellij configs are symlinks into it. Read CLAUDE.md and README.md first, and your memory note "worktree-tooling-worktrunk" (decisions, zellij 0.45 facts, incidents). The hub is the zellij session "hub" (layout written by bin/wt-hub): worktree list (fzf, bin/wt-sidebar) | hub Claude ⇄ one agent viewer | review (tuicr via bin/wt-hub-pane) ⇄ files (yazi).
 
 Alex's to-do list, in his words (2026-10-19):
-1. Clean up the tops of the panes — "the stacks are cumbersome/ugly" (zellij stacked-pane title bars in the middle and right columns).
-2. Nicer zellij UI — "the current tabs and hints are meh" (tab-bar and status-bar plugins in the hub layout).
-3. Faster pane switching/navigation.
-4. Keyboard hints in the worktree list, and the ability to remove agents and worktrees from it.
+1. Clean up the tops of the panes — "the stacks are cumbersome/ugly" (zellij stacked-pane title bars in the middle and right columns). Done 2026-10-19: one pane per column, panes in place.
+2. Nicer zellij UI — "the current tabs and hints are meh" (tab-bar and status-bar plugins in the hub layout). Done 2026-10-19: one zjstatus bar (shows at the next hub start).
+3. Faster pane switching/navigation. Done 2026-10-19: Ctrl g h/l/1/2/3/;, Enter in the list moves the focus.
+4. Keyboard hints in the worktree list, and the ability to remove agents and worktrees from it. Done 2026-10-19: footer, ? for all keys, d removes after a confirm.
 5. The agent panel sometimes stops responding to the mouse (added 2026-10-19).
 
 How to work:

@@ -2,9 +2,10 @@
 # wt sidebar — live list of worktrees and Claude agents for a narrow left pane.
 # Click, double-click or Enter: an agent → shown in the hub's middle column (over the hub
 # Claude), and review (tuicr, its turns) and files (yazi, when shown) switch to it; a worktree →
-# review and files switch to it; "◆ hub" → the hub Claude (closes the agent viewer).
-# v: review  e: files (over review)  o: the worktree's own Ghostty tab  x: close the agent viewer
-# r: reload worktrees  j/k: move  h/l: narrower/wider (the hub keeps the width)  q: quit
+# review and files switch to it; "◆ hub" → the hub Claude (closes the agent viewer). Enter also
+# moves the focus there. v: review  e: files (over review)  o: own Ghostty tab  x: close the
+# agent viewer  d: remove the agent or worktree (asks first)  r: reload  j/k: move
+# h/l: narrower/wider (the hub keeps the width)  ?: all keys  q: quit
 set -uo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
 
@@ -65,12 +66,31 @@ rows() {
     >(head -1 | cut -f3 >"${WT_SIDEBAR_SUM:-/dev/null}")
 }
 
+# Move the focus from the list $1 columns to the right (the hub's middle column is 1, review
+# and files are 2). `move-focus` moves the terminal's focus; `focus-pane-id` does not.
+focus_column() {
+  wtl_in_hub || return 0
+  local i
+  for ((i = 0; i < $1; i++)); do zellij action move-focus right >/dev/null 2>&1; done
+}
+
+# Pick row kind $1 with id $2; --focus: also move the focus into what was picked.
 act() {
+  local shown
   case $1 in
-    ag) wt-go "$2" >/dev/null 2>&1 ;;
-    wt) if wtl_in_hub; then wtl_hub_locked wtl_hub_target "$2"; else wt-open "$2" >/dev/null 2>&1; fi ;;
-    hub) wtl_hub_locked wtl_hub_show_claude >/dev/null 2>&1 ;;
+    ag) wt-go "$2" >/dev/null 2>&1 || return 0
+        shown=$(cut -f1 "$(wtl_hub_target_file agent)" 2>/dev/null)
+        [[ "${3:-}" == --focus && -n "$shown" && "$2" == "$shown"* ]] && focus_column 1 ;;
+    wt) if wtl_in_hub; then
+          wtl_hub_locked wtl_hub_target "$2"
+          [[ "${3:-}" == --focus ]] && focus_column 2
+        else
+          wt-open "$2" >/dev/null 2>&1
+        fi ;;
+    hub) wtl_hub_locked wtl_hub_show_claude >/dev/null 2>&1
+         [[ "${3:-}" == --focus ]] && focus_column 1 ;;
   esac
+  return 0
 }
 
 target_and_show() {
@@ -94,7 +114,7 @@ view() {
   [[ -n "$path" ]] || return 0
   case $1 in
     open) wt-open "$path" >/dev/null 2>&1 ;;
-    review|files) wtl_hub_locked target_and_show "$path" "$1" ;;
+    review|files) wtl_hub_locked target_and_show "$path" "$1"; focus_column 2 ;;
   esac
 }
 
@@ -105,16 +125,116 @@ close_agent() {
   [[ -n "$id" ]] && wtl_hub_close "$id" >/dev/null 2>&1
 }
 
+# The key hints under the list; --toggle switches between the short and the full list.
+FOOTER_SHORT=$'\e[2m⏎ open  v review  e files\nx close  d remove  ? keys\e[0m'
+FOOTER_FULL=$'\e[2m⏎      open, focus goes there
+click  open, focus stays
+v / e  review / files
+o      own Ghostty tab
+x      close the agent viewer
+d      remove agent / worktree
+r      reload   j / k  move
+h / l  narrower / wider
+q      quit     ?  fewer keys
+Ctrl g h l 1 2 3 ;  panes\e[0m'
+footer() {
+  local flag=${WT_SIDEBAR_HELP:-/dev/null}
+  if [[ "${1:-}" == --toggle ]]; then
+    if [[ -f "$flag" ]]; then rm -f "$flag"; else : >"$flag"; fi
+  fi
+  if [[ -f "$flag" ]]; then printf '%s' "$FOOTER_FULL"; else printf '%s' "$FOOTER_SHORT"; fi
+}
+
+# Show text $1 on a clear pane, folded to its width.
+say() {
+  local cols
+  cols=$(stty size </dev/tty 2>/dev/null | cut -d' ' -f2)
+  clear
+  printf '\n%s\n\n' "$1" | fold -s -w "$(( ${cols:-40} > 10 ? ${cols:-40} - 1 : 40 ))"
+}
+
+# Ask $1 and return 0 when the answer is y.
+confirm() {
+  local answer
+  say "$1"
+  printf 'y: remove   other key: cancel\n'
+  read -rsn1 answer </dev/tty
+  [[ "$answer" == y ]]
+}
+
+pause() {
+  say "$1"
+  printf 'Press a key.\n'
+  read -rsn1 _ </dev/tty
+}
+
+# Remove the agent or worktree in row kind $1 with id $2, after a confirm. Never forced:
+# `claude rm` and `wt remove` stop on unpushed or uncommitted work and the list shows why.
+remove() {
+  local kind=$1 id=$2 agents agent out name short top main branch busy pane
+  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  case $kind in
+    ag)
+      agent=$(jq -c --arg s "$id" 'first(.[] | select(.sessionId == $s)) // empty' <<<"$agents")
+      [[ -n "$agent" ]] || return 0
+      name=$(jq -r '.name // .id' <<<"$agent")
+      short=$(jq -r '.id // empty' <<<"$agent")
+      if [[ "$(jq -r .kind <<<"$agent")" != background || -z "$short" ]]; then
+        pause "\"$name\" is an interactive session. Close it in its own tab."
+        return 0
+      fi
+      confirm "Remove agent \"$name\" ($short)?
+
+This deletes the background session, and the worktree it made, if any. Unpushed commits stop the removal." || return 0
+      out=$(claude rm "$short" 2>&1) || pause "Not removed:
+
+$out" ;;
+    wt)
+      top=$id
+      IFS=$'\t' read -r main branch < <(jq -r --arg p "$top" 'select(.path == $p) | "\(.main)\t\(.branch)"' "$CACHE" | head -1)
+      if [[ "$main" == true ]]; then
+        pause "$top is a main checkout. The list never removes it."
+        return 0
+      fi
+      busy=$(jq -r --arg p "$top" '.[] | (.cwd // "") as $cwd | select(.state != "stopped" and ($cwd == $p or ($cwd | startswith($p + "/"))))
+        | "  \(.name // .id)"' <<<"$agents")
+      if [[ -n "$busy" ]]; then
+        pause "Agents run in this worktree. Remove them first:
+
+$busy"
+        return 0
+      fi
+      confirm "Remove worktree ${branch:-$top}?
+
+$top
+
+The branch is deleted only if it is merged. Uncommitted changes stop the removal." || return 0
+      if [[ "$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)" == "$top" ]]; then
+        wtl_hub_locked wtl_hub_show_review
+        pane=$(wtl_hub_locked wtl_hub_point review "" | cut -f1)
+        [[ -n "$pane" ]] && zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" review >/dev/null 2>&1
+      fi
+      out=$(wt -C "$top" remove --foreground 2>&1) || pause "Not removed:
+
+$out"
+      refresh_worktrees ;;
+  esac
+  return 0
+}
+
 case ${1:-} in
   --rows) shift; rows "$@"; exit 0 ;;
   --act) shift; act "$@"; exit 0 ;;
   --close) shift; close_agent "$@"; exit 0 ;;
   --view) shift; view "$@"; exit 0 ;;
-  -h|--help) sed -n '2,7s/^# \{0,1\}//p' "$0"; exit 0 ;;
+  --remove) shift; remove "$@"; exit 0 ;;
+  --footer) shift; footer "$@"; exit 0 ;;
+  -h|--help) sed -n '2,8s/^# \{0,1\}//p' "$0"; exit 0 ;;
 esac
 
 sock="$STATE/wt-sidebar.$$.sock"
-export WT_SIDEBAR_COUNT="$STATE/wt-sidebar.$$.count" WT_SIDEBAR_SUM="$STATE/wt-sidebar.$$.sum"
+export WT_SIDEBAR_COUNT="$STATE/wt-sidebar.$$.count" WT_SIDEBAR_SUM="$STATE/wt-sidebar.$$.sum" \
+  WT_SIDEBAR_HELP="$STATE/wt-sidebar.$$.help"
 post() { curl -s --max-time 2 --unix-socket "$sock" -X POST http://localhost -d "$1" >/dev/null 2>&1 || true; }
 
 # Send the agent counts (the list's first row) to the hub's bar (zjstatus, see wt-hub) when
@@ -161,11 +281,14 @@ remember_width() {
   done
 ) &
 loop=$!
-trap 'kill $loop 2>/dev/null; rm -f "$sock" "$WT_SIDEBAR_COUNT" "$WT_SIDEBAR_SUM"' EXIT
+trap 'kill $loop 2>/dev/null; rm -f "$sock" "$WT_SIDEBAR_COUNT" "$WT_SIDEBAR_SUM" "$WT_SIDEBAR_HELP"' EXIT
 
 rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=hidden --no-scrollbar \
   --delimiter=$'\t' --with-nth=3 --track --id-nth=2 --pointer='▌' --gutter=' ' --highlight-line \
-  --bind 'enter:execute-silent(wt-sidebar --act {1} {2})' \
+  --footer="$(footer)" \
+  --bind '?:transform-footer(wt-sidebar --footer --toggle)' \
+  --bind 'd:execute(wt-sidebar --remove {1} {2})+reload-sync(wt-sidebar --rows)+clear-screen' \
+  --bind 'enter:execute-silent(wt-sidebar --act {1} {2} --focus)' \
   --bind 'double-click:execute-silent(wt-sidebar --act {1} {2})' \
   --bind 'left-click:execute-silent(wt-sidebar --act {1} {2})' \
   --bind 'r:reload-sync(wt-sidebar --rows --fresh)' \
