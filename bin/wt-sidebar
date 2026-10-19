@@ -19,9 +19,8 @@ mkdir -p "$STATE"
 
 # The git signs of the rows: Nerd Font Octicons (one cell wide; private use, not East Asian
 # wide), as UTF-8 bytes because bash 3.2 has no \u.
-G_DIFF=$'\xef\x91\x80' G_NEW=$'\xef\x93\x90' G_UP=$'\xef\x90\xb1' G_DOWN=$'\xef\x90\xb3'
-G_PUSH=$'\xef\x90\x83' G_PULL=$'\xef\x90\x84' G_ALERT=$'\xef\x90\xa1' G_OK=$'\xef\x90\xae'
-G_MERGE=$'\xef\x90\x99' G_SYNC=$'\xef\x91\xaa'
+G_DIFF=$'\xef\x91\x80' G_UP=$'\xef\x90\xb1' G_ALERT=$'\xef\x90\xa1' G_OK=$'\xef\x90\xae'
+G_MERGE=$'\xef\x90\x99'
 
 refresh_worktrees() {
   wt-all --json >"$CACHE.$$" 2>/dev/null && mv "$CACHE.$$" "$CACHE"
@@ -53,9 +52,8 @@ rows() {
   [[ -f "$HIDE_IDLE" ]] && hideidle=true
   jq -rs --argjson agents "$agents" --arg hub "$hub" --argjson inhub "$inhub" --arg shown "$shown" \
     --argjson hideidle "$hideidle" --arg roots "$WT_ROOTS" --argjson gone "$(gone_dirs "$agents")" \
-    --argjson gl "$(jq -nc --arg diff "$G_DIFF" --arg new "$G_NEW" --arg up "$G_UP" --arg down "$G_DOWN" \
-      --arg push "$G_PUSH" --arg pull "$G_PULL" --arg alert "$G_ALERT" --arg ok "$G_OK" \
-      --arg merge "$G_MERGE" --arg sync "$G_SYNC" '$ARGS.named')" \
+    --argjson gl "$(jq -nc --arg diff "$G_DIFF" --arg up "$G_UP" --arg alert "$G_ALERT" --arg ok "$G_OK" \
+      --arg merge "$G_MERGE" '$ARGS.named')" \
     --argjson now "$(date +%s)" '
     def c($code): "\u001b[" + $code + "m";
     def age($ms): (($now - ($ms / 1000)) / 60 | floor) as $m
@@ -103,34 +101,27 @@ rows() {
     | def lead($col): (" " * ($col - 2)) + (if shown then c("1;36") + "▸ " + c("0") else "  " end);
       def agrow($col; $tail): "ag\t" + .sessionId + "\t" + lead($col) + (.phase | glyph) + " " + title + " " + c("2") + $tail + c("0");
       def bgage: (if .kind == "background" then "bg " else "" end) + age(.startedAt // 0);
-      # Git signs (Nerd Font Octicons) with counts: conflicts now, a git operation, uncommitted
-      # lines, untracked files, commits ahead of / behind the default branch, to push / to pull,
-      # a merge into the default branch would conflict, safe to remove (empty or integrated).
+      # Git signs (Nerd Font Octicons): conflicts now or a rebase/merge in progress, uncommitted
+      # changes, commits not in the default branch yet, a merge into it would conflict, safe to
+      # remove (empty or integrated).
       def safe: .git.state == "empty" or .git.state == "integrated";
       def gitsigns: .git as $g | [
-          (if $g.conflicted then c("1;31") + $gl.merge + c("0") else empty end),
-          (if $g.operation != null then c("33") + $gl.sync + ($g.operation | tostring) + c("0") else empty end),
-          (if $g.added + $g.deleted > 0 or $g.modified or $g.staged then c("33") + $gl.diff + c("0")
-             + (if $g.added > 0 then c("32") + "+\($g.added)" else "" end)
-             + (if $g.deleted > 0 then c("31") + "-\($g.deleted)" else "" end) + c("0") else empty end),
-          (if $g.untracked then c("33") + $gl.new + c("0") else empty end),
+          (if $g.conflicted or $g.operation != null then c("31") + $gl.merge + c("0") else empty end),
+          (if $g.added + $g.deleted > 0 or $g.modified or $g.staged or $g.untracked then c("33") + $gl.diff + c("0") else empty end),
           (if $g.ahead > 0 and (safe | not) then c("32") + $gl.up + "\($g.ahead)" + c("0") else empty end),
-          (if $g.behind > 0 and (safe | not) then c("31") + $gl.down + "\($g.behind)" + c("0") else empty end),
-          (if $g.push > 0 then c("36") + $gl.push + "\($g.push)" + c("0") else empty end),
-          (if $g.pull > 0 then c("36") + $gl.pull + "\($g.pull)" + c("0") else empty end),
           (if $g.state == "would_conflict" then c("31") + $gl.alert + c("0") else empty end),
           (if safe then c("2") + $gl.ok + c("0") else empty end)
         ] | join(" ");
       def info: (if .git then gitsigns else c("2") + (.symbols | narrow) end)
         + (if .task != "" then c("2") + " · " + (.task | narrow) else "" end);
       def reporows: select((.idle and $hideidle) | not)
-        | ("repo\t" + .main.path + "\t  " + (if .idle then c("2") else c("1") end) + .repo + c("0")),
+        | ("repo\t" + .main.path + "\t " + (if .idle then c("2") else c("1") end) + .repo + c("0")),
           (.trees[] | select((.idle and $hideidle) | not)
-            | ("wt\t" + .path + "\t    " + (if .idle or (.git and safe) then c("2") else "" end) + (.branch | split("/") | last)
-                 + c("0") + " " + info + c("0")),
-              (.agents[] | agrow(6; bgage))),
-          (.dead[] | ("gone\tgone:" + .path + "\t    " + c("2") + .label + " (gone)" + c("0")),
-                     (.agents[] | agrow(6; bgage)));
+            | ("wt\t" + .path + "\t  " + (if .idle or (.git and safe) then c("2") else "" end) + (.branch | split("/") | last)
+                 + c("0") + (info | if . == "" then "" else " " + . end) + c("0")),
+              (.agents[] | agrow(4; bgage))),
+          (.dead[] | ("gone\tgone:" + .path + "\t  " + c("2") + .label + " (gone)" + c("0")),
+                     (.agents[] | agrow(4; bgage)));
       def heading($key; $name; $idle): " \tgap:" + $key + "\t ",
         "hdr\thdr:" + $key + "\t" + (if $idle then c("2") else c("1;38;5;173") end) + $name + c("0");
     "sum\tsum\t" + (if $summary == "" then c("2") + "No agents" + c("0") else $summary end),
@@ -143,8 +134,8 @@ rows() {
         | select((map(select((.idle and $hideidle) | not)) | length) + ($stray | length) > 0)
         | heading("other"; "Other"; all(.[]; .idle) and $stray == []), (.[] | reporows),
           ($stray | select(length > 0)
-            | ("hdr\thdr:norepo\t  " + c("2") + "no repo" + c("0")),
-              (.[] | agrow(4; .cwd + (if .gone then " (gone)" else "" end))))),
+            | ("hdr\thdr:norepo\t " + c("2") + "no repo" + c("0")),
+              (.[] | agrow(3; .cwd + (if .gone then " (gone)" else "" end))))),
       (if $hideidle and $idle + $idlemain > 0 then " \tgap:idle\t ",
          "idle\tidle\t" + c("2") + "a shows " + ([(if $idle > 0 then "\($idle) idle repo" + (if $idle > 1 then "s" else "" end) else empty end),
                                      (if $idlemain > 0 then "\($idlemain) idle main" else empty end)] | join(", ")) + c("0")
@@ -239,7 +230,7 @@ $out"
 # the full list, one key per line. Lines stay under 30 columns (the list is about 32 wide).
 # --toggle switches between the two.
 KEY=$'\e[38;5;173m' OFF=$'\e[0m'
-YEL=$'\e[33m' GRN=$'\e[32m' RED=$'\e[31m' CYN=$'\e[36m' DIM=$'\e[2m'
+YEL=$'\e[33m' GRN=$'\e[32m' RED=$'\e[31m' DIM=$'\e[2m'
 FOOTER_SHORT="${KEY}⏎${OFF} open  ${KEY}n${OFF} new  ${KEY}d${OFF} remove
 ${KEY}t${OFF} turns/commits  ${KEY}?${OFF} keys"
 FOOTER_FULL="${KEY}⏎${OFF}      open, focus moves
@@ -262,12 +253,11 @@ ${KEY}^g h l${OFF} pane left / right
 ${KEY}^g ;${OFF}   last pane
 ${KEY}▸${OFF}      agent in middle pane
 ${KEY}◆ hub${OFF}  back to hub Claude
-${YEL}${G_DIFF}${GRN}+1${RED}-2${OFF}  uncommitted lines
-${YEL}${G_NEW}${OFF}      untracked files
-${GRN}${G_UP}3 ${RED}${G_DOWN}2${OFF}  ahead/behind main
-${CYN}${G_PUSH}1 ${G_PULL}4${OFF}  to push/to pull
+${YEL}${G_DIFF}${OFF}      uncommitted changes
+${GRN}${G_UP}3${OFF}     commits not in main
 ${RED}${G_ALERT}${OFF}      merge would conflict
-${DIM}${G_OK}${OFF}      safe to remove"
+${DIM}${G_OK}${OFF}      safe to remove
+${RED}${G_MERGE}${OFF}      conflicts, rebase/merge"
 footer() {
   local flag=${WT_SIDEBAR_HELP:-/dev/null}
   if [[ "${1:-}" == --toggle ]]; then
@@ -445,7 +435,7 @@ loop=$!
 trap 'kill $loop 2>/dev/null; rm -f "$sock" "$WT_SIDEBAR_COUNT" "$WT_SIDEBAR_SUM" "$WT_SIDEBAR_HELP"' EXIT
 
 rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=hidden --no-scrollbar \
-  --delimiter=$'\t' --with-nth=3 --track --id-nth=2 --pointer='▌' --gutter=' ' --highlight-line \
+  --delimiter=$'\t' --with-nth=3 --track --id-nth=2 --pointer='' --marker='' --highlight-line \
   --footer="$(footer)" --color=footer:-1 \
   --bind '?:transform-footer(wt-sidebar --footer --toggle)' \
   --bind 'd:execute(wt-sidebar --remove {1} {2})+reload-sync(wt-sidebar --rows)+clear-screen' \
