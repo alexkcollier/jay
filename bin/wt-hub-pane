@@ -4,9 +4,13 @@
 # the running program, so the pane starts it again for the new target).
 # agent:  `claude attach` on the picked agent. It covers the hub Claude; when you leave the
 #         agent, the pane closes and the hub Claude comes back.
-# review: tuicr on the agent's turn chain (refs/wt-turns/<agent id or session8>), else the newest chain in
-#         the worktree, else tuicr's own target picker. A chain opens on its last turn; `(`
-#         shows all turns. q in tuicr starts it again (back to the picker or the last turn).
+# review: tuicr in one of two modes (wt-hub-review.mode), switched with `t` (wt-hub-keys) or `t`
+#         in the list; the title starts with the mode.
+#         turns: the agent's turn chain (refs/wt-turns/<agent id or session8>), else the newest
+#         chain in the worktree, else tuicr's own target picker. A chain opens on its last
+#         turn; `(` shows all turns.
+#         commits: the branch's own commits (since it left main), else tuicr's picker.
+#         q in tuicr starts it again (back to the picker or the last turn).
 # files:  yazi in the worktree. It covers review; quit yazi and review comes back.
 set -uo pipefail
 export PATH="$HOME/.local/share/mise/shims:/opt/homebrew/bin:$PATH"
@@ -68,9 +72,25 @@ select_last_turn() {
   done
 }
 
+# The commit the worktree's branch left its main branch at; empty when it has no commits of its
+# own (or there is no main branch).
+branch_base() {
+  local main base
+  main=$(git rev-parse -q --abbrev-ref origin/HEAD 2>/dev/null)
+  if [[ -z "$main" || "$main" == origin/HEAD ]]; then
+    main=""
+    for base in main master; do
+      git rev-parse -q --verify "refs/heads/$base" >/dev/null && { main=$base; break; }
+    done
+  fi
+  [[ -n "$main" ]] || return 0
+  base=$(git merge-base HEAD "$main" 2>/dev/null) || return 0
+  [[ "$base" != "$(git rev-parse HEAD)" ]] && printf '%s\n' "$base"
+}
+
 # Run the role's program for target line $1 in the foreground.
 run() {
-  local id path session
+  local id path session base
   case $role in
     agent)
       IFS=$'\t' read -r id path <<<"$1"
@@ -79,14 +99,24 @@ run() {
     review)
       IFS=$'\t' read -r path session <<<"$1"
       cd "$path" || return
+      # wt-hub-keys exits 99 for `t` (toggle turns ⇄ commits).
+      if [[ "$(wtl_hub_mode)" == commits ]]; then
+        base=$(branch_base)
+        if [[ -n "$base" ]]; then
+          "$HOME/.local/bin/wt-hub-keys" tuicr --no-update-check -r "$base..HEAD"
+        else
+          "$HOME/.local/bin/wt-hub-keys" tuicr --no-update-check
+        fi
+        return
+      fi
       session=$(chain "$session")
       if [[ -n "$session" ]]; then
         if (($(git rev-list --count "refs/wt-turns/$session/base..refs/wt-turns/$session/head") > 1)); then
           select_last_turn "$1" &
         fi
-        tuicr --no-update-check -r "refs/wt-turns/$session/base..refs/wt-turns/$session/head"
+        "$HOME/.local/bin/wt-hub-keys" tuicr --no-update-check -r "refs/wt-turns/$session/base..refs/wt-turns/$session/head"
       else
-        tuicr --no-update-check
+        "$HOME/.local/bin/wt-hub-keys" tuicr --no-update-check
       fi ;;
     files)
       cd "$1" || return
@@ -102,10 +132,19 @@ while :; do
     clear
     continue
   fi
-  started=$SECONDS
+  started=$SECONDS mode=$(wtl_hub_mode)
   run "$now"
+  rc=$?
   reset_screen
   [[ "$(target)" != "$now" ]] && continue
+  if [[ "$role" == review ]]; then
+    ((rc == 99)) && wtl_hub_toggle_mode
+    # A toggle (t here or in the list) starts tuicr again in the other mode, under a new title.
+    if [[ "$(wtl_hub_mode)" != "$mode" ]]; then
+      wtl_hub_retitle review
+      continue
+    fi
+  fi
   # q in tuicr (q_quits, config/tuicr/config.toml) means "back": start it again at once, so a
   # review opened from tuicr's start screen returns to it. A quick exit is an error: ask first.
   [[ "$role" == review ]] && ((SECONDS - started >= 2)) && continue

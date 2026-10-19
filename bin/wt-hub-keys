@@ -1,0 +1,69 @@
+#!/usr/bin/python3 -I
+# wt-hub-keys CMD... — run CMD (tuicr) in a pty and pass all input to it, except `t` typed while
+# tuicr's status line shows NORMAL or SELECT: then stop CMD and exit 99 (the review pane toggles
+# turns ⇄ commits). tuicr has no key mapping, so the hub adds this key in front of it.
+# A `t` in a comment, a `:` or `/` prompt or a paste goes to tuicr as usual.
+import os, pty, select, signal, subprocess, sys, termios, tty, fcntl, struct
+
+TOGGLE = 99
+
+
+def size():
+    try:
+        return fcntl.ioctl(sys.stdin.fileno(), termios.TIOCGWINSZ, b"\0" * 8)
+    except OSError:
+        return struct.pack("HHHH", 24, 80, 0, 0)
+
+
+def normal_mode():
+    # The pane's last line is tuicr's status line: " NORMAL ..." or " SELECT ..." when keys are
+    # commands; " COMMENT ...", ":" or "/" when you type text.
+    pane = os.environ.get("ZELLIJ_PANE_ID")
+    if not pane:
+        return False
+    try:
+        out = subprocess.run(["zellij", "action", "dump-screen", "-p", "terminal_" + pane],
+                             capture_output=True, text=True, timeout=2).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    lines = [l for l in out.splitlines() if l.strip()]
+    return bool(lines) and lines[-1].lstrip().startswith(("NORMAL", "SELECT"))
+
+
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp(sys.argv[1], sys.argv[1:])
+
+fcntl.ioctl(fd, termios.TIOCSWINSZ, size())
+signal.signal(signal.SIGWINCH, lambda *_: fcntl.ioctl(fd, termios.TIOCSWINSZ, size()))
+stdin = sys.stdin.fileno()
+saved = termios.tcgetattr(stdin)
+tty.setraw(stdin)
+code = 0
+try:
+    while True:
+        try:
+            ready, _, _ = select.select([stdin, fd], [], [])
+        except InterruptedError:
+            continue
+        if fd in ready:
+            try:
+                data = os.read(fd, 65536)
+            except OSError:
+                data = b""
+            if not data:
+                break
+            os.write(sys.stdout.fileno(), data)
+        if stdin in ready:
+            data = os.read(stdin, 4096)
+            if data == b"t" and normal_mode():
+                os.kill(pid, signal.SIGTERM)
+                code = TOGGLE
+                break
+            os.write(fd, data)
+finally:
+    termios.tcsetattr(stdin, termios.TCSADRAIN, saved)
+_, status = os.waitpid(pid, 0)
+if code != TOGGLE:
+    code = os.waitstatus_to_exitcode(status) if hasattr(os, "waitstatus_to_exitcode") else status >> 8
+sys.exit(code if code >= 0 else 128 - code)

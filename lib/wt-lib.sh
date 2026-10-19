@@ -388,14 +388,25 @@ wtl_hub_title() {
   printf '%s/%s\n' "$repo" "${branch##*/}"
 }
 
+# Review mode: turns (the agent's turn chain) or commits (the branch's commits).
+WT_HUB_MODE="$HOME/.local/state/wt-hub-review.mode"
+wtl_hub_mode() {
+  if [[ "$(cat "$WT_HUB_MODE" 2>/dev/null)" == commits ]]; then printf 'commits\n'; else printf 'turns\n'; fi
+}
+wtl_hub_toggle_mode() {
+  local next=turns
+  [[ "$(wtl_hub_mode)" == turns ]] && next=commits
+  printf '%s\n' "$next" >"$WT_HUB_MODE"
+}
+
 # Point review (and files, when shown) at the worktree that holds $1.
-# $2: the agent's session id, to review that agent's turns; empty for a worktree pick.
+# $2: the agent's id, to review that agent's turns; empty for a worktree pick.
 wtl_hub_target() {
   local top title pane changed
   top=$(wtl_toplevel "$1")
   title=$(wtl_hub_title "$top")
   if IFS=$'\t' read -r pane changed < <(wtl_hub_point review "$(printf '%s\t%s' "$top" "${2:-}")"); then
-    [[ "$changed" == 1 ]] && zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "review · $title" >/dev/null 2>&1
+    [[ "$changed" == 1 ]] && zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "$(wtl_hub_mode) · $title" >/dev/null 2>&1
   fi
   if IFS=$'\t' read -r pane changed < <(wtl_hub_point files "$top"); then
     [[ "$changed" == 1 ]] && zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "files · $title" >/dev/null 2>&1
@@ -403,14 +414,24 @@ wtl_hub_target() {
   return 0
 }
 
-# Title the pane of role $1 (review or files) after the worktree in its target. zellij does not
-# rename a suspended pane, so review gets its title again when files closes.
+# Title the pane of role $1 (review or files) after the worktree in its target; review's title
+# starts with its mode. zellij does not rename a suspended pane, so review gets its title again
+# when files closes.
 wtl_hub_retitle() {
-  local pane top
+  local pane top prefix=$1
   IFS=$'\t' read -r pane _ < <(wtl_hub_role "$1") || return 0
   top=$(cut -f1 "$(wtl_hub_target_file "$1")" 2>/dev/null)
   [[ -n "$top" ]] || return 0
-  zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "$1 · $(wtl_hub_title "$top")" >/dev/null 2>&1
+  [[ "$1" == review ]] && prefix=$(wtl_hub_mode)
+  zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "$prefix · $(wtl_hub_title "$top")" >/dev/null 2>&1
+}
+
+# Switch review between turns and commits (the list's t): the pane starts tuicr again.
+wtl_hub_toggle_review() {
+  local pid
+  wtl_hub_toggle_mode
+  IFS=$'\t' read -r _ pid < <(wtl_hub_role review) || return 0
+  wtl_kill_children "$pid"
 }
 
 # Show files (yazi) in place over review, in the review's worktree.
