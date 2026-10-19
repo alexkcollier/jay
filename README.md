@@ -25,5 +25,17 @@ agent's turns, yazi for files). Built on [worktrunk](https://github.com/max-sixt
 - `wt go <agent>` — show an agent (id or name) in the hub.
 - `wt new <branch> [-- prompt]` — new worktree, with a prompt a background agent.
 
+The bar at the bottom is [zjstatus](https://github.com/dj95/zjstatus) v0.25.0 (agent counts sent by
+the list, the zellij mode when not locked, tabs, time). Install it once; without it `wt hub` uses
+zellij's compact bar:
+
+```sh
+mkdir -p ~/.local/share/wt-hub && curl -fL -o ~/.local/share/wt-hub/zjstatus-v0.25.0.wasm \
+  https://github.com/dj95/zjstatus/releases/download/v0.25.0/zjstatus.wasm
+shasum -a 256 ~/.local/share/wt-hub/zjstatus-v0.25.0.wasm  # 282ceab219e56e1908c9fac33907241fe6c3e1ef7d85faab3e5f438cef87b8fe
+```
+
+On its first start zellij asks for its permissions in the bar: click the bar and press `y`.
+
 State lives in `~/.local/state/` (`wt-hub.json`, `wt-hub-<role>.target|.pane`, `wt-hub-sidebar.pct`,
 `wt-turns/`).

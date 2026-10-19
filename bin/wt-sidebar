@@ -61,7 +61,8 @@ rows() {
       ($ag | map(select(.wt == "")) | select(length > 0)
         | (" \tgap:other\t ", "hdr\thdr:other\t" + c("1") + "Other" + c("0")),
           (.[] | "ag\t" + .sessionId + "\t   " + (.phase | glyph) + " " + (.name | narrow) + " " + c("2") + .cwd + c("0")))
-  ' "$CACHE" | tee >(wc -l | tr -d ' ' >"${WT_SIDEBAR_COUNT:-/dev/null}")
+  ' "$CACHE" | tee >(wc -l | tr -d ' ' >"${WT_SIDEBAR_COUNT:-/dev/null}") \
+    >(head -1 | cut -f3 >"${WT_SIDEBAR_SUM:-/dev/null}")
 }
 
 act() {
@@ -113,8 +114,20 @@ case ${1:-} in
 esac
 
 sock="$STATE/wt-sidebar.$$.sock"
-export WT_SIDEBAR_COUNT="$STATE/wt-sidebar.$$.count"
+export WT_SIDEBAR_COUNT="$STATE/wt-sidebar.$$.count" WT_SIDEBAR_SUM="$STATE/wt-sidebar.$$.sum"
 post() { curl -s --max-time 2 --unix-socket "$sock" -X POST http://localhost -d "$1" >/dev/null 2>&1 || true; }
+
+# Send the agent counts (the list's first row) to the hub's bar (zjstatus, see wt-hub) when
+# they change, and every 30 s for a bar that started again.
+last_sum=""
+send_sum() {
+  local sum
+  sum=$(cat "$WT_SIDEBAR_SUM" 2>/dev/null)
+  [[ -n "$sum" ]] || return 0
+  [[ "$sum" != "$last_sum" || "${1:-}" == --again ]] || return 0
+  last_sum=$sum
+  (zellij pipe "zjstatus::pipe::pipe_agents::$sum" >/dev/null 2>&1 &)
+}
 
 # Save the list's share of the hub's width when it changes (mouse drag, h/l), so `wt hub`
 # starts it at that width.
@@ -142,10 +155,13 @@ remember_width() {
     sleep 1
     after=$(cat "$WT_SIDEBAR_COUNT" 2>/dev/null)
     if [[ "$before" != "$after" ]] || ((tick % 10 == 0)); then post 'clear-screen'; fi
+    if wtl_in_hub; then
+      if ((tick % 10 == 0)); then send_sum --again; else send_sum; fi
+    fi
   done
 ) &
 loop=$!
-trap 'kill $loop 2>/dev/null; rm -f "$sock" "$WT_SIDEBAR_COUNT"' EXIT
+trap 'kill $loop 2>/dev/null; rm -f "$sock" "$WT_SIDEBAR_COUNT" "$WT_SIDEBAR_SUM"' EXIT
 
 rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=hidden --no-scrollbar \
   --delimiter=$'\t' --with-nth=3 --track --id-nth=2 --pointer='▌' --gutter=' ' --highlight-line \

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # wt hub — select the hub's Ghostty tab, or open it: zellij session "hub" with the live
 # worktree list (left), the hub Claude / picked agent (middle) and review + files (right).
-# --here: start it in this terminal.
+# --here: start it in this terminal.  --print-layout: print the zellij layout it starts with.
 set -euo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
 [[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,4s/^# \{0,1\}//p' "$0"; exit 0; }
@@ -9,6 +9,38 @@ source "$HOME/.local/lib/wt-lib.sh"
 SESSION=$WT_HUB_SESSION
 root=${WT_ROOTS%%:*}
 layout="$HOME/.local/state/wt-hub-layout.kdl"
+# zjstatus (github.com/dj95/zjstatus) v0.25.0, sha256 282ceab219e56e1908c9fac33907241fe6c3e1ef7d85faab3e5f438cef87b8fe.
+# Without it the hub uses zellij's compact bar.
+ZJSTATUS="$HOME/.local/share/wt-hub/zjstatus-v0.25.0.wasm"
+
+# The bar at the bottom of the hub, in kanagawa colors: the agent counts (sent by the list,
+# see wt-sidebar), the zellij mode when it is not locked, the tabs and the time.
+bar() {
+  if [[ ! -f "$ZJSTATUS" ]]; then
+    printf '%s\n' 'plugin location="zellij:compact-bar"'
+    return
+  fi
+  local tz
+  tz=$(readlink /etc/localtime | sed 's#.*/zoneinfo/##')
+  cat <<KDL
+plugin location="file:$ZJSTATUS" {
+                format_left   "#[fg=#7E9CD8,bold] ◆ hub  {pipe_agents}"
+                format_right  "{mode}{tabs}#[fg=#727169] {datetime} "
+                format_space  ""
+                pipe_agents_format     "{output}"
+                pipe_agents_rendermode "raw"
+                mode_locked          ""
+                mode_normal          "#[fg=#1F1F28,bg=#E6C384,bold] {name} #[fg=#727169] Ctrl g: lock  "
+                mode_default_to_mode "normal"
+                tab_active    "#[fg=#DCD7BA,bold] {name} "
+                tab_normal    "#[fg=#727169] {name} "
+                tab_separator "#[fg=#54546D]│"
+                datetime          "{format}"
+                datetime_format   "%H:%M"
+                datetime_timezone "$tz"
+            }
+KDL
+}
 
 write_layout() {
   local resume="" last list middle right
@@ -20,22 +52,24 @@ write_layout() {
   [[ "$list" =~ ^[0-9]+$ ]] && ((list >= 10 && list <= 60)) || list=22
   middle=$(((100 - list) * 43 / 78))
   right=$((100 - list - middle))
-  cat >"$layout" <<KDL
+  cat <<KDL
 layout {
-    pane size=1 borderless=true {
-        plugin location="zellij:tab-bar"
-    }
-    pane split_direction="vertical" {
-        pane size="$list%" name="worktrees" command="$HOME/.local/bin/wt-sidebar"
-        pane size="$middle%" name="hub" focus=true command="/usr/bin/env" {
-            args "WT_HUB=1" "$HOME/.local/bin/claude" "-n" "hub"$resume
-        }
-        pane size="$right%" name="review" command="$HOME/.local/bin/wt-hub-pane" {
-            args "review"
+    default_tab_template {
+        children
+        pane size=1 borderless=true {
+            $(bar)
         }
     }
-    pane size=2 borderless=true {
-        plugin location="zellij:status-bar"
+    tab name="hub" focus=true {
+        pane split_direction="vertical" {
+            pane size="$list%" name="worktrees" command="$HOME/.local/bin/wt-sidebar"
+            pane size="$middle%" name="hub" focus=true command="/usr/bin/env" {
+                args "WT_HUB=1" "$HOME/.local/bin/claude" "-n" "hub"$resume
+            }
+            pane size="$right%" name="review" command="$HOME/.local/bin/wt-hub-pane" {
+                args "review"
+            }
+        }
     }
 }
 KDL
@@ -51,9 +85,14 @@ hub_answers() {
 fresh_start() {
   pkill -9 -f "zellij --server .*/$SESSION\$" 2>/dev/null || true
   zellij delete-session --force "$SESSION" >/dev/null 2>&1 || true
-  write_layout
+  write_layout >"$layout"
   wtl_hub_reset
 }
+
+if [[ "${1:-}" == --print-layout ]]; then
+  write_layout
+  exit 0
+fi
 
 if [[ "${1:-}" == --here ]]; then
   hub_answers && exec zellij attach "$SESSION"
