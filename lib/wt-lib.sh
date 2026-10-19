@@ -310,15 +310,25 @@ wtl_hub_point() {
   printf '%s\t1\n' "$pane"
 }
 
-# No hub function moves the focus: in zellij 0.45 `focus-pane-id` from the CLI sets a focus of
-# its own, not the terminal's, and on a suspended pane it makes that pane float.
+# In zellij 0.45 `focus-pane-id` from the CLI sets a focus of its own, not the terminal's, and on
+# a suspended pane it makes that pane float. `move-focus` moves the terminal's focus.
 
-# Show the hub Claude: close the agent viewer over it (the agent keeps running).
+# Move the focus to the middle column (the hub Claude or the agent viewer), from any column:
+# left twice reaches the list, then one step right.
+wtl_hub_focus_middle() {
+  zellij -s "$WT_HUB_SESSION" action move-focus left >/dev/null 2>&1
+  zellij -s "$WT_HUB_SESSION" action move-focus left >/dev/null 2>&1
+  zellij -s "$WT_HUB_SESSION" action move-focus right >/dev/null 2>&1
+  return 0
+}
+
+# Show the hub Claude: close the agent viewer over it (the agent keeps running), focus it.
 wtl_hub_show_claude() {
   local pane
-  IFS=$'\t' read -r pane _ < <(wtl_hub_role agent) || return 0
-  zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "$pane" >/dev/null 2>&1
-  return 0
+  if IFS=$'\t' read -r pane _ < <(wtl_hub_role agent); then
+    zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "$pane" >/dev/null 2>&1
+  fi
+  wtl_hub_focus_middle
 }
 
 # Run "$@" holding the hub lock, so two picks (sidebar, /wt go, a notice click) never move
@@ -333,7 +343,7 @@ wtl_hub_locked() {
 }
 
 # Show background agent $1 (short id) named $2 from folder $3 in the hub's middle column: the
-# viewer pane follows the new agent, or opens in place over the hub Claude.
+# viewer pane follows the new agent, or opens in place over the hub Claude. The focus goes there.
 wtl_hub_show() {
   local id=$1 name=$2 cwd=$3 line viewer changed hub
   line=$(printf '%s\t%s' "$id" "$cwd")
@@ -348,7 +358,7 @@ wtl_hub_show() {
     [[ "$viewer" == terminal_* ]] || return 1
     wtl_hub_role_ready agent
   fi
-  return 0
+  wtl_hub_focus_middle
 }
 
 # Close the agent viewer when it shows agent $1 (short id); the hub Claude comes back.

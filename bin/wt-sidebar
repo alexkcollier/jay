@@ -2,10 +2,10 @@
 # wt sidebar — live list of worktrees and Claude agents for a narrow left pane.
 # Click, double-click or Enter: an agent → shown in the hub's middle column (over the hub
 # Claude), and review (tuicr, its turns) and files (yazi, when shown) switch to it; a worktree →
-# review and files switch to it; "◆ hub" → the hub Claude (closes the agent viewer). Enter also
-# moves the focus there. v: review  e: files (over review)  o: own Ghostty tab  x: close the
-# agent viewer  d: remove the agent or worktree (asks first)  r: reload  j/k: move
-# h/l: narrower/wider (the hub keeps the width)  ?: all keys  q: quit
+# review and files switch to it; "◆ hub" → the hub Claude (closes the agent viewer). Agents and
+# the hub row take the focus to the middle; Enter on a worktree takes it to review. n/N: new agent
+# here / in a new worktree  v: review  e: files  o: own Ghostty tab  x: close the agent viewer
+# d: remove the agent or worktree (asks first)  r: reload  h/l: narrower/wider  ?: keys  q: quit
 set -uo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
 
@@ -74,21 +74,18 @@ focus_column() {
   for ((i = 0; i < $1; i++)); do zellij action move-focus right >/dev/null 2>&1; done
 }
 
-# Pick row kind $1 with id $2; --focus: also move the focus into what was picked.
+# Pick row kind $1 with id $2. An agent or the hub row always moves the focus to the middle
+# column (wtl_hub_show); a worktree with --focus (Enter) moves it to review.
 act() {
-  local shown
   case $1 in
-    ag) wt-go "$2" >/dev/null 2>&1 || return 0
-        shown=$(cut -f1 "$(wtl_hub_target_file agent)" 2>/dev/null)
-        [[ "${3:-}" == --focus && -n "$shown" && "$2" == "$shown"* ]] && focus_column 1 ;;
+    ag) wt-go "$2" >/dev/null 2>&1 ;;
     wt) if wtl_in_hub; then
           wtl_hub_locked wtl_hub_target "$2"
           [[ "${3:-}" == --focus ]] && focus_column 2
         else
           wt-open "$2" >/dev/null 2>&1
         fi ;;
-    hub) wtl_hub_locked wtl_hub_show_claude >/dev/null 2>&1
-         [[ "${3:-}" == --focus ]] && focus_column 1 ;;
+    hub) wtl_hub_locked wtl_hub_show_claude >/dev/null 2>&1 ;;
   esac
   return 0
 }
@@ -118,6 +115,55 @@ view() {
   esac
 }
 
+# Start a background agent from row kind $2 with id $3, asking in the list pane: $1 = here (in
+# the row's worktree) or worktree (a new worktree from the row's repo, through `wt new`). The
+# new agent shows in the hub's middle column.
+new_agent() {
+  local mode=$1 kind=$2 id=$3 path top primary repo branch prompt out agent i
+  case $kind in
+    wt|ag) path=$(path_of "$kind" "$id") ;;
+    hdr) path=$(jq -r --arg k "${id#hdr:}" 'select(.main and (.client + "/" + .repo) == $k) | .path' "$CACHE" | head -1) ;;
+  esac
+  [[ -n "$path" ]] || return 0
+  top=$(wtl_toplevel "$path")
+  primary=$(wtl_primary "$top")
+  IFS=$'\t' read -r _ repo branch _ < <(wtl_describe "$top")
+  if [[ "$mode" == here && "$kind" == hdr ]]; then
+    pause "n starts an agent in a worktree: pick a worktree row. N makes a new worktree."
+    return 0
+  fi
+  if [[ "$mode" == worktree ]]; then
+    say "New worktree and agent in $repo."
+    printf 'Branch, empty to cancel: '
+    read -r -e branch </dev/tty
+    [[ -n "$branch" ]] || return 0
+  else
+    say "New agent in $repo/${branch##*/}."
+  fi
+  printf 'Prompt, empty to cancel: '
+  read -r -e prompt </dev/tty
+  [[ -n "$prompt" ]] || return 0
+  printf '\nStarting...\n'
+  if [[ "$mode" == worktree ]]; then
+    out=$(cd "$primary" && wt-new "$branch" -- "$prompt" 2>&1)
+  else
+    out=$(cd "$top" && claude --bg --name "$(wtl_tab_name "$repo" "$branch")" "$prompt" 2>&1)
+  fi
+  # `claude --bg` prints the new agent's short id last.
+  agent=$(grep -oE '\b[0-9a-f]{8}\b' <<<"$out" | tail -1)
+  if [[ -z "$agent" ]]; then
+    pause "Not started:
+
+$out"
+    return 0
+  fi
+  for i in $(seq 20); do
+    wt-go "$agent" >/dev/null 2>&1 && return 0
+    sleep 0.5
+  done
+  pause "Started $agent, but the hub cannot show it yet. Pick it in the list."
+}
+
 close_agent() {
   [[ "$1" == ag ]] || return 0
   local id
@@ -126,9 +172,11 @@ close_agent() {
 }
 
 # The key hints under the list; --toggle switches between the short and the full list.
-FOOTER_SHORT=$'\e[2m⏎ open  v review  e files\nx close  d remove  ? keys\e[0m'
-FOOTER_FULL=$'\e[2m⏎      open, focus goes there
-click  open, focus stays
+FOOTER_SHORT=$'\e[2m⏎ open  v review  e files\nn new  x close  d remove  ? keys\e[0m'
+FOOTER_FULL=$'\e[2m⏎      open (agent: focus goes there)
+click  open (agent: focus goes there)
+n      new agent in this worktree
+N      new worktree + agent
 v / e  review / files
 o      own Ghostty tab
 x      close the agent viewer
@@ -228,6 +276,7 @@ case ${1:-} in
   --close) shift; close_agent "$@"; exit 0 ;;
   --view) shift; view "$@"; exit 0 ;;
   --remove) shift; remove "$@"; exit 0 ;;
+  --new) shift; new_agent "$@"; exit 0 ;;
   --footer) shift; footer "$@"; exit 0 ;;
   -h|--help) sed -n '2,8s/^# \{0,1\}//p' "$0"; exit 0 ;;
 esac
@@ -288,6 +337,8 @@ rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=
   --footer="$(footer)" \
   --bind '?:transform-footer(wt-sidebar --footer --toggle)' \
   --bind 'd:execute(wt-sidebar --remove {1} {2})+reload-sync(wt-sidebar --rows)+clear-screen' \
+  --bind 'n:execute(wt-sidebar --new here {1} {2})+reload-sync(wt-sidebar --rows --fresh)+clear-screen' \
+  --bind 'N:execute(wt-sidebar --new worktree {1} {2})+reload-sync(wt-sidebar --rows --fresh)+clear-screen' \
   --bind 'enter:execute-silent(wt-sidebar --act {1} {2} --focus)' \
   --bind 'double-click:execute-silent(wt-sidebar --act {1} {2})' \
   --bind 'left-click:execute-silent(wt-sidebar --act {1} {2})' \
