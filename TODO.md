@@ -31,7 +31,7 @@ Alex's to-do list, in his words (2026-10-19):
 - `wt step prune` candidates were listed but not removed. Never in one client repo (it would delete `main`).
 - macOS notices (claude-notify) were never clicked live.
 - Test leftovers to remove after Alex agrees: scratch worktree `shop.turns-selftest` (chain 11112222) and the stray chain 60e27a52 in the shop repo.
-- `bin/wt-hub-keys` has no install step: its ~/.local/bin link was made by hand.
+- `bin/wt-hub-edit` and the `wtl_nvim_*` helpers are left from the Neovim files pane (now yazi). Ask Alex before removing them.
 
 ## How to work
 

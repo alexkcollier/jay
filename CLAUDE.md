@@ -6,6 +6,8 @@ edit is live at once.
 
 ## Rules
 
+- A new script in `bin/` needs its `~/.local/bin` link: run the link loop in README "Install"
+  step 2. A new tool or config the hub needs goes into that section too.
 - Edit with the Edit/Write tools (so `/diff` tracks changes), never python/sed via Bash.
 - A script that is running (`wt-sidebar`, `wt-hub-pane`) must be replaced write-then-mv: edit a
   copy, then `mv` it over the file. Bash reads a running script lazily.
