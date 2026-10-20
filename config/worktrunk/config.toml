@@ -1,3 +1,6 @@
+# The hub's worktrunk settings. ~/.config/worktrunk/config.toml is a real file, not a link to
+# this one, so client settings ([projects."..."] entries) stay out of this repo: copy this file
+# there once, or merge these keys into the file that is there.
 worktree-path = "{{ repo_path }}/../{{ repo }}.{{ branch | sanitize }}"
 
 pre-start = "wt-setup"
@@ -9,6 +12,3 @@ priority = 5
 
 [aliases]
 task = "{% if args %}wt config state vars set task={{ args }}{% else %}wt config state vars get task{% endif %}"
-
-[projects."github.com/acme/shop".aliases]
-dev = "pnpm --filter @apps/{{ args }} exec vite --port {{ (args ~ '-' ~ branch) | hash_port }} --strictPort"

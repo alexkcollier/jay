@@ -52,7 +52,7 @@ Alex's to-do list, in his words (2026-10-19):
   A watcher restarts tuicr when the chain head (commits mode: HEAD) moves, only while tuicr is
   in NORMAL/SELECT. tuicr kept: revdiff (Alex offered a switch) has only a manual reload, no
   per-commit pick, and keys that cannot run commands; its plus is annotations back to Claude.
-- Removed (Alex agreed): scratch worktree shop.turns-selftest, test chains 11112222 and
+- Removed (Alex agreed): a scratch worktree turns-selftest, test chains 11112222 and
   60e27a52, bin/wt-hub-edit, the wtl_nvim_* helpers, ~/.config/wt/lazygit-hub.yml.
 - Kept as is (Alex): idle background agents stay until removed; the Octicons for uncommitted,
   conflict, safe and rebase.
@@ -60,12 +60,13 @@ Alex's to-do list, in his words (2026-10-19):
 ## Other open items
 
 None. Dropped 2026-10-20 (Alex): `wt step prune` (bulk removal; the list's dim ✓ and `d` do it
-one worktree at a time). Never run it in one client repo (it would delete `main`).
+one worktree at a time). Never run it in the client repo where it would delete `main` (the
+memory note "worktree-tooling-worktrunk" names it).
 
 ## How to work
 
 - Taste items: first show Alex 2–3 concrete options (short ASCII previews, what each costs), let him pick, then build. Key items: propose the keys in one message, then build. Alex wants idiomatic keys ("q means quit").
-- Removing a worktree is destructive: confirm in the UI first, use `wt remove`, never remove a main checkout, never run `wt step prune` in one client repo. Removing an agent: `claude rm <id>` after a confirm. The agent viewer never closes (no hub Claude under it since 2026-10-20).
+- Removing a worktree is destructive: confirm in the UI first, use `wt remove`, never remove a main checkout, never run `wt step prune` (see "Other open items"). Removing an agent: `claude rm <id>` after a confirm. The agent viewer never closes (no hub Claude under it since 2026-10-20).
 - Test zellij behaviour in a throwaway session as CLAUDE.md says, never on Alex's live hub. Apply to the live hub only when an item is done, and restart a live pane in place (focus it, `zellij -s hub run --in-place --close-replaced-pane ... -- env -u CLAUDE_JOB_DIR <cmd>`, refocus) — never quit the hub session.
 - Edit running scripts write-then-mv. Commit each finished item in this repo (no Claude-Session trailer, no ticket ids); there is no remote.
 - Respond in Simplified Technical English. End each item with what changed and how Alex uses it.

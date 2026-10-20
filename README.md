@@ -6,7 +6,8 @@ agent's work (tuicr on its turns, or yazi on its files). Built on
 [worktrunk](https://github.com/max-sixty/worktrunk) and Claude Code background agents.
 
 This repo is the live install: `~/.local/bin`, `~/.local/lib`, `~/mods/wt-hub` and the configs are
-symlinks into it, so an edit is live at once. Open items and known faults: [TODO.md](TODO.md).
+symlinks into it, so an edit is live at once. The exception is worktrunk's config: it is a copy
+in `~`, because it also holds client settings. Client names stay out of this repo. Open items and known faults: [TODO.md](TODO.md).
 Rules for edits: [CLAUDE.md](CLAUDE.md).
 
 - [What the hub is](#what-the-hub-is)
@@ -124,14 +125,24 @@ can run again safely.
    for f in bin/*; do [ -f "$f" ] && ln -sfn "$PWD/$f" ~/.local/bin/; done
    ln -sfn "$PWD/lib/wt-lib.sh" ~/.local/lib/wt-lib.sh
    ln -sfn "$PWD/mod" ~/mods/wt-hub
-   ln -sfn "$PWD/config/worktrunk/config.toml" ~/.config/worktrunk/config.toml
    ln -sfn "$PWD/config/tuicr/config.toml" ~/.config/tuicr/config.toml
    ln -sfn "$PWD/config/yazi" ~/.config/wt-hub/yazi
    ln -sfn "$PWD/config/zellij/wt-hub.kdl" ~/.config/zellij/layouts/wt-hub.kdl
    ```
 
    `ln -sfn` replaces a file of the same name in place: look first if one is not a link
-   (`ls -l ~/.config/worktrunk/config.toml`). `~/.local/bin` must be on PATH.
+   (`ls -l ~/.config/tuicr/config.toml`). `~/.local/bin` must be on PATH.
+
+   worktrunk's config is a copy, not a link: `~/.config/worktrunk/config.toml` also holds the
+   client settings (`[projects."..."]` entries), and they stay out of this repo. With no file
+   there, copy the hub's settings; else merge the keys of `config/worktrunk/config.toml` into
+   it by hand:
+
+   ```sh
+   [ -e ~/.config/worktrunk/config.toml ] || cp config/worktrunk/config.toml ~/.config/worktrunk/config.toml
+   ```
+
+   A later change to `config/worktrunk/config.toml` must go into that file by hand too.
 3. Claude Code: add the hooks in `config/claude-settings-hooks.json` to the `hooks` in
    `~/.claude/settings.json` (merge by hand, keep the hooks that are there). Then the mod and
    worktrunk's plugin:
@@ -594,7 +605,7 @@ lib/
 config/
   claude-settings-hooks.json   hooks to merge into ~/.claude/settings.json
   tuicr/config.toml            q_quits: q in review goes back
-  worktrunk/config.toml        worktree path <repo>.<branch>, pre-start wt-setup, Task column, aliases
+  worktrunk/config.toml        hub settings to copy into ~: worktree path <repo>.<branch>, pre-start wt-setup, Task column, task alias
   yazi/keymap.toml             hub-only yazi keys: e, O, W
   zellij/wt-hub.kdl            a saved hub layout (wt hub writes its own copy)
 mod/

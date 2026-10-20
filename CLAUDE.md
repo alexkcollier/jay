@@ -2,9 +2,14 @@
 
 Alex's personal hub tooling (see README.md). Machine-only: the files here are the live install —
 `~/.local/bin`, `~/.local/lib`, `~/mods/wt-hub` and the configs are symlinks into this repo, so an
-edit is live at once.
+edit is live at once. Not linked: `~/.config/worktrunk/config.toml` (a real file with the client
+settings) and `~/.claude/settings.json`.
 
 ## Rules
+
+- No client names in this repo (client folders, repos, remotes, people), also not in examples,
+  tests or notes: use made-up names (`acme`, `shop`). Client settings go in `~`-level config,
+  for worktrunk in `~/.config/worktrunk/config.toml`.
 
 - A new script in `bin/` needs its `~/.local/bin` link: run the link loop in README "Install"
   step 2. A new tool or config the hub needs goes into that section too.
