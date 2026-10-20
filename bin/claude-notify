@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # claude-notify — Claude Code hook (Stop, Notification) that posts a macOS notice
 # naming client › repo · branch, the task note and the agent's message.
-# No notice while Ghostty is in front showing that agent, in its own tab or in the hub's middle
-# column.
+# No notice while Ghostty is the app in front.
 # Click: `wt go <session>` brings the agent in front.
 set -uo pipefail
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
@@ -38,46 +37,9 @@ esac
 
 [[ -n "${WT_NOTIFY_LOG:-}" ]] && printf '%s %s %s %s bg=%s\n' "$(date '+%F %T')" "$event" "$type" "$cwd" "${CLAUDE_JOB_DIR:+yes}" >>"$WT_NOTIFY_LOG"
 
-claude_pid() {
-  local p=${CLAUDE_PID:-$PPID} comm
-  while [[ -n "$p" && "$p" -gt 1 ]]; do
-    comm=$(ps -o comm= -p "$p" 2>/dev/null)
-    [[ "$comm" == *claude* ]] && { printf '%s\n' "$p"; return 0; }
-    p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
-  done
-  return 1
-}
-
-# Ghostty tab id that shows this agent (empty when unknown), and whether its zellij pane has focus.
-agent_tab="" pane_focused=true
-if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
-  agent_tab=$(wtl_gh_tab_for_command "^claude attach ${sid:0:8}" || true)
-elif wtl_in_zellij; then
-  agent_tab=$(wtl_gh_tab_for_session "$ZELLIJ_SESSION_NAME" || true)
-  active=$(zellij -s "$ZELLIJ_SESSION_NAME" action list-tabs -j 2>/dev/null | jq -r '.[] | select(.active) | .tab_id')
-  pane_focused=$(zellij -s "$ZELLIJ_SESSION_NAME" action list-panes -j 2>/dev/null | jq -r --argjson p "${ZELLIJ_PANE_ID:-0}" --arg t "$active" \
-    'any(.[]; .id == $p and (.is_plugin | not) and .is_focused and ((.tab_id | tostring) == $t))')
-elif pid=$(claude_pid); then
-  tty=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
-  [[ -n "$tty" && "$tty" != "??" ]] && agent_tab=$(wtl_gh_tab_for_tty "$tty" || true)
-fi
-
-# The hub's Ghostty tab, and whether this agent is the one in the hub's middle column (its
-# target names the agent id, or the session id for an interactive agent).
-hub_tab="" in_hub=false
-if wtl_hub_live; then
-  hub_tab=$(wtl_gh_tab_for_session "$WT_HUB_SESSION" || true)
-  shown=$(cut -f1 "$(wtl_hub_target_file agent)" 2>/dev/null)
-  if [[ -n "$shown" ]]; then
-    [[ "$shown" == "$sid" || "$shown" == "${sid:0:8}" || "$shown" == "$(basename "${CLAUDE_JOB_DIR:-none}")" ]] && in_hub=true
-  fi
-fi
-
-if [[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
-  selected=$(wtl_gh_tabs | awk -F'\t' '$2 == "true" && $3 == "true" { print $1; exit }')
-  [[ -n "$selected" && "$selected" == "$agent_tab" && "$pane_focused" == true ]] && exit 0
-  [[ -n "$selected" && "$selected" == "$hub_tab" && "$in_hub" == true ]] && exit 0
-fi
+# Notices only while Ghostty is not the app in front (Alex): in Ghostty the hub's list and the
+# tabs show the agents.
+[[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]] && exit 0
 
 [[ -x "$NOTIFIER" ]] || exit 0
 IFS=$'\t' read -r client repo branch top < <(wtl_describe "${cwd:-$PWD}")
