@@ -11,7 +11,8 @@
 # p: prune dead agents (folder gone; asks first). The list also prunes them by itself, every
 # 10 minutes, with plain `claude rm` (it keeps an agent whose worktree has work to lose); log in
 # ~/.local/state/wt-hub-prune.log.
-# r: reload  h/l: narrower/wider  ?: keys  q: quit  (e for files is a key of the review pane)
+# r: reload (git signs now, and the list starts again: new code and keys too)  h/l: narrower/wider
+# ?: keys. No quit key: the list belongs to the hub.
 # wt-sidebar --files: show files over review (e in the review pane, through wt-hub-keys).
 set -uo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
@@ -342,10 +343,9 @@ ${KEY}d${OFF}      remove agent/worktree
 ${KEY}b${OFF}      session to background
 ${KEY}a${OFF}      hide/show idle repos
 ${KEY}p${OFF}      prune dead agents
-${KEY}r${OFF}      reload
+${KEY}r${OFF}      reload (git signs too)
 ${KEY}j k${OFF}    move
 ${KEY}h l${OFF}    narrower / wider
-${KEY}q${OFF}      quit
 ${KEY}?${OFF}      fewer keys
 
 ${HEAD}Panes${OFF} (${KEY}Ctrl g${OFF}, then)
@@ -505,7 +505,7 @@ case ${1:-} in
   --files) wtl_hub_locked wtl_hub_show_files; exit 0 ;;
   --idle) if [[ -f "$HIDE_IDLE" ]]; then rm -f "$HIDE_IDLE"; else : >"$HIDE_IDLE"; fi; exit 0 ;;
   --footer) shift; footer "$@"; exit 0 ;;
-  -h|--help) sed -n '2,13s/^# \{0,1\}//p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,15s/^# \{0,1\}//p' "$0"; exit 0 ;;
   # An option this version does not have (say a bind of a list started before an update) must
   # not start a second list.
   -*) printf 'wt-sidebar: unknown option %s\n' "$1" >&2; exit 2 ;;
@@ -513,7 +513,7 @@ esac
 
 sock="$STATE/wt-sidebar.$$.sock"
 export WT_SIDEBAR_COUNT="$STATE/wt-sidebar.$$.count" WT_SIDEBAR_SUM="$STATE/wt-sidebar.$$.sum" \
-  WT_SIDEBAR_HELP="$STATE/wt-sidebar.$$.help"
+  WT_SIDEBAR_HELP="$STATE/wt-sidebar.$$.help" WT_SIDEBAR_RESTART="$STATE/wt-sidebar.$$.restart"
 post() { curl -s --max-time 2 --unix-socket "$sock" -X POST http://localhost -d "$1" >/dev/null 2>&1 || true; }
 
 # Send the agent counts (the list's first row) to the hub's bar (zjstatus, see wt-hub) when
@@ -560,7 +560,11 @@ remember_width() {
   done
 ) &
 loop=$!
-trap 'kill $loop 2>/dev/null; rm -f "$sock" "$WT_SIDEBAR_COUNT" "$WT_SIDEBAR_SUM" "$WT_SIDEBAR_HELP"' EXIT
+cleanup() {
+  kill $loop 2>/dev/null
+  rm -f "$sock" "$WT_SIDEBAR_COUNT" "$WT_SIDEBAR_SUM" "$WT_SIDEBAR_HELP" "$WT_SIDEBAR_RESTART"
+}
+trap cleanup EXIT
 
 rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=hidden --no-scrollbar \
   --delimiter=$'\t' --with-nth=3 --track --id-nth=2 --pointer='▌' --marker='' --gutter=' ' --highlight-line \
@@ -573,10 +577,21 @@ rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=
   --bind 'enter:execute-silent(wt-sidebar --act {1} {2} --focus)+reload-sync(wt-sidebar --rows)' \
   --bind 'double-click:execute-silent(wt-sidebar --act {1} {2})+reload-sync(wt-sidebar --rows)' \
   --bind 'left-click:execute-silent(wt-sidebar --act {1} {2})+reload-sync(wt-sidebar --rows)' \
-  --bind 'r:reload-sync(wt-sidebar --rows --fresh)' \
+  --bind 'r:execute-silent(: >"$WT_SIDEBAR_RESTART")+abort' \
   --bind 'o:execute-silent(wt-sidebar --view open {1} {2})' \
   --bind 'a:execute-silent(wt-sidebar --idle)+reload-sync(wt-sidebar --rows)+clear-screen' \
   --bind 'p:execute(wt-sidebar --prune)+reload-sync(wt-sidebar --rows)+clear-screen' \
   --bind 'h:execute-silent(zellij action resize -p "$ZELLIJ_PANE_ID" decrease right)' \
   --bind 'l:execute-silent(zellij action resize -p "$ZELLIJ_PANE_ID" increase right)' \
-  --bind 'j:down,k:up,q:abort,esc:ignore'
+  --bind 'j:down,k:up,q:ignore,esc:ignore'
+
+# r: start again as the newest version of this script, with fresh git signs (same pid, so the
+# state files keep their names).
+if [[ -f "$WT_SIDEBAR_RESTART" ]]; then
+  trap - EXIT
+  cleanup
+  clear
+  printf '\n  Reloading...\n'
+  refresh_worktrees
+  exec "$0"
+fi

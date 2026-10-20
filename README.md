@@ -88,9 +88,10 @@ is live at once. Every step can run again safely.
   (`claude --bg --resume`). `n` new idle agent in the row's worktree, `N` new worktree (asks the branch) +
   idle agent (`wt new -a`); type the first prompt in the middle column. `o` own tab,
   `d` remove the agent (`claude rm`) or worktree (`wt remove`) after a confirm, `h`/`l`
-  width, `a` hide/show idle repos, `p` prune dead agents, `r` reload, `?` all keys (one per line,
-  then the pane moves and the signs under their own headings),
-  `q` quit.
+  width, `a` hide/show idle repos, `p` prune dead agents, `?` all keys (one per line, then the
+  pane moves and the signs under their own headings). `r` reload: the git signs at once (else
+  every 30 s; agent rows every few seconds), and the list starts again as the newest version of
+  `wt-sidebar`, so new keys apply. The list has no quit key.
 - The list shows each repo with a `.git` folder 1–2 levels under `$WT_ROOTS` (default
   `~/Documents/projects`): `<root>/<client>/<repo>` under a heading for its client,
   `<root>/<repo>` under "Other" at the bottom. Under each repo: its worktrees, the main checkout
