@@ -23,14 +23,14 @@ Rules for edits: [CLAUDE.md](CLAUDE.md).
 ## What the hub is
 
 ```
-┌ worktrees ─────────────┬ shop/fix-login ─────────┬ turns · shop   e files · t commits ┐
+┌ worktrees ─────────────┬ shop/fix-login ────────────┬ turns · shop   e files · t commits ───┐
 │ ● 1 working  ○ 2 idle  │                            │                                        │
 │                        │  the picked agent:         │  review of the agent's turns (tuicr)   │
-│ acme                │  claude attach <id>        │                                        │
-│  shop               │                            │            e ⇅ e / q                   │
+│ acme                   │  claude attach <id>        │                                        │
+│  shop                  │                            │            e ⇅ e / q                   │
 │   main                 │  type to the agent here    │                                        │
 │   fix-login  ↑2        │                            │  files of the worktree (yazi),         │
-│     ▸ ● shop/fix-…  │  Ctrl+Z or ←: leave it     │  over review                           │
+│     ▸ ● shop/fix-login │  Ctrl+Z or ←: leave it     │  over review                           │
 │                        │  (it keeps running)        │                                        │
 │ ⏎ open  n new  d remove│                            │                                        │
 │ ? all keys and signs   │                            │                                        │
