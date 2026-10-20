@@ -36,6 +36,9 @@ Alex's to-do list, in his words (2026-10-19):
 - Background-first (Alex's choice): `c` starts every new session as a background agent and
   attaches the terminal; `b` in the list moves an idle interactive session to the background;
   ← in the hub viewer goes back to the hub Claude.
+- List keys act in the list only (Alex: no list key may change review's mode or files): `t` left
+  the list. The `?` help has Keys, Panes (Ctrl g moves, Alex: fine to show) and Signs (git signs,
+  ▸, ◆ hub) under their own headings; signs are not drawn as keys.
 
 ## Other open items
 

@@ -473,14 +473,6 @@ wtl_hub_retitle() {
   zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "$(wtl_hub_pane_title "$1" "$(wtl_hub_title "$top")")" >/dev/null 2>&1
 }
 
-# Switch review between turns and commits (the list's t): the pane starts tuicr again.
-wtl_hub_toggle_review() {
-  local pid
-  wtl_hub_toggle_mode
-  IFS=$'\t' read -r _ pid < <(wtl_hub_role review) || return 0
-  wtl_kill_children "$pid"
-}
-
 # Show files (yazi) in place over review, in the review's worktree.
 wtl_hub_show_files() {
   local review top pane

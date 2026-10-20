@@ -87,8 +87,9 @@ is live at once. Every step can run again safely.
   confirm) ends it there and continues it as a background agent with the same conversation
   (`claude --bg --resume`). `n` new idle agent in the row's worktree, `N` new worktree (asks the branch) +
   idle agent (`wt new -a`); type the first prompt in the middle column. `o` own tab,
-  `t` review turns ⇄ commits, `d` remove the agent (`claude rm`) or worktree (`wt remove`) after a confirm, `h`/`l`
-  width, `a` hide/show idle repos, `p` prune dead agents, `r` reload, `?` all keys (one per line),
+  `d` remove the agent (`claude rm`) or worktree (`wt remove`) after a confirm, `h`/`l`
+  width, `a` hide/show idle repos, `p` prune dead agents, `r` reload, `?` all keys (one per line,
+  then the pane moves and the signs under their own headings),
   `q` quit.
 - The list shows each repo with a `.git` folder 1–2 levels under `$WT_ROOTS` (default
   `~/Documents/projects`): `<root>/<client>/<repo>` under a heading for its client,
@@ -124,7 +125,8 @@ is live at once. Every step can run again safely.
 - Review (tuicr) has two modes; the pane title starts with the mode. **turns**: the agent's turn
   chain, one commit per turn plus "between turns" commits for your own edits, opened on the last
   turn. **commits**: merge-base with `origin/HEAD`/`main`/`master` up to `HEAD`. `t` in tuicr (in
-  NORMAL or SELECT mode) or in the list toggles the mode; `q` in tuicr goes back to its start.
+  NORMAL or SELECT mode) toggles the mode; `q` in tuicr goes back to its start. The list's keys
+  act in the list only, so it has no key for review's mode or for files.
 - Turn chains: the `claude-turn-snapshot` hooks (UserPromptSubmit, Stop) save the worktree at each
   turn as hidden commits under `refs/wt-turns/<agent8>/{base,head}`. They never touch the branch,
   the index or the files. A chain stays with its agent after a resume or `/clear`.
