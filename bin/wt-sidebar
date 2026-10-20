@@ -22,10 +22,12 @@ CACHE="$STATE/wt-worktrees.ndjson"
 HIDE_IDLE="$STATE/wt-hub-sidebar.hide-idle"
 mkdir -p "$STATE"
 
-# The git signs of the rows: Nerd Font Octicons (one cell wide; private use, not East Asian
-# wide), as UTF-8 bytes because bash 3.2 has no \u.
-G_DIFF=$'\xef\x91\x80' G_UP=$'\xef\x90\xb1' G_ALERT=$'\xef\x90\xa1' G_OK=$'\xef\x90\xae'
-G_MERGE=$'\xef\x90\x99' G_PUSH=$'\xef\x90\x83' G_PULL=$'\xef\x90\x84'
+# The git signs of the rows, one cell wide, as UTF-8 bytes because bash 3.2 has no \u: Nerd Font
+# Octicons (private use) for states; plain arrows ↑ ↓ (East Asian ambiguous, not wide) for
+# commits to push / pull, which the small repo-push/pull icons did not make clear (Alex); + for
+# commits not in main yet, so it does not read as a push.
+G_DIFF=$'\xef\x91\x80' G_UP='+' G_ALERT=$'\xef\x90\xa1' G_OK=$'\xef\x90\xae'
+G_MERGE=$'\xef\x90\x99' G_PUSH=$'\xe2\x86\x91' G_PULL=$'\xe2\x86\x93'
 
 refresh_worktrees() {
   wt-all --json >"$CACHE.$$" 2>/dev/null && mv "$CACHE.$$" "$CACHE"
@@ -108,7 +110,7 @@ rows() {
     | def lead($col): (" " * ($col - 2)) + (if shown then c("1;36") + "▸ " + c("0") else "  " end);
       def agrow($col; $tail): "ag\t" + .sessionId + "\t" + lead($col) + (.phase | glyph) + " " + title + " " + c("2") + $tail + c("0");
       def bgage: (if .kind == "background" then "bg " else "" end) + age(.startedAt // 0);
-      # Git signs (Nerd Font Octicons): conflicts now or a rebase/merge in progress, uncommitted
+      # Git signs: conflicts now or a rebase/merge in progress, uncommitted
       # changes, commits to push / to pull when the branch is on the remote (its tracking branch
       # or origin/<branch>, as for a PR) else commits not in the default branch yet, a merge into
       # the default branch would conflict, safe to remove (empty or integrated).
@@ -347,8 +349,9 @@ ${KEY};${OFF}      last pane
 ${HEAD}Signs${OFF}
 ${ROW}▸${OFF} agent in the middle pane
 ${YEL}${G_DIFF}${OFF} uncommitted changes
-${CYN}${G_PUSH}1 ${G_PULL}2${OFF} to push / pull (remote)
-${GRN}${G_UP}3${OFF} not in main, no remote
+${CYN}${G_PUSH}1${OFF} commits to push (remote)
+${CYN}${G_PULL}2${OFF} commits to pull (remote)
+${GRN}${G_UP}3${OFF} not in main (no remote)
 ${RED}${G_ALERT}${OFF} merge would conflict
 ${DIM}${G_OK}${OFF} safe to remove
 ${RED}${G_MERGE}${OFF} conflicts or a rebase"
