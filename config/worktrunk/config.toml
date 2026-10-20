@@ -1,9 +1,8 @@
-# The hub's worktrunk settings. ~/.config/worktrunk/config.toml is a real file, not a link to
-# this one, so client settings ([projects."..."] entries) stay out of this repo: copy this file
-# there once, or merge these keys into the file that is there.
+# The hub's worktrunk settings. install.sh copies this file to ~/.config/worktrunk/config.toml
+# when there is none (a real file, not a link: your own settings go there too), or lists the
+# keys to merge into the file that is there. `install.sh --with-setup` also adds
+# pre-start = "wt-setup" (in each new worktree: copy ignored files, install dependencies).
 worktree-path = "{{ repo_path }}/../{{ repo }}.{{ branch | sanitize }}"
-
-pre-start = "wt-setup"
 
 [list.custom-columns.Task]
 template = "{{ vars.task }}"

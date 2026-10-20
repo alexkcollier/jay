@@ -1,9 +1,10 @@
 #!/bin/bash
-# install.sh [--link] [--with-mod] [--force] | --check | --uninstall
+# install.sh [--link] [--with-mod] [--with-setup] [--force] | --check | --uninstall
 # Install wt-hub for this user (macOS). It runs again safely: run it again after a git pull.
 #   ~/.local/bin/<each script in bin/>, ~/.local/lib/wt-lib.sh
 #                                    copies; --link: symlinks into this repo, so an edit is live
 #                                    at once (for work on wt-hub itself)
+#   ~/.config/wt-hub/config          your settings (WT_ROOTS, ...), made when missing
 #   ~/.config/wt-hub/yazi            the hub's yazi keys
 #   ~/.config/tuicr/config.toml      made when missing (q_quits = true); else only checked
 #   ~/.config/worktrunk/config.toml  copied when missing (always a copy: client settings go
@@ -11,6 +12,8 @@
 #   ~/.claude/settings.json          the hub's hooks, only the missing ones (a backup first)
 #   ~/.local/share/wt-hub/           zjstatus v0.25.0 for the bar (sha256 checked)
 #   --with-mod                       also the Claude Code mod (/wt), marketplace alex-wt-hub
+#   --with-setup                     also worktrunk's pre-start = "wt-setup": in each new
+#                                    worktree, copy ignored files and install dependencies
 # It never changes a file it did not install (--force: replace it), and it never edits
 # ~/.config/zellij/config.kdl: it prints the pane keys to add there.
 # --check: report the tools and the install, change nothing.
@@ -24,8 +27,9 @@ ZJSTATUS="$SHARE/zjstatus-v0.25.0.wasm"
 ZJSTATUS_URL=https://github.com/dj95/zjstatus/releases/download/v0.25.0/zjstatus.wasm
 ZJSTATUS_SHA=282ceab219e56e1908c9fac33907241fe6c3e1ef7d85faab3e5f438cef87b8fe
 SETTINGS="$HOME/.claude/settings.json"
+SETTINGS_FILE="$HOME/.config/wt-hub/config"
 
-mode=install link=false mod=false force=false elsewhere=""
+mode=install link=false mod=false setup=false force=false elsewhere=""
 for arg in "$@"; do
   case $arg in
     --link) link=true ;;
@@ -33,7 +37,8 @@ for arg in "$@"; do
     --force) force=true ;;
     --check) mode=check ;;
     --uninstall) mode=uninstall ;;
-    -h | --help) sed -n '2,17s/^# \{0,1\}//p' "$0"; exit 0 ;;
+    --with-setup) setup=true ;;
+    -h | --help) sed -n '2,20s/^# \{0,1\}//p' "$0"; exit 0 ;;
     *) echo "install.sh: unknown option $arg (see --help)" >&2; exit 2 ;;
   esac
 done
@@ -99,7 +104,6 @@ check_tools() {
     *":$BIN:"*) ok "$BIN is on PATH" ;;
     *) need "add $BIN to PATH in your shell profile" ;;
   esac
-  note "the list shows the repos under ${WT_ROOTS:-$HOME/Documents/projects} (set WT_ROOTS, ':' between folders)"
 }
 
 # is_ours DEST: DEST was installed by this script (in the manifest), or is a link into a wt-hub
@@ -213,13 +217,15 @@ install_worktrunk() {
       need "$dest is missing: run ./install.sh"
     else
       mkdir -p "$(dirname "$dest")"
-      cp "$repo/config/worktrunk/config.toml" "$dest"
-      did "$dest (a copy: add your own settings there)"
+      # --with-setup: the pre-start hook goes under worktree-path (a top-level key, before
+      # the first table).
+      awk -v setup="$setup" '{ print } setup == "true" && /^worktree-path/ { print ""; print "pre-start = \"wt-setup\"" }' \
+        "$repo/config/worktrunk/config.toml" >"$dest"
+      did "$dest (a copy: add your own settings there)$($setup && echo ', with wt-setup')"
     fi
     return 0
   fi
   local missing=()
-  grep -qE '^[[:space:]]*pre-start[[:space:]]*=.*wt-setup' "$dest" || missing+=('pre-start = "wt-setup"')
   grep -qF '[list.custom-columns.Task]' "$dest" || missing+=('[list.custom-columns.Task]')
   grep -qE '^[[:space:]]*task[[:space:]]*=' "$dest" || missing+=('the task alias')
   grep -qF '{{ repo }}.{{ branch' "$dest" || missing+=('worktree-path <repo>.<branch>')
@@ -227,6 +233,51 @@ install_worktrunk() {
     ok "$dest has the hub's settings"
   else
     need "merge into $dest from config/worktrunk/config.toml: ${missing[*]}"
+  fi
+  if grep -qE '^[[:space:]]*pre-start[[:space:]]*=.*wt-setup' "$dest"; then
+    ok "wt-setup runs in each new worktree (pre-start)"
+  elif $setup; then
+    need "add pre-start = \"wt-setup\" near the top of $dest (before the first [table])"
+  else
+    note "wt-setup is off (optional: ./install.sh --with-setup)"
+  fi
+}
+
+# ~/.config/wt-hub/config: made with comments when missing. Then the list's folders must exist.
+install_settings() {
+  local roots dir dirs=() missing=""
+  if [[ ! -e "$SETTINGS_FILE" ]]; then
+    if [[ $mode == check ]]; then
+      note "$SETTINGS_FILE is missing: the defaults apply (./install.sh makes it)"
+    else
+      mkdir -p "$(dirname "$SETTINGS_FILE")"
+      cat >"$SETTINGS_FILE" <<'CONF'
+# wt-hub settings: KEY=value lines. An environment variable of the same name wins.
+
+# The folders with your repos, ':' between them (default: ~/Documents/projects).
+# The list shows each repo 1-2 levels under them: <root>/<client>/<repo> or <root>/<repo>.
+# WT_ROOTS=~/Documents/projects
+
+# Your editor for O in files and wt-edit (default: $VISUAL, else $EDITOR, else nvim).
+# WT_EDITOR=nvim
+
+# Tab control: ghostty (on) or none (off). Default: on when Ghostty runs.
+# WT_TERMINAL=ghostty
+CONF
+      did "$SETTINGS_FILE (settings, all at their defaults)"
+    fi
+  else
+    ok "$SETTINGS_FILE"
+  fi
+  roots=$(HOME="$HOME" /bin/bash -c 'source "$1" && printf "%s" "$WT_ROOTS"' _ "$repo/lib/wt-lib.sh")
+  IFS=: read -ra dirs <<<"$roots"
+  for dir in ${dirs[@]+"${dirs[@]}"}; do
+    [[ -d "$dir" ]] || missing+=" $dir"
+  done
+  if [[ -n "$missing" ]]; then
+    need "the list's folders do not exist:$missing; set WT_ROOTS in $SETTINGS_FILE"
+  else
+    ok "the list shows the repos under ${roots//:/, }"
   fi
 }
 
@@ -341,7 +392,7 @@ uninstall() {
   fi
   rm -rf "$SHARE" && did "removed $SHARE (zjstatus, mod copy, list of installed files)"
   need "remove the hub's hooks (claude-notify, claude-turn-snapshot) from $SETTINGS"
-  note "kept: ~/.config/worktrunk/config.toml (your settings), ~/.local/state (hub state and logs)"
+  note "kept: ~/.config/wt-hub/config and ~/.config/worktrunk/config.toml (your settings), ~/.local/state (hub state and logs)"
 }
 
 if [[ $mode == uninstall ]]; then
@@ -352,6 +403,7 @@ fi
 check_tools
 install_files
 head_ "Configs"
+install_settings
 install_tuicr
 install_worktrunk
 install_hooks

@@ -1,7 +1,28 @@
-# Shared helpers for wt-tab, wt-new, wt-all, wt-agents and claude-notify.
-# Sourced, not executed.
+# Shared helpers for the wt-hub scripts (bin/). Sourced, not executed.
 
+# Settings: an environment variable wins, else ~/.config/wt-hub/config (KEY=value lines, #
+# comments), else the default. The file reaches what a shell profile does not: hooks in
+# background agents, and a notice click. ~ at the start of a WT_ROOTS folder is $HOME.
+WT_HUB_CONFIG="$HOME/.config/wt-hub/config"
+if [[ -f "$WT_HUB_CONFIG" ]]; then
+  _re='^[[:space:]]*(WT_ROOTS|WT_TERMINAL|WT_EDITOR|WT_EDITOR_GUI)[[:space:]]*=[[:space:]]*(.*)$'
+  while IFS= read -r _line || [[ -n "$_line" ]]; do
+    [[ "$_line" =~ $_re ]] || continue
+    _key=${BASH_REMATCH[1]} _val=${BASH_REMATCH[2]}
+    _val=${_val%"${_val##*[![:space:]]}"}
+    _val=${_val#\"}; _val=${_val%\"}
+    [[ -n "${!_key:-}" ]] || export "$_key=$_val"
+  done <"$WT_HUB_CONFIG"
+  unset _re _line _key _val
+fi
 WT_ROOTS=${WT_ROOTS:-$HOME/Documents/projects}
+_roots=""
+IFS=: read -ra _dirs <<<"$WT_ROOTS"
+for _dir in ${_dirs[@]+"${_dirs[@]}"}; do
+  _roots+="${_roots:+:}${_dir/#\~/$HOME}"
+done
+WT_ROOTS=$_roots
+unset _roots _dirs _dir
 
 # A click on a notice runs `wt-go` through /bin/sh with launchd's PATH (/usr/bin:/bin:...),
 # which has no claude or zellij. Add their folders at the end, so a caller's own order wins.

@@ -128,12 +128,14 @@ it off. Without tab control:
    | What | Where |
    |---|---|
    | the scripts in `bin/` and `lib/wt-lib.sh` | `~/.local/bin`, `~/.local/lib` (copies; `--link`: symlinks) |
+   | your settings, all at their defaults (see [Settings](#settings)) | `~/.config/wt-hub/config`, made when missing |
    | the hub's yazi keys | `~/.config/wt-hub/yazi` |
    | tuicr's `q_quits = true` | `~/.config/tuicr/config.toml`, made when missing; else checked |
    | the hub's worktrunk settings | `~/.config/worktrunk/config.toml`, copied when missing; else the missing keys are listed |
    | the hooks (Stop, UserPromptSubmit, Notification) | added to `~/.claude/settings.json`, only the missing ones, after a backup |
    | zjstatus v0.25.0 (the bar) | `~/.local/share/wt-hub/`, sha256 checked |
    | the mod (`/wt`), with `--with-mod` | `~/.local/share/wt-hub/mod`, marketplace `alex-wt-hub` |
+   | `wt-setup` as worktrunk's `pre-start` hook, with `--with-setup` | `~/.config/worktrunk/config.toml` (see `wt setup` in [Commands](#commands)) |
 
    It never replaces a file that it did not install: it lists it as a TODO (`--force`
    replaces it). It never edits `~/.config/zellij/config.kdl`: it prints the pane keys below.
@@ -159,10 +161,22 @@ it off. Without tab control:
 5. Optional: worktrunk's own Claude Code plugin:
    `claude plugin marketplace add max-sixty/worktrunk && claude plugin install worktrunk@worktrunk`.
 
-The list shows the repos under `~/Documents/projects`. Set `WT_ROOTS` (folders with `:` between
-them) in your shell profile when your repos are elsewhere.
+### Settings
 
-Your own settings, for example worktrunk aliases for one client's repo, go in
+`~/.config/wt-hub/config` holds `KEY=value` lines; `#` starts a comment. An environment
+variable of the same name wins over the file. The file also reaches what a shell profile does
+not: the hooks in background agents and a notice click.
+
+| Key | Default | What |
+|---|---|---|
+| `WT_ROOTS` | `~/Documents/projects` | the folders with your repos, `:` between them; the list shows each repo 1–2 levels under them |
+| `WT_EDITOR` | `$VISUAL`, else `$EDITOR`, else `nvim` | the editor for `O` in files and `wt-edit` |
+| `WT_EDITOR_GUI` | a guess from the editor's name | `1`: a GUI editor, `0`: a terminal editor |
+| `WT_TERMINAL` | on when Ghostty runs | `ghostty`: tab control on; another value: off |
+
+`./install.sh --check` tells you when a `WT_ROOTS` folder does not exist.
+
+Your own worktrunk settings, for example aliases for one client's repo, go in
 `~/.config/worktrunk/config.toml`, not in this repo.
 
 **Work on wt-hub itself**: `./install.sh --link` links the scripts and keys into the checkout,
@@ -492,7 +506,7 @@ All of these are in `~/.local/bin`. worktrunk runs `wt-<name>` for `wt <name>`, 
 | `wt all --json` | One JSON object per worktree (the list's data; implies `-a`). |
 | `wt pick [-a]` | The same list in fzf, with git status and log in a preview. Enter: `wt open` on the row. Ctrl-A: `wt agents` for that worktree. |
 | `wt agents [path]` | Claude sessions (all, or one worktree) in fzf, the ones that need input first. Enter: `wt go`. |
-| `wt setup [path]` | The worktrunk `pre-start` hook: in a new worktree, copy the ignored files (`.worktreeinclude` through `wt step copy-ignored`, else the ignored `.env*` files of the main checkout) and install the dependencies (pnpm, bun, yarn, npm or uv, from the lock file). It puts back a lock file that the install changed. Safe to run again. |
+| `wt setup [path]` | The worktrunk `pre-start` hook, when you turn it on (`./install.sh --with-setup`): in a new worktree, copy the ignored files (`.worktreeinclude` through `wt step copy-ignored`, else the ignored `.env*` files of the main checkout) and install the dependencies (pnpm, bun, yarn, npm or uv, from the lock file). It puts back a lock file that the install changed. Safe to run again. |
 | `wt task [text]` | worktrunk alias: set the worktree's task note, or show it. |
 | `claude-turn-snapshot --list [path]` | The turn chains of a worktree: id, age, last subject. |
 | `claude-turn-snapshot --prune [--dry-run]` | Remove the chains of agents that `claude agents --all` no longer lists, when their worktree is gone or their last turn is older than 7 days. It does nothing without an agent list or the worktree cache. |
@@ -547,10 +561,8 @@ Elsewhere:
 - `~/.local/share/wt-hub/`: `zjstatus-v0.25.0.wasm` (the bar), `mod/` (the mod, with
   `--with-mod`), `installed.txt` (the files `install.sh` installed).
 
-Environment variables: `WT_ROOTS` (project roots, `:`-separated; default `~/Documents/projects`),
-`WT_HUB_SESSION` (default `hub`), `WT_ZELLIJ_TIMEOUT` (default 5 s), `WT_EDITOR`,
-`WT_EDITOR_GUI`, `WT_TERMINAL` (`ghostty`: tab control on; another value: off; unset: see
-[Requirements](#requirements)).
+Settings: `~/.config/wt-hub/config` ([Settings](#settings)). Environment variables only:
+`WT_HUB_SESSION` (default `hub`), `WT_ZELLIJ_TIMEOUT` (default 5 s).
 
 ## Troubleshooting
 
@@ -590,14 +602,14 @@ bin/
   wt-hub-pane            a hub pane (agent | review | files) that follows its target
   wt-new                 wt new: worktree, task note, background agent
   wt-open                wt open: the worktree's zellij session in a Ghostty tab
-  wt-setup               worktrunk pre-start hook: ignored files, dependencies
+  wt-setup               optional worktrunk pre-start hook: ignored files, dependencies
   wt-sidebar             the list (fzf): rows, keys, remove, prune, new agents
 lib/
   wt-lib.sh              shared helpers: zellij timeout, Ghostty tabs, hub panes and targets
 config/
   claude-settings-hooks.json   hooks to merge into ~/.claude/settings.json
   tuicr/config.toml            q_quits: q in review goes back
-  worktrunk/config.toml        hub settings to copy into ~: worktree path <repo>.<branch>, pre-start wt-setup, Task column, task alias
+  worktrunk/config.toml        hub settings to copy into ~: worktree path <repo>.<branch>, Task column, task alias
   yazi/keymap.toml             hub-only yazi keys: e, O, W
 mod/
   .claude-plugin/              plugin.json, marketplace.json (marketplace alex-wt-hub)
