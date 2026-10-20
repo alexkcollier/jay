@@ -414,11 +414,11 @@ wtl_list_follow() {
 
 # --- Hub review (tuicr) and files (yazi) panes, following the picked worktree ---
 
-# "repo/branch" of the worktree $1, for pane titles.
+# The repo of the worktree $1, for the review and files titles (no branch: the list shows it).
 wtl_hub_title() {
   local client repo branch top
   IFS=$'\t' read -r client repo branch top < <(wtl_describe "$1")
-  printf '%s/%s\n' "$repo" "${branch##*/}"
+  printf '%s\n' "$repo"
 }
 
 # Review mode: turns (the agent's turn chain) or commits (the branch's commits).
