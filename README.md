@@ -132,7 +132,9 @@ is live at once. Every step can run again safely.
   chain, one commit per turn plus "between turns" commits for your own edits, opened on the last
   turn. **commits**: merge-base with `origin/HEAD`/`main`/`master` up to `HEAD`. `t` in tuicr (in
   NORMAL or SELECT mode) toggles the mode; `q` in tuicr goes back to its start. The list's keys
-  act in the list only, so it has no key for review's mode or for files.
+  act in the list only, so it has no key for review's mode or for files. New turns (in commits
+  mode, new commits) come in by themselves: tuicr starts again on the newest turn, but not
+  while you type a comment or a `:`/`/` prompt (it waits until you are back in NORMAL).
 - Turn chains: the `claude-turn-snapshot` hooks (UserPromptSubmit, Stop) save the worktree at each
   turn as hidden commits under `refs/wt-turns/<agent8>/{base,head}`. They never touch the branch,
   the index or the files. A chain stays with its agent after a resume or `/clear`.
