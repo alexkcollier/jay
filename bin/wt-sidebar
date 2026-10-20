@@ -190,7 +190,7 @@ act() {
         if wtl_in_hub && [[ -n "$agent" && "$(jq -r .kind <<<"$agent")" != background ]]; then
           wtl_hub_locked pick_interactive "$2" "$(jq -r '.name // .sessionId[0:8]' <<<"$agent")" "$(jq -r .cwd <<<"$agent")"
         else
-          wt-go "$2" >/dev/null 2>&1
+          WT_LIST_PICK=1 wt-go "$2" >/dev/null 2>&1
         fi ;;
     wt|repo) if wtl_in_hub; then
           wtl_hub_locked wtl_hub_target "$2"

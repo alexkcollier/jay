@@ -40,6 +40,9 @@ if [[ "$kind" == background ]] && { wtl_in_hub || wtl_hub_live; }; then
   # The turn chain of a background agent is named after its id (see claude-turn-snapshot).
   hub_pick() { wtl_hub_show "$id" "$(jq -r '.name // .id' <<<"$agent")" "$cwd" && wtl_hub_target "$cwd" "$id"; }
   wtl_hub_locked hub_pick || { echo "Could not show $id in the hub." >&2; exit 1; }
+  # The list's cursor follows (a list pick has it there already). Detached: called from a list
+  # key (n), the list's fzf answers only after this script ends.
+  [[ -n "${WT_LIST_PICK:-}" ]] || (wtl_list_follow "$sid" &) >/dev/null 2>&1
   if ! wtl_in_hub && tab=$(wtl_gh_tab_for_session "$WT_HUB_SESSION"); then
     wtl_gh_select "$tab"
   fi

@@ -388,6 +388,30 @@ wtl_hub_show() {
   wtl_hub_focus_middle
 }
 
+# Move the cursor of each running list (wt-sidebar's fzf, through its --listen socket) to the
+# row of the agent with session id $1, so the cursor follows a pick made elsewhere (a notice
+# click, `wt go`, a new agent). A new agent's row may not be there yet: then reload and wait up
+# to 3 s for it. `pos` must come after a reload ends: the list's --track puts the cursor back
+# on the old row when a reload ends.
+wtl_list_follow() {
+  local sid=$1 sock pid pos i
+  for sock in "$HOME"/.local/state/wt-sidebar.*.sock; do
+    [[ -S "$sock" ]] || continue
+    pid=${sock##*/wt-sidebar.}; pid=${pid%.sock}
+    kill -0 "$pid" 2>/dev/null || continue
+    for i in $(seq 12); do
+      pos=$(curl -s --max-time 2 --unix-socket "$sock" 'http://localhost?limit=1000' 2>/dev/null \
+        | jq -r --arg s "$sid" '[.matches[] | .text | split("\t")[1]] | index($s) // empty | . + 1')
+      [[ -n "$pos" ]] && break
+      ((i == 1)) && curl -s --max-time 2 --unix-socket "$sock" -X POST http://localhost \
+        -d 'reload-sync(wt-sidebar --rows)' >/dev/null 2>&1
+      sleep 0.25
+    done
+    [[ -n "$pos" ]] && curl -s --max-time 2 --unix-socket "$sock" -X POST http://localhost -d "pos($pos)" >/dev/null 2>&1
+  done
+  return 0
+}
+
 # --- Hub review (tuicr) and files (yazi) panes, following the picked worktree ---
 
 WT_HUB_NVIM="$HOME/.local/state/wt-hub-nvim.sock"
