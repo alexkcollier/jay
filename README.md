@@ -338,10 +338,13 @@ to `~/.local/state/claude-notify.log`.
 - **Background agent**: `claude rm <id>`. It deletes the session and the worktree that Claude
   made for it, if any. Unpushed commits stop the removal. The transcript stays.
 - **Interactive agent**: not removed. Close it in its tab, or `b` first.
-- **Worktree**: `wt remove`. The list never removes a main checkout. Agents in the worktree must
-  go first (the list names them). The branch is deleted only when it is merged. Uncommitted
-  changes stop the removal. A dim check sign and a dim name mark a worktree that is safe to
-  remove.
+- **Worktree**: `wt remove`, then `claude rm` for each idle background agent in it (the confirm
+  names them). The list never removes a main checkout. An agent that works, or an interactive
+  session in the worktree, stops the removal (the list names it). The branch is deleted only
+  when it is merged. Uncommitted changes stop the removal, and then the agents stay. A dim check
+  sign and a dim name mark a worktree that is safe to remove.
+- **Removed worktree** (a dim `(gone)` row): `claude rm` for each of its agents, with the same
+  rules.
 
 Dead agents are background agents whose folder is gone (a removed worktree) and that do not run
 now. The list removes them by itself every 10 minutes, with plain `claude rm`, and logs each one
@@ -378,7 +381,7 @@ no quit key.
 | `n` | new idle background agent in this row's worktree |
 | `N` | new worktree of this row's repo (asks the branch) + idle agent |
 | `o` | the row's own Ghostty tab: an interactive agent's tab, else the worktree's zellij session (`wt open`) |
-| `d` | remove the agent or worktree (asks first) |
+| `d` | remove the agent, or the worktree with its idle agents (asks first) |
 | `b` | an idle interactive session goes on as a background agent (asks first) |
 | `a` | hide / show idle repos and main checkouts |
 | `p` | prune dead agents now (asks first) |

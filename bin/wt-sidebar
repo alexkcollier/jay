@@ -5,7 +5,8 @@
 # it. An agent takes the focus to the middle; Enter on a worktree takes it to review. n/N: new agent
 # here / in a new worktree  o: own Ghostty tab. Keys act in the list only: review's mode (t)
 # and files (e) are keys of the review pane.
-# d: remove the agent or worktree (asks first)  a: hide/show idle repos and main checkouts
+# d: remove the agent, or the worktree with its idle agents (asks first)
+# a: hide/show idle repos and main checkouts
 # b: an idle interactive session goes on as a background agent (asks first)
 # p: prune dead agents (folder gone; asks first). The list also prunes them by itself, every
 # 10 minutes, with plain `claude rm` (it keeps an agent whose worktree has work to lose), and
@@ -387,9 +388,11 @@ pause() {
 }
 
 # Remove the agent or worktree in row kind $1 with id $2, after a confirm. Never forced:
-# `claude rm` and `wt remove` stop on unpushed or uncommitted work and the list shows why.
+# `claude rm` and `wt remove` stop on unpushed or uncommitted work and the list shows why. A
+# worktree goes with its idle background agents; a "(gone)" row removes its agents. An agent
+# that works or an interactive session stops both.
 remove() {
-  local kind=$1 id=$2 agents agent out name short top main branch busy pane
+  local kind=$1 id=$2 agents agent out name short top main branch here idle pane
   agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
   case $kind in
     ag)
@@ -414,29 +417,82 @@ $out" ;;
         pause "$top is a main checkout. The list never removes it."
         return 0
       fi
-      busy=$(jq -r --arg p "$top" '.[] | (.cwd // "") as $cwd | select(.state != "stopped" and ($cwd == $p or ($cwd | startswith($p + "/"))))
-        | "  \(.name // .id)"' <<<"$agents")
-      if [[ -n "$busy" ]]; then
-        pause "Agents run in this worktree. Remove them first:
-
-$busy"
-        return 0
-      fi
-      confirm "Remove worktree ${branch:-$top}?
+      here=$(agents_in "$agents" "$top")
+      agents_busy "$here" && return 0
+      idle=$(awk -F'\t' '$1 == "idle" { print "  " $3 }' <<<"$here")
+      confirm "Remove worktree ${branch:-$top}${idle:+ and its agents}?
 
 $top
-
+${idle:+
+Agents (their transcripts stay):
+$idle
+}
 The branch is deleted only if it is merged. Uncommitted changes stop the removal." || return 0
       if [[ "$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)" == "$top" ]]; then
         wtl_hub_locked wtl_hub_show_review
         pane=$(wtl_hub_locked wtl_hub_point review "" | cut -f1)
         [[ -n "$pane" ]] && zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" review >/dev/null 2>&1
       fi
-      out=$(wt -C "$top" remove --foreground 2>&1) || pause "Not removed:
+      # The worktree goes first: `claude rm` keeps an agent while its worktree is on disk.
+      if out=$(wt -C "$top" remove --foreground 2>&1); then
+        rm_agents "$here"
+      else
+        pause "Not removed:
 
 $out"
+      fi
       refresh_worktrees ;;
+    gone)
+      here=$(agents_in "$agents" "${id#gone:}")
+      [[ -n "$here" ]] || return 0
+      agents_busy "$here" && return 0
+      confirm "Remove the agents of the removed worktree ${id#gone:}?
+
+$(cut -f3 <<<"$here" | sed 's/^/  /')
+
+Their transcripts stay." || return 0
+      rm_agents "$here" ;;
   esac
+  return 0
+}
+
+# The agents in agents JSON $1 whose folder is $2 or in it, as what<TAB>id<TAB>name. what is open
+# (an interactive session: the list cannot remove it), busy (it works or waits for input) or idle.
+agents_in() {
+  jq -r --arg p "$2" '.[] | (.cwd // "") as $cwd | select(.state != "stopped" and ($cwd == $p or ($cwd | startswith($p + "/"))))
+    | [(if .kind != "background" or .id == null then "open"
+        elif (.state | IN("working", "blocked")) or (.status | IN("busy", "waiting")) then "busy"
+        else "idle" end), (.id // ""), (.name // .id // .sessionId[0:8])] | @tsv' <<<"$1"
+}
+
+# Return 0 after a note when agents TSV $1 (from agents_in) has an agent that the list must not
+# remove: an interactive session or an agent that works.
+agents_busy() {
+  local busy open
+  busy=$(awk -F'\t' '$1 == "busy" { print "  " $3 }' <<<"$1")
+  open=$(awk -F'\t' '$1 == "open" { print "  " $3 }' <<<"$1")
+  [[ -n "$busy$open" ]] || return 1
+  pause "Not removed. These agents use the folder:
+${busy:+
+Working (try again when they stop):
+$busy
+}${open:+
+Interactive (close them in their own tabs, or b: make them background agents):
+$open
+}"
+  return 0
+}
+
+# Remove the idle agents in agents TSV $1 (from agents_in) with `claude rm`; show the failures.
+rm_agents() {
+  local what id name out failed=""
+  while IFS=$'\t' read -r what id name; do
+    [[ "$what" == idle ]] || continue
+    out=$(claude rm "$id" 2>&1) || failed+="  $name: $out"$'\n'
+  done <<<"$1"
+  [[ -z "$failed" ]] || pause "Agents not removed (p removes them later):
+
+$failed"
   return 0
 }
 
