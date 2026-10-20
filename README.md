@@ -84,17 +84,17 @@ it off. Without tab control:
 | Tool | Tested with | From | Used for |
 |---|---|---|---|
 | macOS | 27.0.1 | | `osascript`, `lsappinfo`, `stat -f`, `cp -c` |
-| Ghostty | 1.3.2 (1.3+) | ghostty.org | tabs through AppleScript: `wt hub`, `wt go`, `wt open`, `wt-edit`, notices |
+| Ghostty | 1.3.2 (1.3+) | `brew install --cask ghostty` (optional) | tabs through AppleScript: `wt hub`, `wt go`, `wt open`, `wt-edit`, notices |
 | zellij | 0.45.1 | `brew install zellij` | the hub session; the scripts use 0.45 behavior (see CLAUDE.md) |
 | zjstatus | 0.25.0 | GitHub release, `~/.local/share/wt-hub/zjstatus-v0.25.0.wasm` | the bar; without it the hub uses zellij's compact bar |
 | worktrunk (`wt`) | 0.80.0 | `brew install worktrunk` | worktrees, `wt list` data, task notes, `wt remove`; `wt <name>` runs `wt-<name>` from PATH |
 | fzf | 0.74.1 (0.74+) | `brew install fzf` | the list (`--footer`, `transform-footer`, `--listen`, `--id-nth`) |
-| jq | 1.7.1 | `/usr/bin/jq` (macOS); brew's works too | all JSON |
+| jq | 1.7.1 | `brew install jq` | all JSON |
 | tuicr | 0.27.0 | `brew install tuicr` | review |
-| yazi | 26.9.1 (26.x) | `mise use -g yazi`; the panes find it in `~/.local/share/mise/shims` | files |
+| yazi | 26.9.1 (26.x) | `brew install yazi` | files |
 | terminal-notifier | 3.1.0 | `brew install terminal-notifier` (optional) | notices |
 | Nerd Font | | Ghostty's built-in font has the Nerd Font symbols; in another terminal, set a Nerd Font | the Octicons in the git signs |
-| Claude Code | 2.1.304 | claude.com/claude-code | `claude --bg`, `claude attach`, `claude agents --json --all`, `claude rm`, `claude --bg --resume`, hooks, the mod |
+| Claude Code | 2.1.304 | `brew install --cask claude-code` | `claude --bg`, `claude attach`, `claude agents --json --all`, `claude rm`, `claude --bg --resume`, hooks, the mod |
 | git | 2.54.0 (Apple) | Xcode Command Line Tools | worktrees, turn chains |
 | bash | 3.2.57 (`/bin/bash`) | macOS | every script (`#!/usr/bin/env bash` finds `/bin/bash`) |
 | python3 | 3.9.6 (`/usr/bin/python3`) | Xcode Command Line Tools | `wt-hub-keys` |
@@ -103,15 +103,18 @@ it off. Without tab control:
 
 ## Install
 
-1. Install the tools (macOS, Homebrew; jq comes with macOS 15+):
+1. Install the tools with Homebrew:
 
    ```sh
-   brew install worktrunk zellij fzf tuicr terminal-notifier
-   mise use -g yazi        # or: brew install yazi
+   brew install worktrunk zellij fzf jq tuicr yazi
+   brew install --cask claude-code
+   # optional:
+   brew install terminal-notifier     # macOS notices when an agent finishes or needs input
+   brew install --cask ghostty        # tab control (wt hub, wt go, wt open, O in files)
    ```
 
-   Install Claude Code too. Ghostty is optional: without it there is no tab control (see
-   [Requirements](#requirements)).
+   Without terminal-notifier there are no notices; the rest works. Without Ghostty the hub runs
+   in any terminal, but without tab control (see [Requirements](#requirements)).
 2. Get the repo and run the installer. The repo can be anywhere:
 
    ```sh
@@ -558,7 +561,7 @@ Environment variables: `WT_ROOTS` (project roots, `:`-separated; default `~/Docu
   server cannot stop the list or a hook for long.
 - **The list does not update**: press `r` in the list. It starts again as the newest
   `wt-sidebar` with fresh git signs.
-- **No notices**: run `/opt/homebrew/bin/terminal-notifier -diagnose`. Look at
+- **No notices**: run `terminal-notifier -diagnose`. Look at
   `~/.local/state/claude-notify.log`: a line for each hook call means the hook runs. Remember the
   rule: no notice while Ghostty is in front with the agent's tab or the hub's tab selected.
 - **A notice click does nothing**: look at the end of `claude-notify.log` for the output of

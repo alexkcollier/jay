@@ -73,10 +73,10 @@ check_tools() {
   tool zellij 0.45.1 "brew install zellij"
   tool wt 0.80.0 "brew install worktrunk"
   tool fzf 0.74.0 "brew install fzf"
-  tool jq 1.7 "macOS 15+ has /usr/bin/jq; else brew install jq"
+  tool jq 1.7 "brew install jq"
   tool tuicr 0.27.0 "brew install tuicr"
-  tool yazi 26.0 "mise use -g yazi, or brew install yazi"
-  tool claude "" "install Claude Code: https://claude.com/claude-code"
+  tool yazi 26.0 "brew install yazi"
+  tool claude "" "brew install --cask claude-code"
   tool git "" "xcode-select --install"
   tool perl "" "part of macOS"
   tool curl "" "part of macOS"
@@ -93,7 +93,7 @@ check_tools() {
   if [[ -d /Applications/Ghostty.app ]]; then
     ok "Ghostty (tab control)"
   else
-    note "Ghostty not found: the hub runs in any terminal, but without tab control (see README)"
+    note "Ghostty not found: the hub runs in any terminal, but without tab control (brew install --cask ghostty)"
   fi
   case ":$PATH:" in
     *":$BIN:"*) ok "$BIN is on PATH" ;;
