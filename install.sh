@@ -142,9 +142,11 @@ put() {
     if [[ -L "$dest" && "$(readlink "$dest")" == "$src" ]]; then
       :
     elif [[ -L "$dest" ]]; then
-      # A link into another checkout of wt-hub (or a relative link to one): one note for all.
-      elsewhere=$(readlink -f "$dest")
-      elsewhere=${elsewhere%/bin/*}; elsewhere=${elsewhere%/lib/*}; elsewhere=${elsewhere%/config/*}
+      # A relative link (wt-pick -> wt-all) into this checkout is fine; a link into another
+      # checkout of wt-hub gets one note for all.
+      tmp=$(readlink -f "$dest")
+      tmp=${tmp%/bin/*}; tmp=${tmp%/lib/*}; tmp=${tmp%/config/*}
+      [[ "$tmp" == "$repo" ]] || elsewhere=$tmp
     elif [[ -f "$dest" && ! -L "$dest" ]] && cmp -s "$src" "$dest"; then
       :
     elif [[ -d "$dest" && ! -L "$dest" ]] && diff -rq "$src" "$dest" >/dev/null 2>&1; then
