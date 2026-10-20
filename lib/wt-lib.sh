@@ -490,7 +490,7 @@ wtl_hub_target() {
   return 0
 }
 
-# Title of the pane of role $1 (review or files) on worktree title $2 ("repo/branch"): review's
+# Title of the pane of role $1 (review or files) on worktree title $2 (the repo): review's
 # starts with its mode. Both end with the pane's keys, the only place they can show (tuicr and
 # yazi fill the pane).
 wtl_hub_pane_title() {

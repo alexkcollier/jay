@@ -1,6 +1,6 @@
 # Hub to-do
 
-Continue Alex's hub to-do list. This repo (~/Documents/projects/wt-hub) is the live install of his worktree hub: ~/.local/bin, ~/.local/lib/wt-lib.sh, ~/mods/wt-hub and the worktrunk/zellij configs are symlinks into it. Read CLAUDE.md and README.md first, and your memory note "worktree-tooling-worktrunk" (decisions, zellij 0.45 facts, incidents). The hub is the zellij session "hub" (layout written by bin/wt-hub): worktree list (fzf, bin/wt-sidebar) | agent viewer (bin/wt-hub-pane agent; no hub Claude since 2026-10-20) | review (tuicr via bin/wt-hub-pane) ⇄ files (yazi).
+Continue Alex's hub to-do list. The main checkout (~/Documents/projects/wt-hub) is the live install of his worktree hub (`./install.sh --link`): ~/.local/bin, ~/.local/lib/wt-lib.sh, the yazi keys and the tuicr config are symlinks into it, and ~/mods/wt-hub links to mod/. Read CLAUDE.md and README.md first, and your memory note "worktree-tooling-worktrunk" (decisions, zellij 0.45 facts, incidents). The hub is the zellij session "hub" (layout written by bin/wt-hub): worktree list (fzf, bin/wt-sidebar) | agent viewer (bin/wt-hub-pane agent; no hub Claude since 2026-10-20) | review (tuicr via bin/wt-hub-pane) ⇄ files (yazi).
 
 Alex's to-do list, in his words (2026-10-19):
 1. Clean up the tops of the panes — "the stacks are cumbersome/ugly" (zellij stacked-pane title bars in the middle and right columns). Done 2026-10-19: one pane per column, panes in place.
@@ -20,7 +20,7 @@ Alex's to-do list, in his words (2026-10-19):
 ## Done after the list (2026-10-19)
 
 - Review pane opens a turn chain on its last turn; `q` in tuicr goes back (the pane starts tuicr again).
-- `t` toggles review between turns (the agent's turn chain) and commits (merge-base..HEAD), in the list and in tuicr (bin/wt-hub-keys); the title shows the mode.
+- `t` toggles review between turns (the agent's turn chain) and commits (merge-base..HEAD), in tuicr (bin/wt-hub-keys; it left the list on 2026-10-20); the title shows the mode.
 - List: `n` new idle agent in the row's worktree, `N` new worktree + idle agent; ▸ marks the shown agent.
 - Turn chains are per agent (a bg agent keeps its chain after resume or /clear).
 - Turn snapshots: committing agents now get turns (the base stays until the first turn commit).
@@ -35,7 +35,7 @@ Alex's to-do list, in his words (2026-10-19):
   prunes dead agents every 10 minutes (a334f58).
 - Background-first (Alex's choice): `c` starts every new session as a background agent and
   attaches the terminal; `b` in the list moves an idle interactive session to the background;
-  ← in the hub viewer goes back to the hub Claude.
+  ← in the hub viewer leaves the agent (it went back to the hub Claude until that was removed).
 - List keys act in the list only (Alex: no list key may change review's mode or files): `t` left
   the list. The `?` help has Keys, Panes (Ctrl g moves, Alex: fine to show) and Signs (git signs,
   ▸) under their own headings; signs are not drawn as keys. `r` reloads the agent list (and

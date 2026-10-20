@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # claude-turn-snapshot — Claude Code hook (UserPromptSubmit, Stop) that records the worktree
-# as a hidden commit chain per session, one commit per agent turn:
-#   refs/wt-turns/<session8>/base   HEAD when the session's first snapshot was taken
-#   refs/wt-turns/<session8>/head   the latest snapshot; each snapshot's parent is the one before
+# as a hidden commit chain per agent, one commit per agent turn. <id> is a background agent's
+# short id (it stays after a resume or /clear), else the first 8 characters of the session id:
+#   refs/wt-turns/<id>/base   HEAD when the agent's first snapshot was taken
+#   refs/wt-turns/<id>/head   the latest snapshot; each snapshot's parent is the one before
 # Review one turn with `tuicr -r <turn>~1..<turn>`, all of them with `tuicr -r base..head`.
 # Branch, index and files are never touched: it hashes the tree through a copy of the index.
-# wt-turns <path>          list the turn chains of a worktree
+# --list [path]            list the turn chains of a worktree (default: this folder)
 # --prune [--dry-run]      remove the chains of agents that `claude agents --all` no longer
 #                          lists, when their worktree is gone or their last turn is older than
 #                          7 days (an ended interactive session keeps its turns for a week).

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # claude-notify — Claude Code hook (Stop, Notification) that posts a macOS notice
 # naming client › repo · branch, the task note and the agent's message.
-# No notice while Ghostty is the app in front.
+# No notice while Ghostty is in front with a selected tab that shows the agent: its own tab,
+# or the hub's tab. Without terminal-notifier it does nothing.
 # Click: `wt go <session>` brings the agent in front.
 set -uo pipefail
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"

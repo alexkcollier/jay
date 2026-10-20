@@ -506,6 +506,13 @@ case ${1:-} in
   -*) printf 'wt-sidebar: unknown option %s\n' "$1" >&2; exit 2 ;;
 esac
 
+# The files of lists that were killed (their EXIT trap did not run): their pid is gone.
+for f in "$STATE"/wt-sidebar.*.*; do
+  [[ -e "$f" || -S "$f" ]] || continue
+  pid=${f#"$STATE"/wt-sidebar.}; pid=${pid%%.*}
+  [[ "$pid" =~ ^[0-9]+$ ]] && ! kill -0 "$pid" 2>/dev/null && rm -f "$f"
+done
+
 sock="$STATE/wt-sidebar.$$.sock"
 export WT_SIDEBAR_COUNT="$STATE/wt-sidebar.$$.count" WT_SIDEBAR_SUM="$STATE/wt-sidebar.$$.sum" \
   WT_SIDEBAR_HELP="$STATE/wt-sidebar.$$.help" WT_SIDEBAR_RESTART="$STATE/wt-sidebar.$$.restart"
