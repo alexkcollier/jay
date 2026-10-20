@@ -49,6 +49,16 @@ if [[ "$kind" == background ]] && { wtl_in_hub || wtl_hub_live; }; then
   exit 0
 fi
 
+# Without the hub, the agent comes in front through a tab (Ghostty only, see wtl_gh_ok).
+if ! wtl_gh_ok; then
+  if [[ "$kind" == background ]]; then
+    echo "Bringing $id in front needs the hub or Ghostty. Attach in a terminal: claude attach $id" >&2
+  else
+    echo "Session $sid runs in its own terminal (pid $pid). Bringing it in front needs Ghostty." >&2
+  fi
+  exit 1
+fi
+
 if [[ "$kind" == background ]]; then
   if tab=$(wtl_gh_tab_for_command "^claude attach $id"); then
     wtl_gh_select "$tab"

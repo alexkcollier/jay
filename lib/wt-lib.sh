@@ -96,6 +96,7 @@ wtl_focus_pane() {
 }
 
 wtl_raise_terminal() {
+  wtl_gh_ok || return 1
   open -b com.mitchellh.ghostty 2>/dev/null
 }
 
@@ -110,8 +111,27 @@ wtl_has_transcripts() {
 
 # --- Ghostty tabs (AppleScript, Ghostty 1.3+) ---
 
+# Tab control works in Ghostty only; other terminals can be added later. WT_TERMINAL=ghostty
+# turns it on, any other value off. Else it is on when Ghostty runs and the caller's terminal,
+# if it has one, is Ghostty (zellij panes get the TERM_PROGRAM of the terminal that started
+# the session; hooks and a notice click may have none). Without it the wtl_gh_* functions
+# fail and do nothing.
+wtl_gh_ok() {
+  case ${WT_TERMINAL:-} in
+    ghostty) return 0 ;;
+    "") ;;
+    *) return 1 ;;
+  esac
+  case ${TERM_PROGRAM:-ghostty} in
+    ghostty | tmux | zellij) ;;
+    *) return 1 ;;
+  esac
+  pgrep -xq ghostty
+}
+
 # Prints one line per tab: tab-id<TAB>selected<TAB>frontmost-window<TAB>tty<TAB>title
 wtl_gh_tabs() {
+  wtl_gh_ok || return 1
   osascript -e '
 set out to ""
 set TB to character id 9
@@ -168,6 +188,7 @@ wtl_gh_tab_for_tty() {
 }
 
 wtl_gh_select() {
+  wtl_gh_ok || return 1
   osascript - "$1" <<'APPLESCRIPT' >/dev/null 2>&1
 on run argv
   set wanted to item 1 of argv
@@ -189,6 +210,7 @@ APPLESCRIPT
 
 # New Ghostty tab in folder $1 that types command $2 into the shell. Prints the tab id.
 wtl_gh_new_tab() {
+  wtl_gh_ok || return 1
   osascript - "$1" "$2" <<'APPLESCRIPT' 2>/dev/null
 on run argv
   set wd to item 1 of argv

@@ -41,4 +41,8 @@ if [[ -n "$file" ]]; then
   arg=${file#"$root"/}
   [[ "$arg" == -* ]] && arg="./$arg"
 fi
+if ! wtl_gh_ok; then
+  echo "wt-edit: a new tab needs Ghostty. Run: cd $(printf '%q' "$root") && $editor $(printf '%q' "$arg")" >&2
+  exit 1
+fi
 wtl_gh_new_tab "$root" "$editor $(printf '%q' "$arg")" >/dev/null

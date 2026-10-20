@@ -23,7 +23,7 @@ Rules for edits: [CLAUDE.md](CLAUDE.md).
 ## What the hub is
 
 ```
-┌ worktrees ─────────────┬ shop/fix-login ────────────┬ turns · shop   e files · t commits ───┐
+┌ worktrees ─────────────┬ shop/fix-login ────────────┬ turns · shop   e files · t commits ────┐
 │ ● 1 working  ○ 2 idle  │                            │                                        │
 │                        │  the picked agent:         │  review of the agent's turns (tuicr)   │
 │ acme                   │  claude attach <id>        │                                        │
@@ -35,7 +35,7 @@ Rules for edits: [CLAUDE.md](CLAUDE.md).
 │ ⏎ open  n new  d remove│                            │                                        │
 │ ? all keys and signs   │                            │                                        │
 ├────────────────────────┴────────────────────────────┴────────────────────────────────────────┤
-│ ◆ hub  ● 1 working  ○ 2 idle                                                    hub │ 14:05 │
+│ ◆ hub  ● 1 working  ○ 2 idle                                                     hub │ 14:05 │
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
   list (wt-sidebar, fzf)    agent viewer (wt-hub-pane agent)   review ⇄ files (wt-hub-pane review/files)
 ```
@@ -68,6 +68,18 @@ The hub supports:
 
 Versions installed now (2026-10-20). The hub is macOS only: it drives Ghostty tabs through
 AppleScript and reads the front app with `lsappinfo`.
+
+The hub itself runs in any terminal: run `wt hub` in it. Tab control is Ghostty only (other
+terminals can come later). Tab control is on when Ghostty runs and the caller's terminal, if it
+has one, is Ghostty (`TERM_PROGRAM`). `WT_TERMINAL=ghostty` turns it on, any other value turns
+it off. Without tab control:
+
+- `wt hub` does not look for the hub's tab, and it does not open a new tab: it prints a hint.
+- `wt go` still shows a background agent in the hub when the hub runs. Else it prints the
+  `claude attach` command. `o` in the list does nothing.
+- `wt open` and `wt-edit` with a terminal editor (`O` in files) print the command to run.
+- Notices always show (no "agent's tab in front" rule). A click still shows a background agent
+  in the hub, but it does not bring the terminal to the front.
 
 | Tool | Version now | From | Used for |
 |---|---|---|---|
@@ -534,7 +546,8 @@ Elsewhere:
 
 Environment variables: `WT_ROOTS` (project roots, `:`-separated; default `~/Documents/projects`),
 `WT_HUB_SESSION` (default `hub`), `WT_ZELLIJ_TIMEOUT` (default 5 s), `WT_EDITOR`,
-`WT_EDITOR_GUI`.
+`WT_EDITOR_GUI`, `WT_TERMINAL` (`ghostty`: tab control on; another value: off; unset: see
+[Requirements](#requirements)).
 
 ## Troubleshooting
 
@@ -550,6 +563,8 @@ Environment variables: `WT_ROOTS` (project roots, `:`-separated; default `~/Docu
   rule: no notice while Ghostty is in front with the agent's tab or the hub's tab selected.
 - **A notice click does nothing**: look at the end of `claude-notify.log` for the output of
   `wt go`.
+- **`o`, `wt open` or `O` in files does nothing**: tab control is off (not Ghostty). Run the
+  command in a terminal to see the hint, or set `WT_TERMINAL=ghostty`.
 - **Review shows tuicr's picker**: the agent has no turn chain yet (no finished turn with a
   change), or the branch has no commits of its own (commits mode).
 - **The middle column shows an old agent or an error**: pick the agent again, or press Enter in

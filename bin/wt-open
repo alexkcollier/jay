@@ -14,6 +14,16 @@ esac
 IFS=$'\t' read -r client repo branch path < <(wtl_describe "$path")
 name=$(wtl_session_name "$repo" "$branch")
 
+# Tabs need Ghostty (see wtl_gh_ok): else print the command that opens the session.
+if ! wtl_gh_ok; then
+  if session=$(wtl_session_for_worktree "$path" "$name"); then
+    echo "A tab needs Ghostty. Attach in a terminal: zellij attach $session" >&2
+  else
+    echo "A tab needs Ghostty. Open it in a terminal: cd $(printf '%q' "$path") && zellij attach -c $name" >&2
+  fi
+  exit 1
+fi
+
 if session=$(wtl_session_for_worktree "$path" "$name"); then
   if tab=$(wtl_gh_tab_for_session "$session"); then
     wtl_gh_select "$tab"

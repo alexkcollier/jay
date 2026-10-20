@@ -110,6 +110,12 @@ if [[ "$where" == --here ]] || [[ "$where" != --tab && -t 0 && -t 1 && -z "${ZEL
   exec zellij -s "$SESSION" -n "$layout"
 fi
 
+# A new tab needs tab control (Ghostty only, see wtl_gh_ok).
+if ! wtl_gh_ok; then
+  echo "wt hub: a new tab needs Ghostty. Run wt hub in a terminal, outside zellij." >&2
+  exit 1
+fi
+
 if hub_answers; then
   wtl_gh_new_tab "$root" "zellij attach $SESSION" >/dev/null
 else

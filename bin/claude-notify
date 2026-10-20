@@ -50,7 +50,7 @@ claude_pid() {
 # No notice while the selected Ghostty tab, with Ghostty in front, shows this agent (Alex; the
 # zellij pane in that tab does not matter): its own tab (`claude attach`, its zellij session,
 # or the terminal of an interactive session), or the hub, whose list shows every agent.
-if [[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
+if wtl_gh_ok && [[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
   selected=$(wtl_gh_tabs | awk -F'\t' '$2 == "true" && $3 == "true" { print $1; exit }')
   tabs=""
   if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
