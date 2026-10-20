@@ -48,17 +48,18 @@ Alex's to-do list, in his words (2026-10-19):
   No notice while Ghostty is in front with the agent's own tab or the hub tab selected (the hub
   counts for every agent); the zellij pane does not matter (Alex). macOS stacks them (grouping
   Automatic). Turn chains of gone agents are pruned (claude-turn-snapshot --prune).
+- Review: new turns come in by themselves (Alex: turns must come in without manual steps).
+  A watcher restarts tuicr when the chain head (commits mode: HEAD) moves, only while tuicr is
+  in NORMAL/SELECT. tuicr kept: revdiff (Alex offered a switch) has only a manual reload, no
+  per-commit pick, and keys that cannot run commands; its plus is annotations back to Claude.
+- Removed (Alex agreed): scratch worktree shop.turns-selftest, test chains 11112222 and
+  60e27a52, bin/wt-hub-edit, the wtl_nvim_* helpers, ~/.config/wt/lazygit-hub.yml.
+- Kept as is (Alex): idle background agents stay until removed; the Octicons for uncommitted,
+  conflict, safe and rebase.
 
 ## Other open items
 
-- Background-first leaves idle agents running until removed (`d`). If they pile up: an
-  auto-stop (`claude stop`, the conversation stays) for agents idle for N hours.
-- Review does not reload when an agent finishes a turn (tuicr reads the chain at start). Asked
-  Alex 2026-10-20: restart tuicr on a new turn, or a "N new turns · q" hint in the title.
-
 - `wt step prune` candidates were listed but not removed. Never in one client repo (it would delete `main`).
-- Test leftovers to remove after Alex agrees: scratch worktree `shop.turns-selftest` (chain 11112222) and the stray chain 60e27a52 in the shop repo.
-- `bin/wt-hub-edit` and the `wtl_nvim_*` helpers are left from the Neovim files pane (now yazi). Ask Alex before removing them.
 
 ## How to work
 

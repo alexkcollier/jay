@@ -414,16 +414,6 @@ wtl_list_follow() {
 
 # --- Hub review (tuicr) and files (yazi) panes, following the picked worktree ---
 
-WT_HUB_NVIM="$HOME/.local/state/wt-hub-nvim.sock"
-
-wtl_nvim_alive() {
-  [[ -S "$WT_HUB_NVIM" ]] && nvim --server "$WT_HUB_NVIM" --remote-expr '1' >/dev/null 2>&1
-}
-
-wtl_nvim_send() {
-  nvim --server "$WT_HUB_NVIM" --remote-send "<C-\\><C-n>$1" >/dev/null 2>&1
-}
-
 # "repo/branch" of the worktree $1, for pane titles.
 wtl_hub_title() {
   local client repo branch top

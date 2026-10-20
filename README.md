@@ -8,7 +8,7 @@ agent's turns, yazi for files). Built on [worktrunk](https://github.com/max-sixt
 
 | Path | Installed as | What |
 |---|---|---|
-| `bin/` | `~/.local/bin/<name>` (symlinks) | `c`, `wt-hub`, `wt-sidebar`, `wt-hub-pane`, `wt-go`, `wt-open`, `wt-new`, `wt-all`/`wt-pick`, `wt-agents`, `wt-setup`, `wt-hub-edit`, `wt-hub-keys`, `claude-notify`, `claude-turn-snapshot` |
+| `bin/` | `~/.local/bin/<name>` (symlinks) | `c`, `wt-hub`, `wt-sidebar`, `wt-hub-pane`, `wt-go`, `wt-open`, `wt-new`, `wt-all`/`wt-pick`, `wt-agents`, `wt-setup`, `wt-hub-keys`, `claude-notify`, `claude-turn-snapshot` |
 | `lib/wt-lib.sh` | `~/.local/lib/wt-lib.sh` | shared helpers (Ghostty, zellij, hub panes) |
 | `mod/` | `~/mods/wt-hub` (folder marketplace `alex-wt-hub`) | Claude Code mod: `/wt`, toasts, status line in any interactive session that turns it on (the hub no longer runs a Claude) |
 | `config/worktrunk/config.toml` | `~/.config/worktrunk/config.toml` | worktree path, `pre-start = "wt-setup"`, Task column, aliases |

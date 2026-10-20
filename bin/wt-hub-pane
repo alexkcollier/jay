@@ -14,6 +14,7 @@
 #         turn; `(` shows all turns.
 #         commits: the branch's own commits (since it left main), else tuicr's picker.
 #         q in tuicr starts it again (back to the picker or the last turn). e shows files.
+#         A new turn (or commit) starts tuicr again by itself, on the newest turn.
 # files:  yazi in the worktree. It covers review; e or q quits yazi and review comes back
 #         (e from the hub's yazi keymap, config/yazi).
 set -uo pipefail
@@ -77,6 +78,37 @@ select_last_turn() {
   done
 }
 
+# New turns come in by themselves: when ref $1 moves (a turn's snapshot, or in commits mode a
+# new commit), stop tuicr so the loop starts it again on the newest turn. Only while tuicr's
+# status line shows NORMAL or SELECT: never over a comment being typed (it waits until then).
+follow_ref() {
+  local ref=$1 was pane="terminal_${ZELLIJ_PANE_ID:-}" p
+  was=$(git rev-parse -q --verify "$ref")
+  while sleep 2; do
+    [[ "$(git rev-parse -q --verify "$ref")" == "$was" ]] && continue
+    zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -1 \
+      | grep -qE '^[[:space:]]*(NORMAL|SELECT)' || continue
+    for p in $(pgrep -P $$ -f wt-hub-keys); do
+      wtl_kill_children "$p"
+      kill -TERM "$p" 2>/dev/null
+    done
+    return 0
+  done
+}
+
+# tuicr on range $2 that starts again when ref $1 moves (follow_ref). Returns tuicr's status
+# (99: wt-hub-keys' `t`).
+review_range() {
+  local watcher rc
+  follow_ref "$1" &
+  watcher=$!
+  "$HOME/.local/bin/wt-hub-keys" tuicr --no-update-check -r "$2"
+  rc=$?
+  kill "$watcher" 2>/dev/null
+  wait "$watcher" 2>/dev/null # no "Terminated" line on the screen
+  return $rc
+}
+
 # The commit the worktree's branch left its main branch at; empty when it has no commits of its
 # own (or there is no main branch).
 branch_base() {
@@ -126,7 +158,7 @@ run() {
       if [[ "$(wtl_hub_mode)" == commits ]]; then
         base=$(branch_base)
         if [[ -n "$base" ]]; then
-          "$HOME/.local/bin/wt-hub-keys" tuicr --no-update-check -r "$base..HEAD"
+          review_range HEAD "$base..HEAD"
         else
           "$HOME/.local/bin/wt-hub-keys" tuicr --no-update-check
         fi
@@ -137,7 +169,7 @@ run() {
         if (($(git rev-list --count "refs/wt-turns/$session/base..refs/wt-turns/$session/head") > 1)); then
           select_last_turn "$1" &
         fi
-        "$HOME/.local/bin/wt-hub-keys" tuicr --no-update-check -r "refs/wt-turns/$session/base..refs/wt-turns/$session/head"
+        review_range "refs/wt-turns/$session/head" "refs/wt-turns/$session/base..refs/wt-turns/$session/head"
       else
         "$HOME/.local/bin/wt-hub-keys" tuicr --no-update-check
       fi ;;
