@@ -3,6 +3,14 @@
 
 WT_ROOTS=${WT_ROOTS:-$HOME/Documents/projects}
 
+# A click on a notice runs `wt-go` through /bin/sh with launchd's PATH (/usr/bin:/bin:...),
+# which has no claude or zellij. Add their folders at the end, so a caller's own order wins.
+for _dir in "$HOME/.local/bin" /opt/homebrew/bin; do
+  case ":$PATH:" in *":$_dir:"*) ;; *) PATH="$PATH:$_dir" ;; esac
+done
+unset _dir
+export PATH
+
 # Every zellij call from these scripts gives up after $WT_ZELLIJ_TIMEOUT seconds: a session
 # whose server outlives it (seen after a quit) stalls even list-sessions, and with it every
 # pick, hook and sidebar tick. Interactive zellij runs through `exec` or a new Ghostty tab,

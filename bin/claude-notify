@@ -91,7 +91,7 @@ sound=()
     -subtitle "$branch${task:+ — $task}" \
     -message "${text:-$headline}" \
     -group "claude-$sid" \
-    -execute "$(printf '%q ' "$HOME/.local/bin/wt-go" "$sid")" \
+    -execute "$(printf '%q ' "$HOME/.local/bin/wt-go" "$sid") >>$(printf '%q' "$HOME/.local/state/claude-notify.log") 2>&1" \
     ${sound[@]+"${sound[@]}"}
 ) </dev/null >>"${WT_NOTIFY_LOG:-/dev/null}" 2>&1 &
 disown

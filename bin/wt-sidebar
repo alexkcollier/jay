@@ -8,8 +8,8 @@
 # d: remove the agent or worktree (asks first)  a: hide/show idle repos and main checkouts
 # b: an idle interactive session goes on as a background agent (asks first)
 # p: prune dead agents (folder gone; asks first). The list also prunes them by itself, every
-# 10 minutes, with plain `claude rm` (it keeps an agent whose worktree has work to lose); log in
-# ~/.local/state/wt-hub-prune.log.
+# 10 minutes, with plain `claude rm` (it keeps an agent whose worktree has work to lose), and
+# then the turn chains of gone agents; log in ~/.local/state/wt-hub-prune.log.
 # r: reload this agent list (git signs now; the list starts again: new code and keys too)
 # h/l: narrower/wider
 # ?: keys. No quit key: the list belongs to the hub.
@@ -460,6 +460,8 @@ auto_prune() {
     out=$(claude rm "$id" 2>&1)
     printf '%s %s (%s): %s\n' "$(date '+%F %T')" "$id" "$name" "$(head -1 <<<"$out")" >>"$STATE/wt-hub-prune.log"
   done < <(dead_agents "$1")
+  # Then the turn chains of agents that are gone (see claude-turn-snapshot --prune).
+  claude-turn-snapshot --prune >>"$STATE/wt-hub-prune.log" 2>&1
   return 0
 }
 
