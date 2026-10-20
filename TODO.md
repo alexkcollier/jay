@@ -14,7 +14,7 @@ Alex's to-do list, in his words (2026-10-19):
 - Symptom: in the agent viewer the wheel moves the cursor (zellij sends arrow keys), a drag makes zellij's green selection, and the other panes still take the mouse. Closing the viewer and a new pick do not fix it.
 - Not a Claude problem: `claude attach` turns the mouse modes on at start and sends them again every few seconds. Writing `?1000/1002/1003/1006h` straight to the viewer's tty did not help, so zellij ignores mouse mode for that pane.
 - Not reproduced in throwaway hubs (fake HOME, real claude through a shim): the wheel works after the first pick, after a retarget, after a list click, and with a real Claude in the suspended hub pane.
-- Possible cause, fixed: Ghostty passed an agent's CLAUDE_* env into every tab, and the hub server inherited it (0e14fec: `wt hub --here` removes CLAUDE*/ANTHROPIC* before zellij starts). After a clean restart Alex said "all seems to be working".
+- Possible cause, fixed: Ghostty passed an agent's CLAUDE_* env into every tab, and the hub server inherited it (f040335: `wt hub --here` removes CLAUDE*/ANTHROPIC* before zellij starts). After a clean restart Alex said "all seems to be working".
 - Next step: wait. If the fault comes back in the clean hub, look at the suspended `zellij:link` plugin pane over the middle column, or at how zellij handles the pane under the suspended hub pane. Record DEC mode changes with a pty recorder (attachrec.py).
 
 ## Done after the list (2026-10-19)
@@ -30,9 +30,9 @@ Alex's to-do list, in his words (2026-10-19):
 ## Done 2026-10-20
 
 - Lost viewer pane: a pick opened a viewer in place over the already suspended hub Claude; zellij
-  lost that pane, and every later pick went to it. Fixed in wtl_hub_role / wtl_hub_show (b4a580f).
+  lost that pane, and every later pick went to it. Fixed in wtl_hub_role / wtl_hub_show (a334f58).
 - Interactive picks show a note in the middle column; a failed attach keeps its error; the list
-  prunes dead agents every 10 minutes (b4a580f).
+  prunes dead agents every 10 minutes (a334f58).
 - Background-first (Alex's choice): `c` starts every new session as a background agent and
   attaches the terminal; `b` in the list moves an idle interactive session to the background;
   ← in the hub viewer goes back to the hub Claude.
