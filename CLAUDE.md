@@ -1,18 +1,22 @@
 # CLAUDE.md
 
-Alex's personal hub tooling (see README.md). Machine-only: the files here are the live install —
-`~/.local/bin`, `~/.local/lib`, `~/mods/wt-hub` and the configs are symlinks into this repo, so an
-edit is live at once. Not linked: `~/.config/worktrunk/config.toml` (a real file with the client
-settings) and `~/.claude/settings.json`.
+A shareable worktree and agent hub (see README.md); `install.sh` installs it. On Alex's machine
+the main checkout is the live install (`./install.sh --link`): `~/.local/bin`, `~/.local/lib`,
+the yazi keys and the tuicr config are symlinks into it, so an edit is live at once. Not linked:
+`~/.config/worktrunk/config.toml` (a real file with the client settings) and
+`~/.claude/settings.json`. The mod loads from `~/mods/wt-hub` (a link to `mod/`).
 
 ## Rules
 
 - No client names in this repo (client folders, repos, remotes, people), also not in examples,
   tests or notes: use made-up names (`acme`, `shop`). Client settings go in `~`-level config,
   for worktrunk in `~/.config/worktrunk/config.toml`.
-
-- A new script in `bin/` needs its `~/.local/bin` link: run the link loop in README "Install"
-  step 2. A new tool or config the hub needs goes into that section too.
+- No machine-specific paths in the repo: the scripts use `$HOME/.local/...` (the install
+  prefix) and find other tools on PATH.
+- A new script in `bin/`: run `./install.sh --link` in the main checkout for its link. A new
+  tool, config or hook the hub needs goes into `install.sh` (and README "Install") too.
+- Test `install.sh` with a fake `HOME` (`HOME=<tmp> ./install.sh`), never against the real
+  `~/.claude/settings.json`; `--check` is safe anywhere.
 - Edit with the Edit/Write tools (so `/diff` tracks changes), never python/sed via Bash.
 - A script that is running (`wt-sidebar`, `wt-hub-pane`) must be replaced write-then-mv: edit a
   copy, then `mv` it over the file. Bash reads a running script lazily.

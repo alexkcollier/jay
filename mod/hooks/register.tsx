@@ -38,9 +38,9 @@ const USAGE = [
   '/wt refresh              reload worktrees and agents now',
 ].join('\n')
 
-type Env = { home: string; zellijSession: string; tty: string; isHubEnv: boolean }
+type Env = { home: string; zellijSession: string; tty: string; isHubEnv: boolean; claude: string }
 
-let env: Env = { home: '', zellijSession: '', tty: '', isHubEnv: false }
+let env: Env = { home: '', zellijSession: '', tty: '', isHubEnv: false, claude: '' }
 let timers: Array<{ cancel: () => void }> = []
 
 const bin = (name: string) => `${env.home}/.local/bin/${name}`
@@ -64,7 +64,7 @@ async function refreshWorktrees($: EngineInterface) {
 }
 
 async function refreshAgents($: EngineInterface) {
-  const { exitCode, stdout } = await run($, [`${env.home}/.local/bin/claude`, 'agents', '--json', '--all'], 10000)
+  const { exitCode, stdout } = await run($, [env.claude || `${env.home}/.local/bin/claude`, 'agents', '--json', '--all'], 10000)
   if (exitCode !== 0) return
   const next = parseAgents(stdout)
   const before = await read($, agents)
@@ -84,10 +84,10 @@ async function readEnv($: EngineInterface) {
   const { stdout } = await run($, [
     '/bin/sh',
     '-c',
-    'printf "%s\\t%s\\t%s\\t%s" "$HOME" "${ZELLIJ_SESSION_NAME:-}" "$(ps -o tty= -p $PPID | tr -d " ")" "${WT_HUB:-}"',
+    'printf "%s\\t%s\\t%s\\t%s\\t%s" "$HOME" "${ZELLIJ_SESSION_NAME:-}" "$(ps -o tty= -p $PPID | tr -d " ")" "${WT_HUB:-}" "$(command -v claude)"',
   ])
-  const [home = '', zellijSession = '', tty = '', hubFlag = ''] = stdout.split('\t')
-  env = { home, zellijSession, tty: tty === '??' ? '' : tty, isHubEnv: hubFlag === '1' }
+  const [home = '', zellijSession = '', tty = '', hubFlag = '', claude = ''] = stdout.split('\t')
+  env = { home, zellijSession, tty: tty === '??' ? '' : tty, isHubEnv: hubFlag === '1', claude: claude.trim() }
 }
 
 async function startHub($: EngineInterface) {

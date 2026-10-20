@@ -1,14 +1,12 @@
 # wt-hub
 
-Alex's worktree and agent hub. One zellij session, "hub", shows three columns: a live list of the
-worktrees and Claude agents across `~/Documents/projects`, the picked agent, and a review of that
+A worktree and agent hub for macOS. One zellij session, "hub", shows three columns: a live list
+of the worktrees and Claude agents across your projects, the picked agent, and a review of that
 agent's work (tuicr on its turns, or yazi on its files). Built on
 [worktrunk](https://github.com/max-sixty/worktrunk) and Claude Code background agents.
 
-This repo is the live install: `~/.local/bin`, `~/.local/lib`, `~/mods/wt-hub` and the configs are
-symlinks into it, so an edit is live at once. The exception is worktrunk's config: it is a copy
-in `~`, because it also holds client settings. Client names stay out of this repo. Open items and known faults: [TODO.md](TODO.md).
-Rules for edits: [CLAUDE.md](CLAUDE.md).
+Install with `./install.sh` ([Install](#install)). Open items and known faults:
+[TODO.md](TODO.md). Rules for edits: [CLAUDE.md](CLAUDE.md).
 
 - [What the hub is](#what-the-hub-is)
 - [Requirements](#requirements)
@@ -67,8 +65,9 @@ The hub supports:
 
 ## Requirements
 
-Versions installed now (2026-10-20). The hub is macOS only: it drives Ghostty tabs through
-AppleScript and reads the front app with `lsappinfo`.
+The versions are the ones the hub was tested with (2026-10-20); `./install.sh --check` checks
+the minimum versions. The hub is macOS only: it drives Ghostty tabs through AppleScript and
+reads the front app with `lsappinfo`.
 
 The hub itself runs in any terminal: run `wt hub` in it. Tab control is Ghostty only (other
 terminals can come later). Tab control is on when Ghostty runs and the caller's terminal, if it
@@ -82,7 +81,7 @@ it off. Without tab control:
 - Notices always show (no "agent's tab in front" rule). A click still shows a background agent
   in the hub, but it does not bring the terminal to the front.
 
-| Tool | Version now | From | Used for |
+| Tool | Tested with | From | Used for |
 |---|---|---|---|
 | macOS | 27.0.1 | | `osascript`, `lsappinfo`, `stat -f`, `cp -c` |
 | Ghostty | 1.3.2 (1.3+) | ghostty.org | tabs through AppleScript: `wt hub`, `wt go`, `wt open`, `wt-edit`, notices |
@@ -93,9 +92,9 @@ it off. Without tab control:
 | jq | 1.7.1 | `/usr/bin/jq` (macOS); brew's works too | all JSON |
 | tuicr | 0.27.0 | `brew install tuicr` | review |
 | yazi | 26.9.1 (26.x) | `mise use -g yazi`; the panes find it in `~/.local/share/mise/shims` | files |
-| terminal-notifier | 3.1.0 | `brew install terminal-notifier`; path `/opt/homebrew/bin/terminal-notifier` | notices |
-| Nerd Font | | Ghostty's built-in font has the Nerd Font symbols; FiraMono Nerd Font is installed | the Octicons in the git signs |
-| Claude Code | 2.1.304 | `~/.local/bin/claude` | `claude --bg`, `claude attach`, `claude agents --json --all`, `claude rm`, `claude --bg --resume`, hooks, the mod |
+| terminal-notifier | 3.1.0 | `brew install terminal-notifier` (optional) | notices |
+| Nerd Font | | Ghostty's built-in font has the Nerd Font symbols; in another terminal, set a Nerd Font | the Octicons in the git signs |
+| Claude Code | 2.1.304 | claude.com/claude-code | `claude --bg`, `claude attach`, `claude agents --json --all`, `claude rm`, `claude --bg --resume`, hooks, the mod |
 | git | 2.54.0 (Apple) | Xcode Command Line Tools | worktrees, turn chains |
 | bash | 3.2.57 (`/bin/bash`) | macOS | every script (`#!/usr/bin/env bash` finds `/bin/bash`) |
 | python3 | 3.9.6 (`/usr/bin/python3`) | Xcode Command Line Tools | `wt-hub-keys` |
@@ -104,57 +103,42 @@ it off. Without tab control:
 
 ## Install
 
-The repo must stay at `~/Documents/projects/wt-hub`: the install is symlinks into it. Every step
-can run again safely.
-
-1. Tools (macOS, Homebrew):
+1. Install the tools (macOS, Homebrew; jq comes with macOS 15+):
 
    ```sh
    brew install worktrunk zellij fzf tuicr terminal-notifier
-   mise use -g yazi
+   mise use -g yazi        # or: brew install yazi
    ```
 
-   jq comes with macOS (`/usr/bin/jq`). `wt-hub-keys` runs on `/usr/bin/python3` (Xcode Command
-   Line Tools); the zellij timeout wrapper uses `perl`.
-2. Links. A new script in `bin/` needs this step too (the loop links every file in `bin/`,
-   `wt-pick` included):
+   Install Claude Code too. Ghostty is optional: without it there is no tab control (see
+   [Requirements](#requirements)).
+2. Get the repo and run the installer. The repo can be anywhere:
 
    ```sh
-   cd ~/Documents/projects/wt-hub
-   mkdir -p ~/.local/bin ~/.local/lib ~/mods ~/.config/worktrunk ~/.config/tuicr ~/.config/zellij/layouts ~/.config/wt-hub
-   for f in bin/*; do [ -f "$f" ] && ln -sfn "$PWD/$f" ~/.local/bin/; done
-   ln -sfn "$PWD/lib/wt-lib.sh" ~/.local/lib/wt-lib.sh
-   ln -sfn "$PWD/mod" ~/mods/wt-hub
-   ln -sfn "$PWD/config/tuicr/config.toml" ~/.config/tuicr/config.toml
-   ln -sfn "$PWD/config/yazi" ~/.config/wt-hub/yazi
-   ln -sfn "$PWD/config/zellij/wt-hub.kdl" ~/.config/zellij/layouts/wt-hub.kdl
+   git clone <this repo> wt-hub && cd wt-hub
+   ./install.sh --check    # what is there and what is missing; changes nothing
+   ./install.sh            # install
    ```
 
-   `ln -sfn` replaces a file of the same name in place: look first if one is not a link
-   (`ls -l ~/.config/tuicr/config.toml`). `~/.local/bin` must be on PATH.
+   `~/.local/bin` must be on PATH. The installer:
 
-   worktrunk's config is a copy, not a link: `~/.config/worktrunk/config.toml` also holds the
-   client settings (`[projects."..."]` entries), and they stay out of this repo. With no file
-   there, copy the hub's settings; else merge the keys of `config/worktrunk/config.toml` into
-   it by hand:
+   | What | Where |
+   |---|---|
+   | the scripts in `bin/` and `lib/wt-lib.sh` | `~/.local/bin`, `~/.local/lib` (copies; `--link`: symlinks) |
+   | the hub's yazi keys | `~/.config/wt-hub/yazi` |
+   | tuicr's `q_quits = true` | `~/.config/tuicr/config.toml`, made when missing; else checked |
+   | the hub's worktrunk settings | `~/.config/worktrunk/config.toml`, copied when missing; else the missing keys are listed |
+   | the hooks (Stop, UserPromptSubmit, Notification) | added to `~/.claude/settings.json`, only the missing ones, after a backup |
+   | zjstatus v0.25.0 (the bar) | `~/.local/share/wt-hub/`, sha256 checked |
+   | the mod (`/wt`), with `--with-mod` | `~/.local/share/wt-hub/mod`, marketplace `alex-wt-hub` |
 
-   ```sh
-   [ -e ~/.config/worktrunk/config.toml ] || cp config/worktrunk/config.toml ~/.config/worktrunk/config.toml
-   ```
-
-   A later change to `config/worktrunk/config.toml` must go into that file by hand too.
-3. Claude Code: add the hooks in `config/claude-settings-hooks.json` to the `hooks` in
-   `~/.claude/settings.json` (merge by hand, keep the hooks that are there). Then the mod and
-   worktrunk's plugin:
-
-   ```sh
-   claude plugin marketplace add ~/mods/wt-hub && claude plugin install wt-hub@alex-wt-hub
-   claude plugin marketplace add max-sixty/worktrunk && claude plugin install worktrunk@worktrunk
-   ```
-4. Pane keys: in `~/.config/zellij/config.kdl` (not in this repo). The hub expects
-   `default_mode "locked"`, `bind "Ctrl g" { SwitchToMode "normal"; }` in `locked`, and
-   `Ctrl q` (`Quit`) and `Ctrl g` (back to locked) in the other modes. Add these binds to the
-   `normal` block of `keybinds`:
+   It never replaces a file that it did not install: it lists it as a TODO (`--force`
+   replaces it). It never edits `~/.config/zellij/config.kdl`: it prints the pane keys below.
+   It ends with "Ready", or with the TODO items. Run it again after a `git pull`: the copies do
+   not change when the repo changes.
+3. Optional pane keys, in `~/.config/zellij/config.kdl`. The hub expects
+   `default_mode "locked"`, with `Ctrl g` to normal mode and `Ctrl q` to quit. Add these binds
+   to the `normal` block of `keybinds`:
 
    ```kdl
    normal {
@@ -166,19 +150,23 @@ can run again safely.
        bind ";" { FocusLastPane; SwitchToMode "locked"; }
    }
    ```
-5. The bar is [zjstatus](https://github.com/dj95/zjstatus) v0.25.0. Without it `wt hub` uses
-   zellij's compact bar:
+4. Start the hub: `wt hub`. At the first start, zellij asks for the bar's permissions: click
+   the bar and press `y`. The first click on a notice (or the first `wt hub` from a script)
+   can make macOS ask for permission to control Ghostty: allow it.
+5. Optional: worktrunk's own Claude Code plugin:
+   `claude plugin marketplace add max-sixty/worktrunk && claude plugin install worktrunk@worktrunk`.
 
-   ```sh
-   mkdir -p ~/.local/share/wt-hub && curl -fL -o ~/.local/share/wt-hub/zjstatus-v0.25.0.wasm \
-     https://github.com/dj95/zjstatus/releases/download/v0.25.0/zjstatus.wasm
-   shasum -a 256 ~/.local/share/wt-hub/zjstatus-v0.25.0.wasm  # 282ceab219e56e1908c9fac33907241fe6c3e1ef7d85faab3e5f438cef87b8fe
-   ```
+The list shows the repos under `~/Documents/projects`. Set `WT_ROOTS` (folders with `:` between
+them) in your shell profile when your repos are elsewhere.
 
-   On its first start zellij asks for its permissions in the bar: click the bar and press `y`.
-6. Check: `ls -l ~/.local/bin | grep projects/wt-hub/bin` shows each `bin/` script as a link
-   into this repo; `wt hub` opens the hub. The first click on a notice (or the first `wt hub`
-   from a script) can make macOS ask for permission to control Ghostty: allow it.
+Your own settings, for example worktrunk aliases for one client's repo, go in
+`~/.config/worktrunk/config.toml`, not in this repo.
+
+**Work on wt-hub itself**: `./install.sh --link` links the scripts and keys into the checkout,
+so an edit is live at once. Run it again after you add a script to `bin/`.
+
+**Uninstall**: `./install.sh --uninstall` removes what it installed and lists the hooks and the
+mod to remove by hand. It keeps `~/.config/worktrunk/config.toml` and `~/.local/state`.
 
 ## How to work in the hub
 
@@ -553,7 +541,8 @@ Elsewhere:
 
 - `refs/wt-turns/<id>/{base,head}` in each repo: the turn chains.
 - The task note: worktrunk's state variable `task` (`wt task`, `wt new -t`).
-- `~/.local/share/wt-hub/zjstatus-v0.25.0.wasm`: the bar.
+- `~/.local/share/wt-hub/`: `zjstatus-v0.25.0.wasm` (the bar), `mod/` (the mod, with
+  `--with-mod`), `installed.txt` (the files `install.sh` installed).
 
 Environment variables: `WT_ROOTS` (project roots, `:`-separated; default `~/Documents/projects`),
 `WT_HUB_SESSION` (default `hub`), `WT_ZELLIJ_TIMEOUT` (default 5 s), `WT_EDITOR`,
@@ -607,7 +596,6 @@ config/
   tuicr/config.toml            q_quits: q in review goes back
   worktrunk/config.toml        hub settings to copy into ~: worktree path <repo>.<branch>, pre-start wt-setup, Task column, task alias
   yazi/keymap.toml             hub-only yazi keys: e, O, W
-  zellij/wt-hub.kdl            a saved hub layout (wt hub writes its own copy)
 mod/
   .claude-plugin/              plugin.json, marketplace.json (marketplace alex-wt-hub)
   hooks/hooks.json             loads register.tsx
@@ -616,6 +604,7 @@ mod/
   types/index.d.ts             row and event types
   tests/wt-hub.test.tsx        mod tests
   tsconfig.json
+install.sh               installer: copies or links, configs, hooks, zjstatus; --check, --uninstall
 CLAUDE.md                rules for edits in this repo
-TODO.md                  Alex's hub to-do list and decisions
+TODO.md                  the hub's to-do list and decisions
 ```
