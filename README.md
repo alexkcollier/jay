@@ -12,7 +12,7 @@ agent's turns, yazi for files). Built on [worktrunk](https://github.com/max-sixt
 | `lib/wt-lib.sh` | `~/.local/lib/wt-lib.sh` | shared helpers (Ghostty, zellij, hub panes) |
 | `mod/` | `~/mods/wt-hub` (folder marketplace `alex-wt-hub`) | Claude Code mod: `/wt`, toasts, status line in any interactive session that turns it on (the hub no longer runs a Claude) |
 | `config/worktrunk/config.toml` | `~/.config/worktrunk/config.toml` | worktree path, `pre-start = "wt-setup"`, Task column, aliases |
-| `config/yazi/keymap.toml` | `~/.config/wt-hub/yazi/` (folder link) | hub-only yazi keys: `e` back to review, `o` open in your editor (`wt-edit`) |
+| `config/yazi/keymap.toml` | `~/.config/wt-hub/yazi/` (folder link) | hub-only yazi keys: `e` back to review, `O` open in your editor in a new tab (`wt-edit`; `o` stays yazi's open) |
 | `config/tuicr/config.toml` | `~/.config/tuicr/config.toml` | `q_quits`: in the hub's review pane `q` goes back (the pane starts tuicr again) |
 | `config/zellij/wt-hub.kdl` | `~/.config/zellij/layouts/wt-hub.kdl` | saved hub layout (`wt hub` writes its own copy) |
 | `config/claude-settings-hooks.json` | merged into `~/.claude/settings.json` by hand | Stop / UserPromptSubmit / Notification hooks |
@@ -131,8 +131,9 @@ is live at once. Every step can run again safely.
 - Review ⇄ files: `e` in tuicr (NORMAL or SELECT mode) shows files over review, `e` (or `q`) in
   yazi goes back. tuicr keeps running under yazi. tuicr's own `e` (exclude filter) is not
   available in the hub; its `i` (include filter) and `:` commands still work. The pane title
-  ends with the pane's keys (`e files · t commits`, `e review · o editor`). `o` in yazi opens the hovered
-  file or folder in your editor, in its project: `wt-edit <path>` (below).
+  ends with the pane's keys (`e files · t commits`, `e review · O editor`). `O` in yazi opens the
+  hovered file or folder in your editor, in its project, in a new tab: `wt-edit <path>` (below);
+  `o` stays yazi's own open, in the pane.
 - Review (tuicr) has two modes; the pane title starts with the mode. **turns**: the agent's turn
   chain, one commit per turn plus "between turns" commits for your own edits, opened on the last
   turn. **commits**: merge-base with `origin/HEAD`/`main`/`master` up to `HEAD`. `t` in tuicr (in
