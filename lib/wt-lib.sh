@@ -457,7 +457,7 @@ wtl_hub_pane_title() {
       else
         printf 'turns · %s   e files · t commits\n' "$2"
       fi ;;
-    files) printf 'files · %s   e review · O editor\n' "$2" ;;
+    files) printf 'files · %s   e review · o open here · O editor tab · W open with\n' "$2" ;;
   esac
 }
 
