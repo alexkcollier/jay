@@ -25,7 +25,7 @@ const worker = (state: string): RawAgent => ({
   sessionId: 'aaaa1111-2222', id: 'aaaa1111', kind: 'background', name: 'shop/login', cwd: FEATURE, status: 'busy', state, startedAt: T0,
 })
 
-function host(on: On, agents: { current: RawAgent[] }, hubFlag = '') {
+function host(on: On, agents: { current: RawAgent[] }) {
   const calls: string[][] = []
   const toasts: string[] = []
   const sent: Array<{ to: unknown; text: string }> = []
@@ -36,7 +36,7 @@ function host(on: On, agents: { current: RawAgent[] }, hubFlag = '') {
     calls.push([...e.argv])
     const [program = ''] = e.argv
     const ok = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
-    if (program === '/bin/sh' && String(e.argv[2] ?? '').includes('ZELLIJ_SESSION_NAME')) return ok(`${HOME}\thub-session\tttys009\t${hubFlag}`)
+    if (program === '/bin/sh' && String(e.argv[2] ?? '').includes('command -v claude')) return ok(`${HOME}\t`)
     if (program.endsWith('/wt-all')) return ok(worktreeLines)
     if (program.endsWith('/claude')) return ok(JSON.stringify(agents.current))
     return ok('')
@@ -145,7 +145,6 @@ test('the hub polls, toasts state changes, draws the sidebar and reaches agents'
   expect(seen.opened).toEqual([])
   expect(seen.toasts).toEqual([])
   expect(seen.status()).toBe('● 1 working')
-  expect(seen.files.has(`${HOME}/.local/state/wt-hub.json`)).toBe(false)
 
   agents.current = [hub, worker('blocked')]
   await clock.advance(3000)
@@ -192,14 +191,14 @@ test('/wt new passes the arguments through a shell to wt-new', async ($, on) => 
   expect(call?.[2]).toBe('exec "$0" feat/x -t "Try it" -- write the tests')
 })
 
-test('a hub started from the layout (WT_HUB=1) turns on by itself, with no dock pane', async ($, on) => {
+test('/wt turns the hub on with no dock pane; a finished agent toasts; /wt pane opens the dock', async ($, on) => {
   const clock = mock.clock(on, { now: T0 })
   const agents = { current: [hub, worker('working')] }
-  const seen = host(on, agents, '1')
+  const seen = host(on, agents)
   await $.session.start({ cwd: SHOP, surface: 'terminal', isInteractive: true })
+  await wt($, '')
   expect(seen.status()).toBe('● 1 working')
   expect(seen.opened).toEqual([])
-  expect(JSON.parse(seen.files.get(`${HOME}/.local/state/wt-hub.json`) ?? '{}')).toEqual({ sessionId: SELF, zellijSession: 'hub-session', tty: 'ttys009' })
   agents.current = [hub, worker('done')]
   await clock.advance(3000)
   await clock.settle()
@@ -209,9 +208,9 @@ test('a hub started from the layout (WT_HUB=1) turns on by itself, with no dock 
   expect(seen.opened).toEqual(['wt-hub'])
 })
 
-test('a headless session never turns the hub on from WT_HUB', async ($, on) => {
+test('a headless session does not start the hub', async ($, on) => {
   mock.clock(on, { now: T0 })
-  const seen = host(on, { current: [hub] }, '1')
+  const seen = host(on, { current: [hub] })
   await $.session.start({ cwd: SHOP, surface: null, isInteractive: false })
   expect(seen.status()).toBeUndefined()
   expect(seen.calls.some(argv => argv[0]?.endsWith('/claude'))).toBe(false)

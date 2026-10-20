@@ -38,13 +38,12 @@ const USAGE = [
   '/wt refresh              reload worktrees and agents now',
 ].join('\n')
 
-type Env = { home: string; zellijSession: string; tty: string; isHubEnv: boolean; claude: string }
+type Env = { home: string; claude: string }
 
-let env: Env = { home: '', zellijSession: '', tty: '', isHubEnv: false, claude: '' }
+let env: Env = { home: '', claude: '' }
 let timers: Array<{ cancel: () => void }> = []
 
 const bin = (name: string) => `${env.home}/.local/bin/${name}`
-const hubFile = () => `${env.home}/.local/state/wt-hub.json`
 
 async function run($: EngineInterface, argv: string[], timeoutMs = 30000) {
   try {
@@ -84,18 +83,14 @@ async function readEnv($: EngineInterface) {
   const { stdout } = await run($, [
     '/bin/sh',
     '-c',
-    'printf "%s\\t%s\\t%s\\t%s\\t%s" "$HOME" "${ZELLIJ_SESSION_NAME:-}" "$(ps -o tty= -p $PPID | tr -d " ")" "${WT_HUB:-}" "$(command -v claude)"',
+    'printf "%s\\t%s" "$HOME" "$(command -v claude)"',
   ])
-  const [home = '', zellijSession = '', tty = '', hubFlag = '', claude = ''] = stdout.split('\t')
-  env = { home, zellijSession, tty: tty === '??' ? '' : tty, isHubEnv: hubFlag === '1', claude: claude.trim() }
+  const [home = '', claude = ''] = stdout.split('\t')
+  env = { home, claude: claude.trim() }
 }
 
 async function startHub($: EngineInterface) {
   if (timers.length > 0) return
-  const me = await read($, selfId)
-  if (env.isHubEnv) {
-    await $.fs.write(hubFile(), JSON.stringify({ sessionId: me, zellijSession: env.zellijSession, tty: env.tty }))
-  }
   await refreshWorktrees($)
   await refreshAgents($)
   timers = [
@@ -135,7 +130,6 @@ export const register: Register = on => {
       description: 'Worktree hub: sidebar of worktrees and agents; new, go, open, msg',
       argumentHint: '[off | new <branch> [-- prompt] | go <agent> | open <branch> | msg <agent> <text> | refresh]',
     })
-    if (e.isInteractive && env.isHubEnv) await update($, isHub, () => true)
     if (e.isInteractive && (await read($, isHub))) await startHub($)
     return started
   })
