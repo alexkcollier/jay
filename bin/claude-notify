@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # claude-notify — Claude Code hook (Stop, Notification) that posts a macOS notice
 # naming client › repo · branch, the task note and the agent's message.
-# No notice while Ghostty is in front showing that agent, or the hub (its sidebar shows it).
+# No notice while Ghostty is in front showing that agent, in its own tab or in the hub's middle
+# column.
 # Click: `wt go <session>` brings the agent in front.
 set -uo pipefail
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
 source "$HOME/.local/lib/wt-lib.sh"
 NOTIFIER=/opt/homebrew/bin/terminal-notifier
-HUB_FILE="$HOME/.local/state/wt-hub.json"
 
 input=$(cat)
 event=$(jq -r '.hook_event_name // ""' <<<"$input")
@@ -62,22 +62,21 @@ elif pid=$(claude_pid); then
   [[ -n "$tty" && "$tty" != "??" ]] && agent_tab=$(wtl_gh_tab_for_tty "$tty" || true)
 fi
 
-hub_tab=""
-hub_sid=$(jq -r '.sessionId // empty' "$HUB_FILE" 2>/dev/null)
-if [[ -n "$hub_sid" ]] && claude agents --json --all 2>/dev/null | jq -e --arg s "$hub_sid" 'any(.[]; .sessionId == $s)' >/dev/null; then
-  hub_session=$(jq -r '.zellijSession // empty' "$HUB_FILE")
-  hub_tty=$(jq -r '.tty // empty' "$HUB_FILE")
-  if [[ -n "$hub_session" ]]; then
-    hub_tab=$(wtl_gh_tab_for_session "$hub_session" || true)
-  elif [[ -n "$hub_tty" ]]; then
-    hub_tab=$(wtl_gh_tab_for_tty "$hub_tty" || true)
+# The hub's Ghostty tab, and whether this agent is the one in the hub's middle column (its
+# target names the agent id, or the session id for an interactive agent).
+hub_tab="" in_hub=false
+if wtl_hub_live; then
+  hub_tab=$(wtl_gh_tab_for_session "$WT_HUB_SESSION" || true)
+  shown=$(cut -f1 "$(wtl_hub_target_file agent)" 2>/dev/null)
+  if [[ -n "$shown" ]]; then
+    [[ "$shown" == "$sid" || "$shown" == "${sid:0:8}" || "$shown" == "$(basename "${CLAUDE_JOB_DIR:-none}")" ]] && in_hub=true
   fi
 fi
 
 if [[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
   selected=$(wtl_gh_tabs | awk -F'\t' '$2 == "true" && $3 == "true" { print $1; exit }')
   [[ -n "$selected" && "$selected" == "$agent_tab" && "$pane_focused" == true ]] && exit 0
-  [[ -n "$selected" && "$selected" == "$hub_tab" ]] && exit 0
+  [[ -n "$selected" && "$selected" == "$hub_tab" && "$in_hub" == true ]] && exit 0
 fi
 
 [[ -x "$NOTIFIER" ]] || exit 0

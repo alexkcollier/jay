@@ -10,7 +10,7 @@ agent's turns, yazi for files). Built on [worktrunk](https://github.com/max-sixt
 |---|---|---|
 | `bin/` | `~/.local/bin/<name>` (symlinks) | `c`, `wt-hub`, `wt-sidebar`, `wt-hub-pane`, `wt-go`, `wt-open`, `wt-new`, `wt-all`/`wt-pick`, `wt-agents`, `wt-setup`, `wt-hub-edit`, `wt-hub-keys`, `claude-notify`, `claude-turn-snapshot` |
 | `lib/wt-lib.sh` | `~/.local/lib/wt-lib.sh` | shared helpers (Ghostty, zellij, hub panes) |
-| `mod/` | `~/mods/wt-hub` (folder marketplace `alex-wt-hub`) | Claude Code mod: `/wt`, toasts, status line |
+| `mod/` | `~/mods/wt-hub` (folder marketplace `alex-wt-hub`) | Claude Code mod: `/wt`, toasts, status line in any interactive session that turns it on (the hub no longer runs a Claude) |
 | `config/worktrunk/config.toml` | `~/.config/worktrunk/config.toml` | worktree path, `pre-start = "wt-setup"`, Task column, aliases |
 | `config/yazi/keymap.toml` | `~/.config/wt-hub/yazi/` (folder link) | hub-only yazi keys: `e` back to review |
 | `config/tuicr/config.toml` | `~/.config/tuicr/config.toml` | `q_quits`: in the hub's review pane `q` goes back (the pane starts tuicr again) |
@@ -80,7 +80,7 @@ is live at once. Every step can run again safely.
 ## Use
 
 - `wt hub` — open the hub tab (starts it fresh when it is not running or does not answer).
-- In the list: a pick of an agent (or "◆ hub") always moves the focus to the middle column; on a
+- In the list: a pick of an agent always moves the focus to the middle column; on a
   worktree, Enter moves it to review and a click keeps it in the list. ▸ (beside the agent) marks the agent in the
   middle column. An interactive agent (not `bg`) runs in its own terminal: the middle column
   only says so, review shows its turns, `o` goes to its Ghostty tab, and `b` (idle only, after a
@@ -115,10 +115,13 @@ is live at once. Every step can run again safely.
   room left.
 - Panes (in `~/.config/zellij/config.kdl`, all sessions): `Ctrl g` then `h`/`l` column left/right,
   `1`/`2`/`3` list/middle/right column, `;` last pane.
-- One pane per column: a picked agent covers the hub Claude, files (yazi) cover review. Leave
-  the top program (Ctrl+Z or ← in the agent, `q` in yazi) or pick the "◆ hub" row, and the pane
-  under it comes back. ← opens Claude's agent view elsewhere; in the hub the list is that view.
-  When an agent cannot be opened (its worktree is gone), its error stays in the middle column.
+- One pane per column: the middle column always shows the picked agent (`claude attach`); there
+  is no hub Claude. Leave the agent (Ctrl+Z, or ←: Claude's agent view, which the list replaces
+  here) and it keeps running; Enter or a new pick opens it again. When an agent cannot be
+  opened (its worktree is gone), its error stays in the middle column. Files (yazi) cover
+  review; `q` in yazi brings review back.
+- macOS notices (claude-notify): none for the agent you look at (its own tab, or the hub's
+  middle column with the hub tab in front); the other agents notify as usual.
 - Review ⇄ files: `e` in tuicr (NORMAL or SELECT mode) shows files over review, `e` (or `q`) in
   yazi goes back. tuicr keeps running under yazi. tuicr's own `e` (exclude filter) is not
   available in the hub; its `i` (include filter) and `:` commands still work. The pane title
@@ -138,7 +141,7 @@ is live at once. Every step can run again safely.
 - `wt go <agent>` — show an agent (id or name) in the hub.
 - `wt new <branch> [-- prompt]` — new worktree, with a prompt a background agent.
 
-State lives in `~/.local/state/` (`wt-hub.json`, `wt-hub-<role>.target|.pane`, `wt-hub-sidebar.pct`,
+State lives in `~/.local/state/` (`wt-hub-<role>.target|.pane`, `wt-hub-sidebar.pct`,
 `wt-hub-sidebar.hide-idle`, `wt-hub-review.mode`, `wt-turns/` with the worktree of each chain).
 
 Open items and known faults: [TODO.md](TODO.md).

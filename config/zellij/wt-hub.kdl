@@ -23,9 +23,9 @@ layout {
     }
     tab name="hub" focus=true {
         pane split_direction="vertical" {
-            pane size="22%" name="worktrees" command="/Users/alexcollier/.local/bin/wt-sidebar"
-            pane size="43%" name="hub" focus=true command="/usr/bin/env" {
-                args "WT_HUB=1" "/Users/alexcollier/.local/bin/claude" "-n" "hub"
+            pane size="22%" name="worktrees" focus=true command="/Users/alexcollier/.local/bin/wt-sidebar"
+            pane size="43%" name="agent" command="/Users/alexcollier/.local/bin/wt-hub-pane" {
+                args "agent"
             }
             pane size="35%" name="review" command="/Users/alexcollier/.local/bin/wt-hub-pane" {
                 args "review"

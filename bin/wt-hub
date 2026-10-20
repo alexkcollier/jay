@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # wt hub — select the hub's Ghostty tab, or open it: zellij session "hub" with the live
-# worktree list (left), the hub Claude / picked agent (middle) and review + files (right).
+# worktree list (left), the picked agent (middle) and review + files (right).
 # --here: start it in this terminal.  --print-layout: print the zellij layout it starts with.
 set -euo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
@@ -43,11 +43,7 @@ KDL
 }
 
 write_layout() {
-  local resume="" last list middle right
-  last=$(jq -r '.sessionId // empty' "$HOME/.local/state/wt-hub.json" 2>/dev/null || true)
-  if [[ -n "$last" ]] && ! claude agents --json --all 2>/dev/null | jq -e --arg s "$last" 'any(.[]; .sessionId == $s)' >/dev/null; then
-    resume=" \"--resume\" \"$last\""
-  fi
+  local list middle right
   list=$(cat "$HOME/.local/state/wt-hub-sidebar.pct" 2>/dev/null || true)
   [[ "$list" =~ ^[0-9]+$ ]] && ((list >= 10 && list <= 60)) || list=22
   middle=$(((100 - list) * 43 / 78))
@@ -62,9 +58,9 @@ layout {
     }
     tab name="hub" focus=true {
         pane split_direction="vertical" {
-            pane size="$list%" name="worktrees" command="$HOME/.local/bin/wt-sidebar"
-            pane size="$middle%" name="hub" focus=true command="/usr/bin/env" {
-                args "WT_HUB=1" "$HOME/.local/bin/claude" "-n" "hub"$resume
+            pane size="$list%" name="worktrees" focus=true command="$HOME/.local/bin/wt-sidebar"
+            pane size="$middle%" name="agent" command="$HOME/.local/bin/wt-hub-pane" {
+                args "agent"
             }
             pane size="$right%" name="review" command="$HOME/.local/bin/wt-hub-pane" {
                 args "review"

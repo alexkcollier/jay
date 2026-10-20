@@ -2,13 +2,13 @@
 # wt-hub-pane agent|review|files — a pane of the hub that follows its target.
 # The target is a line in ~/.local/state/wt-hub-<role>.target (wtl_hub_point writes it and stops
 # the running program, so the pane starts it again for the new target).
-# agent:  `claude attach` on the picked agent. It covers the hub Claude; when you leave the
-#         agent (Ctrl+Z, or ←: the list is the agent view here), the pane closes and the hub
-#         Claude comes back. An interactive agent runs in its own terminal tab: the pane says
-#         so. When attach fails at once (say the agent's worktree is gone), its error stays on
-#         screen until the next pick or Enter.
-# review: tuicr in one of two modes (wt-hub-review.mode), switched with `t` (wt-hub-keys) or `t`
-#         in the list; the title starts with the mode.
+# agent:  `claude attach` on the picked agent, in the middle column; the pane never closes.
+#         When you leave the agent (Ctrl+Z, or ←: the list is the agent view here), it keeps
+#         running and Enter opens it again. An interactive agent runs in its own terminal tab:
+#         the pane says so. When attach fails at once (say the agent's worktree is gone), its
+#         error stays on screen.
+# review: tuicr in one of two modes (wt-hub-review.mode), switched with `t` (wt-hub-keys); the
+#         title starts with the mode.
 #         turns: the agent's turn chain (refs/wt-turns/<agent id or session8>), else the newest
 #         chain in the worktree, else tuicr's own target picker. A chain opens on its last
 #         turn; `(` shows all turns.
@@ -94,7 +94,7 @@ branch_base() {
 }
 
 # ← in `claude attach` turns it into Claude's agent view (`claude agents`, same process). In
-# the hub the list is that view, so it is stopped: the viewer closes and the hub Claude shows.
+# the hub the list is that view, so it is stopped, as if you left the agent.
 leave_agent_view() {
   while sleep 0.5; do
     pkill -TERM -P $$ -f 'claude agents' && return 0
@@ -109,7 +109,7 @@ run() {
       IFS=$'\t' read -r id path kind name <<<"$1"
       cd "$path" 2>/dev/null || cd "$HOME"
       if [[ "$kind" == interactive ]]; then
-        printf '\n  %s runs in its own terminal tab.\n\n  o in the list: go to that tab.\n  Review shows its turns.\n  Enter: back to the hub Claude.\n' "$name"
+        printf '\n  %s runs in its own terminal tab.\n\n  o in the list: go to that tab.\n  b in the list: make it a background agent.\n  Review shows its turns.\n' "$name"
         wait_change "$1"
         return 0
       fi
@@ -117,6 +117,7 @@ run() {
       claude attach "$id"
       rc=$?
       kill $! 2>/dev/null
+      wait $! 2>/dev/null # no "Terminated" line on the screen
       return $rc ;;
     review)
       IFS=$'\t' read -r path session <<<"$1"
@@ -149,7 +150,11 @@ run() {
 while :; do
   now=$(target)
   if [[ -z "$now" ]]; then
-    printf '\n  Review\n\n  Pick a worktree or an agent in the list.\n  tuicr opens here for its turns.\n  e in tuicr: files (yazi); e in files: review.\n'
+    if [[ "$role" == agent ]]; then
+      printf '\n  Agent\n\n  Pick an agent in the list.\n  n in the list: a new agent.\n'
+    else
+      printf '\n  Review\n\n  Pick a worktree or an agent in the list.\n  tuicr opens here for its turns.\n  e in tuicr: files (yazi); e in files: review.\n'
+    fi
     wait_change "" || true
     clear
     continue
@@ -160,16 +165,28 @@ while :; do
   # 143: stopped (← in attach, see leave_agent_view), not failed.
   if [[ "$role" == agent && "$(target)" == "$now" ]] && ((rc != 0 && rc != 143 && SECONDS - started < 5)); then
     reset_screen keep
-    printf '\n  Could not open this agent (see above).\n  Pick another agent, or Enter: back to the hub Claude.\n'
-    wait_change "$now" || exit 0
+    printf '\n  Could not open this agent (see above).\n  Pick another agent, or Enter: try again.\n'
+    wait_change "$now" || true
     clear
     continue
   fi
   reset_screen
   [[ "$(target)" != "$now" ]] && continue
+  # You left the agent (or pressed Enter on an interactive agent's note). The target is cleared,
+  # so a pick of the same agent opens it again too.
+  if [[ "$role" == agent ]]; then
+    IFS=$'\t' read -r _ _ kind _ <<<"$now"
+    if [[ "$kind" != interactive ]]; then
+      wtl_hub_write_target agent ""
+      printf '\n  You left this agent. It keeps running.\n\n  Enter: open it again.\n  Or pick an agent in the list.\n'
+      wait_change "" || wtl_hub_write_target agent "$now"
+      clear
+    fi
+    continue
+  fi
   if [[ "$role" == review ]]; then
     ((rc == 99)) && wtl_hub_toggle_mode
-    # A toggle (t here or in the list) starts tuicr again in the other mode, under a new title.
+    # A toggle (t) starts tuicr again in the other mode, under a new title.
     if [[ "$(wtl_hub_mode)" != "$mode" ]]; then
       wtl_hub_retitle review
       continue

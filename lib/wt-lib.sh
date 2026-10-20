@@ -224,12 +224,12 @@ wtl_bg_id() {
   grep -oE 'backgrounded · [0-9a-f]{8}' <<<"$1" | grep -oE '[0-9a-f]{8}$' | tail -1
 }
 
-# --- Hub panes (zellij session "hub"): hub Claude ⇄ agent viewer, review ⇄ files ---
-# One pane in each column. The agent viewer opens in place over the hub Claude, and files in
-# place over review: zellij keeps the pane under it suspended and shows it again when the top
-# pane closes. The viewer, review and files panes run `wt-hub-pane <role>`, which follows the
-# target in wt-hub-<role>.target; a pick writes the target and stops the running program, so
-# the pane stays where it is and only its program and title change.
+# --- Hub panes (zellij session "hub"): agent viewer, review ⇄ files ---
+# One pane in each column. The agent viewer (middle) and review (right) are layout panes; files
+# opens in place over review: zellij keeps review suspended and shows it again when files
+# closes. The panes run `wt-hub-pane <role>`, which follows the target in
+# wt-hub-<role>.target; a pick writes the target and stops the running program, so the pane
+# stays where it is and only its program and title change.
 
 WT_HUB_SESSION=${WT_HUB_SESSION:-hub}
 
@@ -245,10 +245,6 @@ wtl_hub_live() {
 
 wtl_hub_panes() {
   zellij -s "$WT_HUB_SESSION" action list-panes -a -j -c 2>/dev/null | jq -c '.[] | select(.is_plugin | not)'
-}
-
-wtl_hub_claude_pane() {
-  wtl_hub_panes | jq -r 'select((.exited | not) and ((.title // "") == "hub" or ((.pane_command // "") | test("claude -n hub")))) | .id' | head -1
 }
 
 wtl_hub_target_file() { printf '%s/.local/state/wt-hub-%s.target\n' "$HOME" "$1"; }
@@ -352,22 +348,13 @@ wtl_hub_point() {
 # In zellij 0.45 `focus-pane-id` from the CLI sets a focus of its own, not the terminal's, and on
 # a suspended pane it makes that pane float. `move-focus` moves the terminal's focus.
 
-# Move the focus to the middle column (the hub Claude or the agent viewer), from any column:
-# left twice reaches the list, then one step right.
+# Move the focus to the middle column (the agent viewer), from any column: left twice reaches
+# the list, then one step right.
 wtl_hub_focus_middle() {
   zellij -s "$WT_HUB_SESSION" action move-focus left >/dev/null 2>&1
   zellij -s "$WT_HUB_SESSION" action move-focus left >/dev/null 2>&1
   zellij -s "$WT_HUB_SESSION" action move-focus right >/dev/null 2>&1
   return 0
-}
-
-# Show the hub Claude: close the agent viewer over it (the agent keeps running), focus it.
-wtl_hub_show_claude() {
-  local pane
-  if IFS=$'\t' read -r pane _ < <(wtl_hub_role agent); then
-    zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "$pane" >/dev/null 2>&1
-  fi
-  wtl_hub_focus_middle
 }
 
 # Run "$@" holding the hub lock, so two picks (sidebar, /wt go, a notice click) never move
@@ -382,25 +369,14 @@ wtl_hub_locked() {
 }
 
 # Show background agent $1 (short id) named $2 from folder $3 in the hub's middle column: the
-# viewer pane follows the new agent, or opens in place over the hub Claude. The focus goes there.
-# With $4 = interactive, $1 is a session id and the viewer only says where that agent runs.
+# viewer pane follows the new agent. The focus goes there. With $4 = interactive, $1 is a
+# session id and the viewer only says where that agent runs.
 wtl_hub_show() {
-  local id=$1 name=$2 cwd=$3 line viewer changed hub
+  local id=$1 name=$2 cwd=$3 line viewer changed
   line=$(printf '%s\t%s' "$id" "$cwd")
   [[ "${4:-}" == interactive ]] && line=$(printf '%s\tinteractive\t%s' "$line" "$name")
-  if IFS=$'\t' read -r viewer changed < <(wtl_hub_point agent "$line"); then
-    [[ "$changed" == 1 ]] && zellij -s "$WT_HUB_SESSION" action rename-pane -p "$viewer" "$name" >/dev/null 2>&1
-  else
-    hub=$(wtl_hub_claude_pane)
-    [[ -n "$hub" ]] || return 1
-    # A pane opened in place over a suspended pane is lost, and takes the suspended one with it.
-    wtl_hub_wait_shown "$hub" || return 1
-    wtl_hub_write_target agent "$line"
-    viewer=$(zellij -s "$WT_HUB_SESSION" action new-pane --in-place --pane-id "terminal_$hub" --close-on-exit \
-      --name "$name" --cwd "$cwd" -- "$HOME/.local/bin/wt-hub-pane" agent)
-    [[ "$viewer" == terminal_* ]] || return 1
-    wtl_hub_role_ready agent
-  fi
+  IFS=$'\t' read -r viewer changed < <(wtl_hub_point agent "$line") || return 1
+  [[ "$changed" == 1 ]] && zellij -s "$WT_HUB_SESSION" action rename-pane -p "$viewer" "$name" >/dev/null 2>&1
   wtl_hub_focus_middle
 }
 
