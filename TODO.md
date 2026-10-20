@@ -7,9 +7,9 @@ Alex's to-do list, in his words (2026-10-19):
 2. Nicer zellij UI — "the current tabs and hints are meh" (tab-bar and status-bar plugins in the hub layout). Done 2026-10-19: one zjstatus bar.
 3. Faster pane switching/navigation. Done 2026-10-19: Ctrl g h/l/1/2/3/;, Enter in the list moves the focus, an agent pick focuses the middle column.
 4. Keyboard hints in the worktree list, and the ability to remove agents and worktrees from it. Done 2026-10-19: footer, ? for all keys, d removes after a confirm.
-5. The agent panel sometimes stops responding to the mouse (added 2026-10-19). Open: see below.
+5. The agent panel sometimes stops responding to the mouse (added 2026-10-19). Closed 2026-10-20 (Alex): not seen since the clean restart; notes below in case it comes back.
 
-## Item 5: what we know
+## Item 5 (closed): what we know
 
 - Symptom: in the agent viewer the wheel moves the cursor (zellij sends arrow keys), a drag makes zellij's green selection, and the other panes still take the mouse. Closing the viewer and a new pick do not fix it.
 - Not a Claude problem: `claude attach` turns the mouse modes on at start and sends them again every few seconds. Writing `?1000/1002/1003/1006h` straight to the viewer's tty did not help, so zellij ignores mouse mode for that pane.
@@ -59,7 +59,8 @@ Alex's to-do list, in his words (2026-10-19):
 
 ## Other open items
 
-- `wt step prune` candidates were listed but not removed. Never in one client repo (it would delete `main`).
+None. Dropped 2026-10-20 (Alex): `wt step prune` (bulk removal; the list's dim ✓ and `d` do it
+one worktree at a time). Never run it in one client repo (it would delete `main`).
 
 ## How to work
 
