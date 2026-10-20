@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# wt hub — select the hub's Ghostty tab, or open it: zellij session "hub" with the live
-# worktree list (left), the picked agent (middle) and review + files (right).
-# --here: start it in this terminal.  --print-layout: print the zellij layout it starts with.
+# wt hub — zellij session "hub": the live worktree list (left), the picked agent (middle) and
+# review + files (right). Goes to the hub's Ghostty tab when it has one, else opens the hub in
+# this terminal; a new tab only without a terminal or from inside another zellij session.
+# --here: in this terminal.  --tab: in a new tab.  --print-layout: the zellij layout it starts.
 set -euo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
-[[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,4s/^# \{0,1\}//p' "$0"; exit 0; }
+[[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,5s/^# \{0,1\}//p' "$0"; exit 0; }
 
 SESSION=$WT_HUB_SESSION
 root=${WT_ROOTS%%:*}
@@ -30,7 +31,7 @@ plugin location="file:$ZJSTATUS" {
                 pipe_agents_format     "{output}"
                 pipe_agents_rendermode "raw"
                 mode_locked          ""
-                mode_normal          "#[fg=#1F1F28,bg=#E6C384,bold] {name} #[fg=#727169] Ctrl g: lock  "
+                mode_normal          "#[fg=#1F1F28,bg=#E6C384,bold] {name} #[fg=#727169] Ctrl q: quit hub · Ctrl g: lock  "
                 mode_default_to_mode "normal"
                 tab_active    "#[fg=#DCD7BA,bold] {name} "
                 tab_normal    "#[fg=#727169] {name} "
@@ -90,7 +91,17 @@ if [[ "${1:-}" == --print-layout ]]; then
   exit 0
 fi
 
-if [[ "${1:-}" == --here ]]; then
+where=${1:-}
+
+# A hub that runs in a Ghostty tab: go to that tab.
+if [[ "$where" != --here ]] && hub_answers && tab=$(wtl_gh_tab_for_session "$SESSION"); then
+  wtl_gh_select "$tab"
+  exit 0
+fi
+
+# Else in this terminal (Alex: no new tab by default). Not possible without a terminal (an
+# agent, a script) or inside another zellij session (nested zellij): then a new tab.
+if [[ "$where" == --here ]] || [[ "$where" != --tab && -t 0 && -t 1 && -z "${ZELLIJ:-}" ]]; then
   hub_answers && exec zellij attach "$SESSION"
   fresh_start
   # The hub's panes inherit the server's environment. A Ghostty started by an agent passes that
@@ -100,11 +111,7 @@ if [[ "${1:-}" == --here ]]; then
 fi
 
 if hub_answers; then
-  if tab=$(wtl_gh_tab_for_session "$SESSION"); then
-    wtl_gh_select "$tab"
-  else
-    wtl_gh_new_tab "$root" "zellij attach $SESSION" >/dev/null
-  fi
+  wtl_gh_new_tab "$root" "zellij attach $SESSION" >/dev/null
 else
   wtl_gh_new_tab "$root" "$HOME/.local/bin/wt-hub --here" >/dev/null
 fi

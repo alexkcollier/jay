@@ -29,7 +29,7 @@ const events = atom({ plugin: 'wt-hub', key: 'events' } as const, [] as HubEvent
 const USAGE = [
   '/wt                      turn the hub on (status line, toasts)',
   '/wt pane                 show the worktree list in the dock',
-  '/wt hub                  open the hub tab: live list on the left, Claude on the right',
+  '/wt hub                  open the hub in its tab (a new one if needed): list, agent, review',
   '/wt off                  turn the hub off',
   '/wt new <branch> [-t "task"] [-- prompt]   new worktree; with a prompt, a background agent',
   '/wt go <agent>           bring an agent in front: id, name or part of a name',

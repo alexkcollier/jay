@@ -79,7 +79,11 @@ is live at once. Every step can run again safely.
 
 ## Use
 
-- `wt hub` — open the hub tab (starts it fresh when it is not running or does not answer).
+- `wt hub` — go to the hub's Ghostty tab when it has one, else open the hub in this terminal
+  (fresh when it is not running or does not answer). A new tab only without a terminal (an
+  agent, `/wt hub`) or from inside another zellij session; `--tab` / `--here` choose.
+  Quit the hub: `Ctrl g`, then `Ctrl q` (the agents keep running). Closing its tab only
+  detaches it; `wt hub` attaches it again.
 - In the list: a pick of an agent always moves the focus to the middle column; on a
   worktree, Enter moves it to review and a click keeps it in the list. ▸ (beside the agent) marks the agent in the
   middle column. An interactive agent (not `bg`) runs in its own terminal: the middle column

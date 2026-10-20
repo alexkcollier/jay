@@ -10,7 +10,7 @@ layout {
                 pipe_agents_format     "{output}"
                 pipe_agents_rendermode "raw"
                 mode_locked          ""
-                mode_normal          "#[fg=#1F1F28,bg=#E6C384,bold] {name} #[fg=#727169] Ctrl g: lock  "
+                mode_normal          "#[fg=#1F1F28,bg=#E6C384,bold] {name} #[fg=#727169] Ctrl q: quit hub · Ctrl g: lock  "
                 mode_default_to_mode "normal"
                 tab_active    "#[fg=#DCD7BA,bold] {name} "
                 tab_normal    "#[fg=#727169] {name} "
