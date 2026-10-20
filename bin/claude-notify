@@ -49,8 +49,7 @@ claude_pid() {
 
 # No notice while the selected Ghostty tab, with Ghostty in front, shows this agent (Alex; the
 # zellij pane in that tab does not matter): its own tab (`claude attach`, its zellij session,
-# or the terminal of an interactive session), or the hub while the agent is in its middle
-# column (the target names the agent id, or the session id for an interactive agent).
+# or the terminal of an interactive session), or the hub, whose list shows every agent.
 if [[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
   selected=$(wtl_gh_tabs | awk -F'\t' '$2 == "true" && $3 == "true" { print $1; exit }')
   tabs=""
@@ -62,12 +61,7 @@ if [[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
     tty=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
     [[ -n "$tty" && "$tty" != "??" ]] && tabs=$(wtl_gh_tab_for_tty "$tty" || true)
   fi
-  if wtl_hub_live; then
-    shown=$(cut -f1 "$(wtl_hub_target_file agent)" 2>/dev/null)
-    if [[ -n "$shown" && ("$shown" == "$sid" || "$shown" == "${sid:0:8}" || "$shown" == "$(basename "${CLAUDE_JOB_DIR:-none}")") ]]; then
-      tabs+=$'\n'$(wtl_gh_tab_for_session "$WT_HUB_SESSION" || true)
-    fi
-  fi
+  wtl_hub_live && tabs+=$'\n'$(wtl_gh_tab_for_session "$WT_HUB_SESSION" || true)
   [[ -n "$selected" ]] && grep -qxF "$selected" <<<"$tabs" && exit 0
 fi
 

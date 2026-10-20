@@ -45,8 +45,8 @@ Alex's to-do list, in his words (2026-10-19):
   open it again"); the "◆ hub" row is gone. Nothing opens in place over a suspended pane any
   more except files over review.
 - Notices: a click works now (Alex checked; wt-go lacked claude/zellij on launchd's PATH).
-  No notice while Ghostty is in front with the agent's tab selected (its own tab, or the hub
-  while it is in the middle column); the zellij pane does not matter (Alex). macOS stacks them (grouping
+  No notice while Ghostty is in front with the agent's own tab or the hub tab selected (the hub
+  counts for every agent); the zellij pane does not matter (Alex). macOS stacks them (grouping
   Automatic). Turn chains of gone agents are pruned (claude-turn-snapshot --prune).
 
 ## Other open items
