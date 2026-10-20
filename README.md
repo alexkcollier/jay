@@ -123,8 +123,7 @@ is live at once. Every step can run again safely.
 - macOS notices (claude-notify): none while Ghostty is in front with a tab that shows the agent
   selected: its own tab (`claude attach`/`c`, its zellij session, an interactive session's
   terminal) or the hub, whose list shows every agent. A click brings Ghostty to the front and
-  shows the
-  agent in the hub (or its own tab); the click's output goes to `claude-notify.log`.
+  shows the agent in the hub (or its own tab); the click's output goes to `claude-notify.log`.
 - Review ⇄ files: `e` in tuicr (NORMAL or SELECT mode) shows files over review, `e` (or `q`) in
   yazi goes back. tuicr keeps running under yazi. tuicr's own `e` (exclude filter) is not
   available in the hub; its `i` (include filter) and `:` commands still work. The pane title
