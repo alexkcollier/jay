@@ -37,9 +37,39 @@ esac
 
 [[ -n "${WT_NOTIFY_LOG:-}" ]] && printf '%s %s %s %s bg=%s\n' "$(date '+%F %T')" "$event" "$type" "$cwd" "${CLAUDE_JOB_DIR:+yes}" >>"$WT_NOTIFY_LOG"
 
-# Notices only while Ghostty is not the app in front (Alex): in Ghostty the hub's list and the
-# tabs show the agents.
-[[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]] && exit 0
+claude_pid() {
+  local p=${CLAUDE_PID:-$PPID} comm
+  while [[ -n "$p" && "$p" -gt 1 ]]; do
+    comm=$(ps -o comm= -p "$p" 2>/dev/null)
+    [[ "$comm" == *claude* ]] && { printf '%s\n' "$p"; return 0; }
+    p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
+  done
+  return 1
+}
+
+# No notice while the selected Ghostty tab, with Ghostty in front, shows this agent (Alex; the
+# zellij pane in that tab does not matter): its own tab (`claude attach`, its zellij session,
+# or the terminal of an interactive session), or the hub while the agent is in its middle
+# column (the target names the agent id, or the session id for an interactive agent).
+if [[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
+  selected=$(wtl_gh_tabs | awk -F'\t' '$2 == "true" && $3 == "true" { print $1; exit }')
+  tabs=""
+  if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
+    tabs=$(wtl_gh_tab_for_command "^claude attach (${sid:0:8}|$(basename "$CLAUDE_JOB_DIR"))" || true)
+  elif wtl_in_zellij; then
+    tabs=$(wtl_gh_tab_for_session "$ZELLIJ_SESSION_NAME" || true)
+  elif pid=$(claude_pid); then
+    tty=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
+    [[ -n "$tty" && "$tty" != "??" ]] && tabs=$(wtl_gh_tab_for_tty "$tty" || true)
+  fi
+  if wtl_hub_live; then
+    shown=$(cut -f1 "$(wtl_hub_target_file agent)" 2>/dev/null)
+    if [[ -n "$shown" && ("$shown" == "$sid" || "$shown" == "${sid:0:8}" || "$shown" == "$(basename "${CLAUDE_JOB_DIR:-none}")") ]]; then
+      tabs+=$'\n'$(wtl_gh_tab_for_session "$WT_HUB_SESSION" || true)
+    fi
+  fi
+  [[ -n "$selected" ]] && grep -qxF "$selected" <<<"$tabs" && exit 0
+fi
 
 [[ -x "$NOTIFIER" ]] || exit 0
 IFS=$'\t' read -r client repo branch top < <(wtl_describe "${cwd:-$PWD}")

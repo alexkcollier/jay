@@ -120,7 +120,9 @@ is live at once. Every step can run again safely.
   here) and it keeps running; Enter or a new pick opens it again. When an agent cannot be
   opened (its worktree is gone), its error stays in the middle column. Files (yazi) cover
   review; `q` in yazi brings review back.
-- macOS notices (claude-notify): only while Ghostty is not the app in front. A click shows the
+- macOS notices (claude-notify): none while Ghostty is in front with a tab that shows the agent
+  selected: its own tab (`claude attach`/`c`, its zellij session, an interactive session's
+  terminal) or the hub while the agent is in the middle column. A click shows the
   agent in the hub (or its own tab); the click's output goes to `claude-notify.log`.
 - Review ⇄ files: `e` in tuicr (NORMAL or SELECT mode) shows files over review, `e` (or `q`) in
   yazi goes back. tuicr keeps running under yazi. tuicr's own `e` (exclude filter) is not
