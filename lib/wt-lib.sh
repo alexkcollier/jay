@@ -219,6 +219,11 @@ wtl_session_for_worktree() {
   return 1
 }
 
+# The short id in the output $1 of `claude --bg` ("backgrounded · <short id> · <name> ...").
+wtl_bg_id() {
+  grep -oE 'backgrounded · [0-9a-f]{8}' <<<"$1" | grep -oE '[0-9a-f]{8}$' | tail -1
+}
+
 # --- Hub panes (zellij session "hub"): hub Claude ⇄ agent viewer, review ⇄ files ---
 # One pane in each column. The agent viewer opens in place over the hub Claude, and files in
 # place over review: zellij keeps the pane under it suspended and shows it again when the top
@@ -318,8 +323,10 @@ wtl_hub_role_ready() {
   return 1
 }
 
+# Callers run it inside `IFS=$'\t' read … < <(…)`, whose IFS bash 3.2 passes on: split the pids
+# with the usual IFS.
 wtl_kill_children() {
-  local child
+  local child IFS=$' \t\n'
   for child in $(pgrep -P "$1"); do
     wtl_kill_children "$child"
     kill -TERM "$child" 2>/dev/null

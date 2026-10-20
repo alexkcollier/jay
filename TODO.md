@@ -27,7 +27,22 @@ Alex's to-do list, in his words (2026-10-19):
 - Key hints: keys in orange, labels in plain text; short hints grouped, `?` one key per line,
   all under 30 columns. `v`/`e` left the list: `e` in tuicr shows files, `e` in yazi goes back.
 
+## Done 2026-10-20
+
+- Lost viewer pane: a pick opened a viewer in place over the already suspended hub Claude; zellij
+  lost that pane, and every later pick went to it. Fixed in wtl_hub_role / wtl_hub_show (b4a580f).
+- Interactive picks show a note in the middle column; a failed attach keeps its error; the list
+  prunes dead agents every 10 minutes (b4a580f).
+- Background-first (Alex's choice): `c` starts every new session as a background agent and
+  attaches the terminal; `b` in the list moves an idle interactive session to the background;
+  ← in the hub viewer goes back to the hub Claude.
+
 ## Other open items
+
+- Background-first leaves idle agents running until removed (`d`). If they pile up: an
+  auto-stop (`claude stop`, the conversation stays) for agents idle for N hours.
+- Review does not reload when an agent finishes a turn (tuicr reads the chain at start). Asked
+  Alex 2026-10-20: restart tuicr on a new turn, or a "N new turns · q" hint in the title.
 
 - Old turn chains are never pruned (`refs/wt-turns/*` and `~/.local/state/wt-turns/`). Build a prune for chains of removed agents and worktrees.
 - `wt step prune` candidates were listed but not removed. Never in one client repo (it would delete `main`).

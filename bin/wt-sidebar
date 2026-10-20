@@ -6,6 +6,7 @@
 # the hub row take the focus to the middle; Enter on a worktree takes it to review. n/N: new agent
 # here / in a new worktree  o: own Ghostty tab  t: review turns/commits
 # d: remove the agent or worktree (asks first)  a: hide/show idle repos and main checkouts
+# b: an idle interactive session goes on as a background agent (asks first)
 # p: prune dead agents (folder gone; asks first). The list also prunes them by itself, every
 # 10 minutes, with plain `claude rm` (it keeps an agent whose worktree has work to lose); log in
 # ~/.local/state/wt-hub-prune.log.
@@ -249,19 +250,74 @@ new_agent() {
     say "Starting an agent in $repo/${branch##*/}..."
     out=$(cd "$top" && claude --bg --name "$(wtl_tab_name "$repo" "$branch")" 2>&1)
   fi
-  # `claude --bg` prints "backgrounded · <short id> · <name> ...".
-  agent=$(grep -oE 'backgrounded · [0-9a-f]{8}' <<<"$out" | grep -oE '[0-9a-f]{8}$' | tail -1)
+  agent=$(wtl_bg_id "$out")
   if [[ -z "$agent" ]]; then
     pause "Not started:
 
 $out"
     return 0
   fi
+  show_started "$agent"
+}
+
+# Show background agent $1 (short id), just started, in the hub: wt-go fails until
+# `claude agents` lists it.
+show_started() {
+  local i
   for i in $(seq 20); do
-    wt-go "$agent" >/dev/null 2>&1 && return 0
+    wt-go "$1" >/dev/null 2>&1 && return 0
     sleep 0.5
   done
-  pause "Started $agent, but the hub cannot show it yet. Pick it in the list."
+  pause "Started $1, but the hub cannot show it yet. Pick it in the list."
+}
+
+# Interactive session $1 (session id) goes on as a background agent, after a confirm. It must be
+# idle: it ends in its tab (SIGTERM; two copies must never write one conversation), and
+# `claude --bg --resume` continues the conversation under the same session id, so its short id
+# and turn chain stay. Its tab goes back to the shell. The hub then shows the agent.
+to_background() {
+  local sid=$1 agent name pid cwd out short i
+  agent=$(agent_json "$sid")
+  [[ -n "$agent" ]] || return 0
+  name=$(jq -r '.name // .sessionId[0:8]' <<<"$agent")
+  if [[ "$(jq -r .kind <<<"$agent")" == background ]]; then
+    pause "\"$name\" is already a background agent."
+    return 0
+  fi
+  if [[ "$sid" == "$(jq -r '.sessionId // ""' "$STATE/wt-hub.json" 2>/dev/null)" ]]; then
+    pause "This is the hub Claude. It stays in the hub."
+    return 0
+  fi
+  if [[ "$(jq -r '.status // ""' <<<"$agent")" != idle ]]; then
+    pause "\"$name\" is working or waits for you. Try again when it is idle."
+    return 0
+  fi
+  pid=$(jq -r '.pid // empty' <<<"$agent")
+  cwd=$(jq -r .cwd <<<"$agent")
+  [[ -n "$pid" ]] || return 0
+  confirm "Continue \"$name\" as a background agent?
+
+It ends in its own tab and goes on in the background with the same conversation. Its tab goes back to the shell: close it, or run c there for a new agent." "y: continue" || return 0
+  kill -TERM "$pid" 2>/dev/null
+  for i in $(seq 40); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.25
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    pause "\"$name\" did not end. Nothing changed."
+    return 0
+  fi
+  out=$(cd "$cwd" && claude --bg --resume "$sid" 2>&1)
+  short=$(wtl_bg_id "$out")
+  if [[ -z "$short" ]]; then
+    pause "\"$name\" ended, but it did not start in the background:
+
+$out
+
+claude --bg --resume $sid tries again."
+    return 0
+  fi
+  show_started "$short"
 }
 
 # The key hints under the list, keys in the headings' orange and labels in the plain text color
@@ -278,6 +334,7 @@ ${KEY}n${OFF}      new agent here
 ${KEY}N${OFF}      new worktree + agent
 ${KEY}o${OFF}      own Ghostty tab
 ${KEY}d${OFF}      remove agent/worktree
+${KEY}b${OFF}      session to background
 ${KEY}t${OFF}      turns ⇄ commits
 ${KEY}a${OFF}      hide/show idle repos
 ${KEY}p${OFF}      prune dead agents
@@ -314,11 +371,11 @@ say() {
   printf '\n%s\n\n' "$1" | fold -s -w "$(( ${cols:-40} > 10 ? ${cols:-40} - 1 : 40 ))"
 }
 
-# Ask $1 and return 0 when the answer is y.
+# Ask $1 and return 0 when the answer is y; $2 labels y (default "y: remove").
 confirm() {
   local answer
   say "$1"
-  printf 'y: remove   other key: cancel\n'
+  printf '%s   other key: cancel\n' "${2:-y: remove}"
   read -rsn1 answer </dev/tty
   [[ "$answer" == y ]]
 }
@@ -341,7 +398,7 @@ remove() {
       name=$(jq -r '.name // .id' <<<"$agent")
       short=$(jq -r '.id // empty' <<<"$agent")
       if [[ "$(jq -r .kind <<<"$agent")" != background || -z "$short" ]]; then
-        pause "\"$name\" is an interactive session. Close it in its own tab."
+        pause "\"$name\" is an interactive session. Close it in its own tab, or b: make it a background agent."
         return 0
       fi
       confirm "Remove agent \"$name\" ($short)?
@@ -437,6 +494,7 @@ case ${1:-} in
   --view) shift; view "$@"; exit 0 ;;
   --remove) shift; remove "$@"; exit 0 ;;
   --new) shift; new_agent "$@"; exit 0 ;;
+  --bg) [[ "${2:-}" == ag ]] && to_background "$3"; exit 0 ;;
   --toggle) wtl_hub_locked wtl_hub_toggle_review; exit 0 ;;
   --files) wtl_hub_locked wtl_hub_show_files; exit 0 ;;
   --idle) if [[ -f "$HIDE_IDLE" ]]; then rm -f "$HIDE_IDLE"; else : >"$HIDE_IDLE"; fi; exit 0 ;;
@@ -500,6 +558,7 @@ rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=
   --footer="$(footer)" --color=footer:-1,pointer:173,bg+:238 \
   --bind '?:transform-footer(wt-sidebar --footer --toggle)' \
   --bind 'd:execute(wt-sidebar --remove {1} {2})+reload-sync(wt-sidebar --rows)+clear-screen' \
+  --bind 'b:execute(wt-sidebar --bg {1} {2})+reload-sync(wt-sidebar --rows)+clear-screen' \
   --bind 'n:execute(wt-sidebar --new here {1} {2})+reload-sync(wt-sidebar --rows --fresh)+clear-screen' \
   --bind 'N:execute(wt-sidebar --new worktree {1} {2})+reload-sync(wt-sidebar --rows --fresh)+clear-screen' \
   --bind 'enter:execute-silent(wt-sidebar --act {1} {2} --focus)+reload-sync(wt-sidebar --rows)' \

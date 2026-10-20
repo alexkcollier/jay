@@ -27,6 +27,14 @@ edit is live at once.
 - Never replace a suspended pane in place on the live hub; wait until it is visible.
 - Never write zellij's `permissions.kdl` yourself; a plugin asks for its permissions in the pane.
 - Bash: `if …; fi >file` truncates the file before the condition reads it.
+- Bash 3.2: `IFS=$'\t' read … < <(f)` runs `f` with that IFS, so `$(…)` lists in `f` do not split
+  on newlines. Set `local IFS=$' \t\n'` in such functions.
+- Claude: `claude attach` turns into the agent view (`claude agents`, same process) on ←.
+  `claude rm` keeps an agent while its recorded worktree is on disk (no WorktreeRemove hook
+  here) or has unpushed work; its transcript stays. `claude --bg --resume <session-id>` continues
+  an ended interactive session in the background with the same ids.
+- Test Claude sessions in a pty with every CLAUDE*/ANTHROPIC* variable unset: an inherited
+  `CLAUDE_CODE_CHILD_SESSION` turns off the transcript and hides the session from `claude agents`.
 - Mod: `cd mod && claude plugin test . && claude plugin validate .`; it loads from its folder,
   edits apply at the next session start or `/reload-plugins`.
 - Commits: no Claude-Session trailer, no ticket ids.

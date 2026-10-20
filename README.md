@@ -8,7 +8,7 @@ agent's turns, yazi for files). Built on [worktrunk](https://github.com/max-sixt
 
 | Path | Installed as | What |
 |---|---|---|
-| `bin/` | `~/.local/bin/<name>` (symlinks) | `wt-hub`, `wt-sidebar`, `wt-hub-pane`, `wt-go`, `wt-open`, `wt-new`, `wt-all`/`wt-pick`, `wt-agents`, `wt-setup`, `wt-hub-edit`, `wt-hub-keys`, `claude-notify`, `claude-turn-snapshot` |
+| `bin/` | `~/.local/bin/<name>` (symlinks) | `c`, `wt-hub`, `wt-sidebar`, `wt-hub-pane`, `wt-go`, `wt-open`, `wt-new`, `wt-all`/`wt-pick`, `wt-agents`, `wt-setup`, `wt-hub-edit`, `wt-hub-keys`, `claude-notify`, `claude-turn-snapshot` |
 | `lib/wt-lib.sh` | `~/.local/lib/wt-lib.sh` | shared helpers (Ghostty, zellij, hub panes) |
 | `mod/` | `~/mods/wt-hub` (folder marketplace `alex-wt-hub`) | Claude Code mod: `/wt`, toasts, status line |
 | `config/worktrunk/config.toml` | `~/.config/worktrunk/config.toml` | worktree path, `pre-start = "wt-setup"`, Task column, aliases |
@@ -82,8 +82,10 @@ is live at once. Every step can run again safely.
 - `wt hub` — open the hub tab (starts it fresh when it is not running or does not answer).
 - In the list: a pick of an agent (or "◆ hub") always moves the focus to the middle column; on a
   worktree, Enter moves it to review and a click keeps it in the list. ▸ (beside the agent) marks the agent in the
-  middle column. An interactive agent (not `bg`) runs in its own terminal: its pick stays in the
-  hub and acts like a worktree pick, with its turns in review; `o` goes to its Ghostty tab. `n` new idle agent in the row's worktree, `N` new worktree (asks the branch) +
+  middle column. An interactive agent (not `bg`) runs in its own terminal: the middle column
+  only says so, review shows its turns, `o` goes to its Ghostty tab, and `b` (idle only, after a
+  confirm) ends it there and continues it as a background agent with the same conversation
+  (`claude --bg --resume`). `n` new idle agent in the row's worktree, `N` new worktree (asks the branch) +
   idle agent (`wt new -a`); type the first prompt in the middle column. `o` own tab,
   `t` review turns ⇄ commits, `d` remove the agent (`claude rm`) or worktree (`wt remove`) after a confirm, `h`/`l`
   width, `a` hide/show idle repos, `p` prune dead agents, `r` reload, `?` all keys (one per line),
@@ -92,9 +94,12 @@ is live at once. Every step can run again safely.
   `~/Documents/projects`): `<root>/<client>/<repo>` under a heading for its client,
   `<root>/<repo>` under "Other" at the bottom. Under each repo: its worktrees, the main checkout
   first, and under each worktree its agents. An agent whose worktree was removed shows under a dim
-  "<branch> (gone)" row of its repo; agents in no repo show under "no repo" at the bottom. `p`
-  prunes the dead agents (background, folder gone, not running) with `claude rm` after a confirm
-  (their transcripts stay). A repo row acts as its main checkout (`N`, `o`, click). A main
+  "<branch> (gone)" row of its repo; agents in no repo show under "no repo" at the bottom. The
+  list prunes the dead agents (background, folder gone, not running) with plain `claude rm`
+  every 10 minutes (log `~/.local/state/wt-hub-prune.log`), and `p` does it now after a confirm.
+  Their transcripts stay. `claude rm` also removes the worktree Claude recorded for the agent,
+  which can differ from its folder; it keeps the agent when that worktree is on disk without a
+  WorktreeRemove hook, or has unpushed work. A repo row acts as its main checkout (`N`, `o`, click). A main
   checkout without an agent is idle, and so
   is a repo with only an idle main checkout: both are dim, and `a` hides them until you press `a`
   again.
@@ -109,7 +114,9 @@ is live at once. Every step can run again safely.
 - Panes (in `~/.config/zellij/config.kdl`, all sessions): `Ctrl g` then `h`/`l` column left/right,
   `1`/`2`/`3` list/middle/right column, `;` last pane.
 - One pane per column: a picked agent covers the hub Claude, files (yazi) cover review. Leave
-  the top program (detach, `q` in yazi) or pick the "◆ hub" row, and the pane under it comes back.
+  the top program (Ctrl+Z or ← in the agent, `q` in yazi) or pick the "◆ hub" row, and the pane
+  under it comes back. ← opens Claude's agent view elsewhere; in the hub the list is that view.
+  When an agent cannot be opened (its worktree is gone), its error stays in the middle column.
 - Review ⇄ files: `e` in tuicr (NORMAL or SELECT mode) shows files over review, `e` (or `q`) in
   yazi goes back. tuicr keeps running under yazi. tuicr's own `e` (exclude filter) is not
   available in the hub; its `i` (include filter) and `:` commands still work. The pane title
@@ -121,6 +128,10 @@ is live at once. Every step can run again safely.
 - Turn chains: the `claude-turn-snapshot` hooks (UserPromptSubmit, Stop) save the worktree at each
   turn as hidden commits under `refs/wt-turns/<agent8>/{base,head}`. They never touch the branch,
   the index or the files. A chain stays with its agent after a resume or `/clear`.
+- `c [claude --bg options] [prompt]` — Claude in this folder as a background agent, shown in this
+  terminal (`claude --bg`, then `claude attach`). Use it in place of plain `claude`: the hub can
+  show the agent too, and Ctrl+Z or closing the tab leaves it running. Plain `claude` stays an
+  interactive session of its terminal, which the hub cannot show.
 - `wt go <agent>` — show an agent (id or name) in the hub.
 - `wt new <branch> [-- prompt]` — new worktree, with a prompt a background agent.
 

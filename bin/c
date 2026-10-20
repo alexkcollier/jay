@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# c [claude --bg options] [prompt] — Claude in this folder as a background agent, shown here.
+# It starts `claude --bg` and attaches this terminal to it, so the hub can show the same agent.
+# Ctrl+Z, closing the tab or ← (agent view) leave it running; the hub list, `wt go` or
+# `claude attach` reach it again. Plain `claude` stays an interactive session of this terminal.
+set -uo pipefail
+source "$HOME/.local/lib/wt-lib.sh"
+
+out=$(claude --bg "$@" 2>&1)
+id=$(wtl_bg_id "$out")
+if [[ -z "$id" ]]; then
+  printf '%s\n' "$out" >&2
+  exit 1
+fi
+exec claude attach "$id"
