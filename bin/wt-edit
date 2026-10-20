@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# wt-edit <file or folder> — open it in your editor, in its project (its git root).
+# A folder opens its git root; a file opens its git root with the file in a buffer. Outside git
+# the folder (or the file's folder) is the project. The editor is $WT_EDITOR, else $VISUAL,
+# else $EDITOR, else nvim. A terminal editor runs in a new Ghostty tab in the project; a GUI
+# editor (VS Code, Cursor, Zed, Sublime, JetBrains) gets `<editor> <project> [file]` and opens
+# its own window. WT_EDITOR_GUI=1 or 0 overrides that guess.
+set -uo pipefail
+source "$HOME/.local/lib/wt-lib.sh"
+
+[[ -n "${1:-}" && "$1" != -h && "$1" != --help ]] || { sed -n '2,7s/^# \{0,1\}//p' "$0"; exit 0; }
+[[ -e "$1" ]] || { echo "wt-edit: no such file or folder: $1" >&2; exit 1; }
+
+if [[ -d "$1" ]]; then
+  dir=$(cd "$1" && pwd -P) file=""
+else
+  dir=$(cd "$(dirname "$1")" && pwd -P)
+  file="$dir/$(basename "$1")"
+fi
+root=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || root=$dir
+
+editor=${WT_EDITOR:-${VISUAL:-${EDITOR:-nvim}}}
+read -ra cmd <<<"$editor"
+gui=${WT_EDITOR_GUI:-}
+if [[ -z "$gui" ]]; then
+  case $(basename "${cmd[0]}") in
+    code | code-insiders | cursor | windsurf | zed | subl | idea | webstorm | pycharm | goland | rubymine | fleet) gui=1 ;;
+    *) gui=0 ;;
+  esac
+fi
+
+if [[ "$gui" == 1 ]]; then
+  (cd "$root" && nohup "${cmd[@]}" "$root" ${file:+"$file"} </dev/null >/dev/null 2>&1 &)
+  exit 0
+fi
+
+# A terminal editor: type `<editor> <file or .>` into a new tab in the project, so the tab's
+# shell stays there when the editor quits.
+arg=.
+if [[ -n "$file" ]]; then
+  arg=${file#"$root"/}
+  [[ "$arg" == -* ]] && arg="./$arg"
+fi
+wtl_gh_new_tab "$root" "$editor $(printf '%q' "$arg")" >/dev/null

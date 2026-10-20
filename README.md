@@ -8,11 +8,11 @@ agent's turns, yazi for files). Built on [worktrunk](https://github.com/max-sixt
 
 | Path | Installed as | What |
 |---|---|---|
-| `bin/` | `~/.local/bin/<name>` (symlinks) | `c`, `wt-hub`, `wt-sidebar`, `wt-hub-pane`, `wt-go`, `wt-open`, `wt-new`, `wt-all`/`wt-pick`, `wt-agents`, `wt-setup`, `wt-hub-keys`, `claude-notify`, `claude-turn-snapshot` |
+| `bin/` | `~/.local/bin/<name>` (symlinks) | `c`, `wt-hub`, `wt-sidebar`, `wt-hub-pane`, `wt-go`, `wt-open`, `wt-new`, `wt-all`/`wt-pick`, `wt-agents`, `wt-setup`, `wt-edit`, `wt-hub-keys`, `claude-notify`, `claude-turn-snapshot` |
 | `lib/wt-lib.sh` | `~/.local/lib/wt-lib.sh` | shared helpers (Ghostty, zellij, hub panes) |
 | `mod/` | `~/mods/wt-hub` (folder marketplace `alex-wt-hub`) | Claude Code mod: `/wt`, toasts, status line in any interactive session that turns it on (the hub no longer runs a Claude) |
 | `config/worktrunk/config.toml` | `~/.config/worktrunk/config.toml` | worktree path, `pre-start = "wt-setup"`, Task column, aliases |
-| `config/yazi/keymap.toml` | `~/.config/wt-hub/yazi/` (folder link) | hub-only yazi keys: `e` back to review |
+| `config/yazi/keymap.toml` | `~/.config/wt-hub/yazi/` (folder link) | hub-only yazi keys: `e` back to review, `o` open in your editor (`wt-edit`) |
 | `config/tuicr/config.toml` | `~/.config/tuicr/config.toml` | `q_quits`: in the hub's review pane `q` goes back (the pane starts tuicr again) |
 | `config/zellij/wt-hub.kdl` | `~/.config/zellij/layouts/wt-hub.kdl` | saved hub layout (`wt hub` writes its own copy) |
 | `config/claude-settings-hooks.json` | merged into `~/.claude/settings.json` by hand | Stop / UserPromptSubmit / Notification hooks |
@@ -131,7 +131,8 @@ is live at once. Every step can run again safely.
 - Review ⇄ files: `e` in tuicr (NORMAL or SELECT mode) shows files over review, `e` (or `q`) in
   yazi goes back. tuicr keeps running under yazi. tuicr's own `e` (exclude filter) is not
   available in the hub; its `i` (include filter) and `:` commands still work. The pane title
-  ends with the pane's keys (`e files · t commits`, `e review`).
+  ends with the pane's keys (`e files · t commits`, `e review`). `o` in yazi opens the hovered
+  file or folder in your editor, in its project: `wt-edit <path>` (below).
 - Review (tuicr) has two modes; the pane title starts with the mode. **turns**: the agent's turn
   chain, one commit per turn plus "between turns" commits for your own edits, opened on the last
   turn. **commits**: merge-base with `origin/HEAD`/`main`/`master` up to `HEAD`. `t` in tuicr (in
@@ -146,6 +147,12 @@ is live at once. Every step can run again safely.
   terminal (`claude --bg`, then `claude attach`). Use it in place of plain `claude`: the hub can
   show the agent too, and Ctrl+Z or closing the tab leaves it running. Plain `claude` stays an
   interactive session of its terminal, which the hub cannot show.
+- `wt-edit <file or folder>` — open it in your editor, in its project (git root; outside git its
+  folder). A folder opens the project; a file opens the project with the file in a buffer.
+  Editor: `$WT_EDITOR`, else `$VISUAL`, else `$EDITOR`, else nvim. A terminal editor runs in a
+  new Ghostty tab in the project (`<editor> .` or `<editor> <file>`); a GUI editor (VS Code,
+  Cursor, Zed, Sublime, JetBrains) gets `<editor> <project> [file]`. `WT_EDITOR_GUI=1|0`
+  overrides the guess.
 - `wt go <agent>` — show an agent (id or name) in the hub.
 - `wt new <branch> [-- prompt]` — new worktree, with a prompt a background agent.
 
