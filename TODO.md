@@ -42,8 +42,11 @@ Alex's to-do list, in his words (2026-10-19):
   starts it again as the newest version); no `q`.
 - No hub Claude (Alex: "i still don't see a point of hub claude"): the middle column is a layout
   pane running `wt-hub-pane agent` that never closes (placeholder; "you left this agent, Enter:
-  open it again"); the "◆ hub" row is gone; notices are skipped only for the agent in the
-  middle column. Nothing opens in place over a suspended pane any more except files over review.
+  open it again"); the "◆ hub" row is gone. Nothing opens in place over a suspended pane any
+  more except files over review.
+- Notices: a click works now (Alex checked; wt-go lacked claude/zellij on launchd's PATH).
+  Notices only while Ghostty is not the app in front (Alex). macOS stacks them (grouping
+  Automatic). Turn chains of gone agents are pruned (claude-turn-snapshot --prune).
 
 ## Other open items
 
@@ -52,9 +55,7 @@ Alex's to-do list, in his words (2026-10-19):
 - Review does not reload when an agent finishes a turn (tuicr reads the chain at start). Asked
   Alex 2026-10-20: restart tuicr on a new turn, or a "N new turns · q" hint in the title.
 
-- Old turn chains are never pruned (`refs/wt-turns/*` and `~/.local/state/wt-turns/`). Build a prune for chains of removed agents and worktrees.
 - `wt step prune` candidates were listed but not removed. Never in one client repo (it would delete `main`).
-- macOS notices (claude-notify) were never clicked live.
 - Test leftovers to remove after Alex agrees: scratch worktree `shop.turns-selftest` (chain 11112222) and the stray chain 60e27a52 in the shop repo.
 - `bin/wt-hub-edit` and the `wtl_nvim_*` helpers are left from the Neovim files pane (now yazi). Ask Alex before removing them.
 
