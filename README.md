@@ -131,7 +131,7 @@ is live at once. Every step can run again safely.
 - Review ⇄ files: `e` in tuicr (NORMAL or SELECT mode) shows files over review, `e` (or `q`) in
   yazi goes back. tuicr keeps running under yazi. tuicr's own `e` (exclude filter) is not
   available in the hub; its `i` (include filter) and `:` commands still work. The pane title
-  ends with the pane's keys (`e files · t commits`, `e review`). `o` in yazi opens the hovered
+  ends with the pane's keys (`e files · t commits`, `e review · o editor`). `o` in yazi opens the hovered
   file or folder in your editor, in its project: `wt-edit <path>` (below).
 - Review (tuicr) has two modes; the pane title starts with the mode. **turns**: the agent's turn
   chain, one commit per turn plus "between turns" commits for your own edits, opened on the last
