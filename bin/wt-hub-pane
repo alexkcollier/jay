@@ -3,7 +3,9 @@
 # The target is a line in ~/.local/state/wt-hub-<role>.target (wtl_hub_point writes it and stops
 # the running program, so the pane starts it again for the new target).
 # agent:  `claude attach` on the picked agent. It covers the hub Claude; when you leave the
-#         agent, the pane closes and the hub Claude comes back.
+#         agent, the pane closes and the hub Claude comes back. An interactive agent runs in
+#         its own terminal tab: the pane says so. When attach fails at once (say the agent's
+#         worktree is gone), its error stays on screen until the next pick or Enter.
 # review: tuicr in one of two modes (wt-hub-review.mode), switched with `t` (wt-hub-keys) or `t`
 #         in the list; the title starts with the mode.
 #         turns: the agent's turn chain (refs/wt-turns/<agent id or session8>), else the newest
@@ -25,11 +27,12 @@ trap 'wtl_hub_pane_gone "$role" $$' EXIT
 
 target() { cat "$target_file" 2>/dev/null; }
 
-# Programs stopped by a retarget can leave mouse modes or the other screen on.
+# Programs stopped by a retarget can leave mouse modes or the other screen on. With `keep`, the
+# text on screen stays.
 reset_screen() {
   printf '\e[?1000l\e[?1002l\e[?1003l\e[?1006l\e[?2004l\e[?1049l\e[?25h'
   stty sane 2>/dev/null
-  clear
+  [[ "${1:-}" == keep ]] || clear
 }
 
 # Wait until the target changes (0) or Enter is pressed (1).
@@ -91,11 +94,16 @@ branch_base() {
 
 # Run the role's program for target line $1 in the foreground.
 run() {
-  local id path session base
+  local id path session base kind name
   case $role in
     agent)
-      IFS=$'\t' read -r id path <<<"$1"
+      IFS=$'\t' read -r id path kind name <<<"$1"
       cd "$path" 2>/dev/null || cd "$HOME"
+      if [[ "$kind" == interactive ]]; then
+        printf '\n  %s runs in its own terminal tab.\n\n  o in the list: go to that tab.\n  Review shows its turns.\n  Enter: back to the hub Claude.\n' "$name"
+        wait_change "$1"
+        return 0
+      fi
       claude attach "$id" ;;
     review)
       IFS=$'\t' read -r path session <<<"$1"
@@ -136,6 +144,13 @@ while :; do
   started=$SECONDS mode=$(wtl_hub_mode)
   run "$now"
   rc=$?
+  if [[ "$role" == agent && "$(target)" == "$now" ]] && ((rc != 0 && SECONDS - started < 5)); then
+    reset_screen keep
+    printf '\n  Could not open this agent (see above).\n  Pick another agent, or Enter: back to the hub Claude.\n'
+    wait_change "$now" || exit 0
+    clear
+    continue
+  fi
   reset_screen
   [[ "$(target)" != "$now" ]] && continue
   if [[ "$role" == review ]]; then

@@ -6,7 +6,9 @@
 # the hub row take the focus to the middle; Enter on a worktree takes it to review. n/N: new agent
 # here / in a new worktree  o: own Ghostty tab  t: review turns/commits
 # d: remove the agent or worktree (asks first)  a: hide/show idle repos and main checkouts
-# p: prune dead agents (folder gone; asks first)
+# p: prune dead agents (folder gone; asks first). The list also prunes them by itself, every
+# 10 minutes, with plain `claude rm` (it keeps an agent whose worktree has work to lose); log in
+# ~/.local/state/wt-hub-prune.log.
 # r: reload  h/l: narrower/wider  ?: keys  q: quit  (e for files is a key of the review pane)
 # wt-sidebar --files: show files over review (e in the review pane, through wt-hub-keys).
 set -uo pipefail
@@ -43,6 +45,7 @@ rows() {
   fi
   local agents hub=""
   agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  (auto_prune "$agents" &) >/dev/null 2>&1
   [[ -f "$STATE/wt-hub.json" ]] && hub=$(jq -r '.sessionId // ""' "$STATE/wt-hub.json" 2>/dev/null)
   local inhub=false shown=""
   wtl_in_hub && inhub=true
@@ -68,7 +71,7 @@ rows() {
     def glyph: {input: (c("1;33") + "!"), failed: (c("31") + "✗"), working: (c("32") + "●"), idle: (c("2") + "○")}[.] + c("0");
     def narrow: [8986,8987,9001,9002,9193,9194,9195,9196,9200,9203,9725,9726,9748,9749,9800,9801,9802,9803,9804,9805,9806,9807,9808,9809,9810,9811,9855,9875,9889,9898,9899,9917,9918,9924,9925,9934,9940,9962,9970,9971,9973,9978,9981,9989,9994,9995,10024,10060,10062,10067,10068,10069,10071,10133,10134,10135,10160,10175,11035,11036,11088,11093,11904,11905,11906,11907,11908,11909,11910,11911,11912,11913,11914,11915,11916,11917,11918,11919,11920,11921,11922,11923,11924,11925,11926,11927,11928,11929,11931,11932,11933,11934,11935,11936,11937,11938,11939,11940,11941,11942,11943,11944,11945,11946,11947,11948,11949,11950,11951,11952,11953,11954,11955,11956,11957,11958,11959,11960,11961,11962,11963,11964,11965,11966,11967,11968,11969,11970,11971,11972,11973,11974,11975,11976,11977,11978,11979,11980,11981,11982,11983,11984,11985,11986,11987,11988,11989,11990,11991,11992,11993,11994,11995,11996,11997,11998,11999,12000,12001,12002,12003,12004,12005,12006,12007,12008,12009,12010,12011,12012,12013,12014,12015,12016,12017,12018,12019,12032,12033,12034,12035,12036,12037,12038,12039,12040,12041,12042,12043,12044,12045,12046,12047,12048,12049,12050,12051,12052,12053,12054,12055,12056,12057,12058,12059,12060,12061,12062,12063,12064,12065,12066,12067,12068,12069,12070,12071,12072,12073,12074,12075,12076,12077,12078,12079,12080,12081,12082,12083,12084,12085,12086,12087,12088,12089,12090,12091,12092,12093,12094,12095,12096,12097,12098,12099,12100,12101,12102,12103,12104,12105,12106,12107,12108,12109,12110,12111,12112,12113,12114,12115,12116,12117,12118,12119,12120,12121,12122,12123,12124,12125,12126,12127,12128,12129,12130,12131,12132,12133,12134,12135,12136,12137,12138,12139,12140,12141,12142,12143,12144,12145,12146,12147,12148,12149,12150,12151,12152,12153,12154,12155,12156,12157,12158,12159,12160,12161,12162,12163,12164,12165,12166,12167,12168,12169,12170,12171,12172,12173,12174,12175,12176,12177,12178,12179,12180,12181,12182,12183,12184,12185,12186,12187,12188,12189,12190,12191,12192,12193,12194,12195,12196,12197,12198,12199,12200,12201,12202,12203,12204,12205,12206,12207,12208,12209,12210,12211,12212,12213,12214,12215,12216,12217,12218,12219,12220,12221,12222,12223,12224,12225,12226,12227,12228,12229,12230,12231,12232,12233,12234,12235,12236,12237,12238,12239,12240,12241,12242,12243,12244,12245,12272,12273,12274,12275,12276,12277,12278,12279,12280,12281,12282,12283] as $wide | explode | map(select(. < 4352 or (. > 4447 and . < 11904) or (. > 42191 and . < 44032) or (. > 55203 and . < 63744) or (. > 64255 and . < 65040) or (. > 65049 and . < 65072) or (. > 65135 and . < 65280) or (. > 65376 and . < 65504) or (. > 65510 and . < 126976)) | select(. != 65039) | select(. as $c | $wide | index([$c]) | not)) | implode;
     def rank: {input: 0, failed: 1, working: 2, idle: 3}[.];
-    def shown: $shown != "" and .id == $shown;
+    def shown: $shown != "" and (.id // .sessionId) == $shown;
     def title: if shown then c("1;36") + (.name | narrow) + c("0") else (.name | narrow) end;
     . as $wts
     | ($wts | map(.path) | sort_by(length) | reverse) as $paths
@@ -174,16 +177,19 @@ agent_json() {
 
 # Pick row kind $1 with id $2. An agent or the hub row always moves the focus to the middle
 # column (wtl_hub_show); a worktree with --focus (Enter) moves it to review. A repo row acts as
-# its main checkout. An interactive agent runs in its own terminal, so in the hub its pick acts
-# like its worktree's, with its turn chain (named after the session id) in review; `o` goes to
-# its tab.
+# its main checkout. An interactive agent runs in its own terminal, so in the hub the middle
+# column only says so, and review shows its turn chain (named after the session id); `o` goes
+# to its tab.
+pick_interactive() {
+  wtl_hub_show "$1" "$2" "$3" interactive && wtl_hub_target "$3" "${1:0:8}"
+}
+
 act() {
   local agent
   case $1 in
     ag) agent=$(agent_json "$2")
         if wtl_in_hub && [[ -n "$agent" && "$(jq -r .kind <<<"$agent")" != background ]]; then
-          wtl_hub_locked wtl_hub_target "$(jq -r .cwd <<<"$agent")" "${2:0:8}"
-          [[ "${3:-}" == --focus ]] && focus_column 2
+          wtl_hub_locked pick_interactive "$2" "$(jq -r '.name // .sessionId[0:8]' <<<"$agent")" "$(jq -r .cwd <<<"$agent")"
         else
           wt-go "$2" >/dev/null 2>&1
         fi ;;
@@ -377,16 +383,37 @@ $out"
   return 0
 }
 
-# Remove the dead agents, after a confirm: background agents whose folder is gone (a removed
-# worktree) and that do not run now. `claude rm` deletes the session.
-prune() {
-  local agents dead id name failed="" out
-  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
-  dead=$(jq -r --argjson gone "$(gone_dirs "$agents")" '.[]
+# The dead agents in agents JSON $1, as id<TAB>name: background agents whose folder is gone (a
+# removed worktree) and that do not run now.
+dead_agents() {
+  jq -r --argjson gone "$(gone_dirs "$1")" '.[]
     | select(.kind == "background" and .id != null and .state != "stopped"
         and (.state | IN("working", "blocked") | not) and (.status | IN("busy", "waiting") | not))
     | (.cwd // "") as $d | select($gone | index([$d]))
-    | [.id, (.name // .id)] | @tsv' <<<"$agents")
+    | [.id, (.name // .id)] | @tsv' <<<"$1"
+}
+
+# Remove the dead agents in agents JSON $1 without asking, at most every 10 minutes. `claude rm`
+# deletes the session (its transcript stays) and the worktree Claude recorded for it; it keeps
+# the agent when that worktree is still on disk without a WorktreeRemove hook, or has work to
+# lose. The worktree can differ from the folder: an agent that moved on keeps its first folder.
+auto_prune() {
+  local stamp="$STATE/wt-hub-prune.stamp" id name out
+  [[ -n "$(find "$stamp" -mmin -10 2>/dev/null)" ]] && return 0
+  touch "$stamp"
+  while IFS=$'\t' read -r id name; do
+    [[ -n "$id" ]] || continue
+    out=$(claude rm "$id" 2>&1)
+    printf '%s %s (%s): %s\n' "$(date '+%F %T')" "$id" "$name" "$(head -1 <<<"$out")" >>"$STATE/wt-hub-prune.log"
+  done < <(dead_agents "$1")
+  return 0
+}
+
+# Remove the dead agents, after a confirm. `claude rm` deletes the session.
+prune() {
+  local agents dead id name failed="" out
+  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  dead=$(dead_agents "$agents")
   if [[ -z "$dead" ]]; then
     pause "No dead agents: every agent's folder exists, or the agent still runs."
     return 0

@@ -265,12 +265,44 @@ wtl_hub_pane_gone() {
 }
 
 # "terminal_<id><TAB>pid" of the running wt-hub-pane for role $1; fails when there is none.
+# A recorded pane that zellij no longer lists is lost (an in-place pane opened over a suspended
+# one): its wt-hub-pane still runs and takes every pick, but nobody sees it. It is stopped and
+# forgotten. A pane of the role without a record is taken on when it is the only one and one
+# wt-hub-pane of the role runs in the hub. When zellij does not answer, the record is trusted.
 wtl_hub_role() {
-  local pane pid
-  IFS=$'\t' read -r pane pid 2>/dev/null <"$(wtl_hub_pane_file "$1")" || return 1
-  [[ -n "$pane" && -n "$pid" ]] || return 1
-  ps -o command= -p "$pid" 2>/dev/null | grep -q "wt-hub-pane $1" || return 1
-  printf 'terminal_%s\t%s\n' "$pane" "$pid"
+  local file pane="" pid="" lost="" panes pids
+  file=$(wtl_hub_pane_file "$1")
+  IFS=$'\t' read -r pane pid 2>/dev/null <"$file"
+  if [[ -n "$pane" && -n "$pid" ]] && ps -o command= -p "$pid" 2>/dev/null | grep -q "wt-hub-pane $1"; then
+    panes=$(wtl_hub_panes)
+    if [[ -z "$panes" ]] || jq -e --argjson id "$pane" 'select(.id == $id and (.exited | not))' <<<"$panes" >/dev/null; then
+      printf 'terminal_%s\t%s\n' "$pane" "$pid"
+      return 0
+    fi
+    lost=$pid
+    wtl_kill_children "$pid"
+    kill -TERM "$pid" 2>/dev/null
+    wtl_hub_pane_gone "$1" "$pid"
+  else
+    panes=$(wtl_hub_panes)
+  fi
+  pane=$(jq -r --arg role "$1" \
+    'select((.exited | not) and ((.terminal_command // "") | test("wt-hub-pane " + $role + "$"))) | .id' <<<"$panes")
+  [[ -n "$pane" && "$pane" != *$'\n'* ]] || return 1
+  pids=$(pgrep -P "$(pgrep -f "zellij --server .*/$WT_HUB_SESSION\$" | head -1)" -f "wt-hub-pane $1\$" | grep -vxF "${lost:-none}")
+  [[ -n "$pids" && "$pids" != *$'\n'* ]] || return 1
+  printf '%s\t%s\n' "$pane" "$pids" >"$file.$$" && mv "$file.$$" "$file"
+  printf 'terminal_%s\t%s\n' "$pane" "$pids"
+}
+
+# Wait up to 2 s until pane $1 (a terminal id) is shown, not suspended under another pane.
+wtl_hub_wait_shown() {
+  local i
+  for i in $(seq 20); do
+    wtl_hub_panes | jq -e --argjson id "$1" 'select(.id == $id and (.is_suppressed | not))' >/dev/null && return 0
+    sleep 0.1
+  done
+  return 1
 }
 
 wtl_hub_write_target() {
@@ -344,14 +376,18 @@ wtl_hub_locked() {
 
 # Show background agent $1 (short id) named $2 from folder $3 in the hub's middle column: the
 # viewer pane follows the new agent, or opens in place over the hub Claude. The focus goes there.
+# With $4 = interactive, $1 is a session id and the viewer only says where that agent runs.
 wtl_hub_show() {
   local id=$1 name=$2 cwd=$3 line viewer changed hub
   line=$(printf '%s\t%s' "$id" "$cwd")
+  [[ "${4:-}" == interactive ]] && line=$(printf '%s\tinteractive\t%s' "$line" "$name")
   if IFS=$'\t' read -r viewer changed < <(wtl_hub_point agent "$line"); then
     [[ "$changed" == 1 ]] && zellij -s "$WT_HUB_SESSION" action rename-pane -p "$viewer" "$name" >/dev/null 2>&1
   else
     hub=$(wtl_hub_claude_pane)
     [[ -n "$hub" ]] || return 1
+    # A pane opened in place over a suspended pane is lost, and takes the suspended one with it.
+    wtl_hub_wait_shown "$hub" || return 1
     wtl_hub_write_target agent "$line"
     viewer=$(zellij -s "$WT_HUB_SESSION" action new-pane --in-place --pane-id "terminal_$hub" --close-on-exit \
       --name "$name" --cwd "$cwd" -- "$HOME/.local/bin/wt-hub-pane" agent)
@@ -445,6 +481,7 @@ wtl_hub_show_files() {
   IFS=$'\t' read -r review _ < <(wtl_hub_role review) || return 0
   top=$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)
   [[ -n "$top" ]] || return 0
+  wtl_hub_wait_shown "${review#terminal_}" || return 0
   wtl_hub_write_target files "$top"
   pane=$(zellij -s "$WT_HUB_SESSION" action new-pane --in-place --pane-id "$review" --close-on-exit \
     --name "$(wtl_hub_pane_title files "$(wtl_hub_title "$top")")" --cwd "$top" -- "$HOME/.local/bin/wt-hub-pane" files)
