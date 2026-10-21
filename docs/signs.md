@@ -1,0 +1,66 @@
+# The list: rows and signs
+
+[README](../README.md) · [Working in the hub](working.md) · [Keys](keys.md#list) ·
+[Orchestrators](orchestrators.md#the-signs)
+
+## Rows
+
+The list shows each repo with a `.git` folder 1–2 levels under `$WT_ROOTS` (default
+`~/Documents/projects`; more roots with `:`).
+
+- `<root>/<client>/<repo>` goes under an orange heading for its client.
+- `<root>/<repo>` goes under "Other" at the bottom.
+- Under each repo (bold): its worktrees, the main checkout first (with a home sign); under each
+  worktree, its agents. A repo row acts as its main checkout (`N`, `o`, click).
+- A removed worktree that still has agents shows as a dim `<branch> (gone)` row of its repo.
+  `d` on it removes those agents.
+- Agents in no repo show under "no repo" at the bottom, with their folder.
+- A main checkout without an agent is idle, and so is a repo with only an idle main checkout:
+  both are dim. `a` hides them.
+- A worktree row: branch (last part, cut to the width), the git signs (always shown), then the
+  task note in the room left.
+- The hub Claude has its own row at the top, "◆ hub", not one in its folder.
+
+Agent rows update every few seconds, git signs every 30 s.
+
+## Signs
+
+The first row and the bar show the agent counts. The `?` footer has the Signs legend, with the
+real glyphs. The Octicons are Nerd Font private-use glyphs, so this file names them by code
+point.
+
+| Sign | Meaning |
+|---|---|
+| `▸` (bold cyan, agent name cyan) | the agent in the middle column |
+| `◆ hub` row (cyan) | the hub Claude, with its state sign |
+| `◇` cyan, before the name | the repo's orchestrator: the oldest agent with the orchestrator prompt in its main checkout (also when it is in a worktree it entered) |
+| `◇` yellow, before the name | a second agent with the orchestrator prompt in the same main checkout; remove it (`d`) |
+| `→ feat` (dim, after the age) | the agent from the main checkout is in that worktree now (`EnterWorktree`); it shows under its main checkout |
+| `!` bold yellow | agent needs input: it is blocked, or it asks you something |
+| `✗` red | agent failed |
+| `✓` bold magenta | done, unread: a turn ended after you last saw the agent |
+| `●` dim green | agent works: its process is busy |
+| `○` dim | idle: you saw it since its last turn, it is in the middle column now, or it waits for its first prompt |
+| `bg 12m` (dim, after the name) | background agent; age (m, h, d) |
+| Octicon home (U+F46D), before the branch | the main checkout |
+| Octicon diff (U+F440), yellow | uncommitted changes |
+| `↑N` cyan | commits to push (the branch is on the remote) |
+| `↓N` cyan | commits to pull (the branch is on the remote) |
+| `+N` green | commits not in the default branch (the branch is not on the remote) |
+| Octicon alert (U+F421), red | a merge into the default branch would conflict |
+| Octicon check (U+F42E), dim | safe to remove: the branch is empty or integrated (its name is dim too) |
+| Octicon git-merge (U+F419), red | conflicts now, or a rebase or merge in progress |
+
+## Agent states
+
+The agents sort in the order of their state signs in the table (`!`, `✗`, `✓`, `●`, `○`). An
+agent whose turn goes on while its process is idle (state `working`, status `idle`: it waits
+for workers it started) does not work: it is unread or idle. You see an agent when it comes
+into or leaves the middle column, when `wt go` shows it, and when its turn ends while its own
+Ghostty tab is in front. The Stop hook (`claude-notify`) records when a turn ends; not while the
+agent has background tasks, because its turn goes on when they end. An agent with no turn since
+this record started is idle. The list, `wt all`, `wt agents` and the mod use one rule
+(`wtl_agent_phases` in `lib/wt-lib.sh`). `c` and `d` use it too.
+
+"On the remote" means the branch has a tracking branch, or `origin/<branch>` exists (as for a PR
+pushed without `-u`). The list uses local refs only; it does not fetch.
