@@ -188,12 +188,14 @@ run() {
     review)
       IFS=$'\t' read -r path session <<<"$1"
       cd "$path" || return
-      # lazygit (WT_REVIEW=lazygit): its `t` toggles the mode itself and stops it.
+      # lazygit (WT_REVIEW=lazygit): its `t` toggles the mode itself and stops it. An agent
+      # with no chain yet gets its view at once: it fills when the first (running) turn comes.
       if [[ "$reviewer" == lazygit ]]; then
         if [[ "$(wtl_hub_mode)" == commits ]]; then
           "$HOME/.local/bin/wt-hub-lazygit" commits
         else
-          "$HOME/.local/bin/wt-hub-lazygit" turns "$(chain "$session")"
+          id=$(chain "$session")
+          "$HOME/.local/bin/wt-hub-lazygit" turns "${id:-${session:0:8}}"
         fi
         return
       fi

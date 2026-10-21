@@ -8,10 +8,13 @@
 #          .git/lazygit.yml), so the turns show as unmerged and the history under them as merged.
 #          Its index marks each file skip-worktree, so its empty work tree has no changes.
 #          A commit, branch or rebase in lazygit changes only the view, never your repo.
-#          Every 2 s the chain head goes into the view; lazygit sees the branch move and
+#          Every 2 s the chain's tip goes into the view: the running turn (refs/wt-turns/<id>/live,
+#          on top of head) while the agent works, else the head. At the end of the turn the live
+#          commit goes and the turn's commit takes its place. lazygit sees the branch move and
 #          refreshes by itself (git.autoDetectExternalChanges, 0.66). A refresh keeps the
 #          selected commit, so when the newest turn was selected, the pane types `<` (top) and
-#          the new turn is selected.
+#          the new turn is selected. A replaced live commit keeps its row. A chain that does not
+#          exist yet gives an empty view that fills when the chain comes.
 # commits: lazygit on the worktree itself, on its commits panel. lazygit refreshes on a new
 #          commit by itself.
 # Config:  CONFIG_DIR keeps lazygit's state (recent repos) out of yours; LG_CONFIG_FILE loads
@@ -61,11 +64,17 @@ position() {
     | sed -nE 's/.*─([0-9]+) of ([0-9]+)─╯.*/\1 \2/p' | head -1
 }
 
-# Put the chain's head and base into the view. The index comes first and is complete before the
+# The newest commit of the chain: the running turn (live, on top of head), else the last turn.
+# When the turn ends, the live commit goes and the turn's commit takes its place.
+tip() {
+  git rev-parse -q --verify "refs/wt-turns/$id/live" || git rev-parse -q --verify "refs/wt-turns/$id/head"
+}
+
+# Put the chain's tip and base into the view. The index comes first and is complete before the
 # branch moves: lazygit refreshes when the branch moves. Returns 1 when nothing changed.
 sync_view() {
   local head base index
-  head=$(git rev-parse -q --verify "refs/wt-turns/$id/head") || return 1
+  head=$(tip) || return 1
   base=$(git rev-parse -q --verify "refs/wt-turns/$id/base") || return 1
   [[ "$(git_view rev-parse -q --verify refs/heads/turns 2>/dev/null)" == "$head" ]] && return 1
   index="$view/.git/index.wt-hub"
@@ -87,11 +96,11 @@ sync_view || true
 # when lazygit ends (q, t, a retarget).
 (
   trap 'exit 0' TERM
-  last=$(git rev-parse -q --verify "refs/wt-turns/$id/head")
+  last=$(tip)
   while kill -0 $$ 2>/dev/null; do
     sleep 2
     read -r sel count < <(position) || sel=""
-    head=$(git rev-parse -q --verify "refs/wt-turns/$id/head")
+    head=$(tip)
     [[ "$head" == "$last" ]] && continue
     last=$head
     sync_view

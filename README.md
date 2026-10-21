@@ -413,13 +413,17 @@ See `notes/lazygit-review.md` for the study.
   `~/.local/state/wt-hub/lazygit/views/<id>`: a repo of its own that reads your repo's objects.
   Its branch `turns` is the chain head, `turns-base` the base. A turn is one row: a yellow `*`
   marks the turns, a green `*` the history under them. A commit, branch or rebase there changes
-  only the view, never your repo. With no chain, lazygit opens on the worktree.
+  only the view, never your repo. While the agent works, the top row is the running turn
+  (`turn, running · <prompt>`, the live ref). An agent with no chain yet gets an empty view
+  that fills at its first change. For a worktree pick with no chain, lazygit opens on the
+  worktree.
 - **commits**: lazygit on the worktree itself, with all its git actions (stage, commit, rebase).
   An agent can work in the same worktree at the same time.
 
-New turns come in without a restart: the pane copies the chain head into the view every 2 s, and
-lazygit refreshes when the branch moves. Your place stays. When the newest turn was selected,
-the new turn is selected (the pane types `<`).
+New turns come in without a restart: the pane copies the chain's newest commit (the running
+turn, else the head) into the view every 2 s, and lazygit refreshes when the branch moves. Your
+place stays. When the newest turn was selected, the new turn is selected (the pane types `<`).
+When the running turn changes or ends, its row stays where it is and shows the new state.
 
 lazygit reads your own `config.yml` (theme, diff renderer), then the hub's
 `~/.config/wt-hub/lazygit/hub.yml` over it: one tab group, list on top, no author or hash, and

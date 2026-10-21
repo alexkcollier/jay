@@ -58,6 +58,13 @@ if [[ "${1:-}" == --prune ]]; then
     done < <(git -C "$repo" for-each-ref --format='%(refname:lstrip=2)%09%(committerdate:unix)' 'refs/wt-turns/' 2>/dev/null \
       | awk -F'\t' '{ split($1, p, "/"); if ($2 > t[p[1]]) t[p[1]] = $2 } END { for (i in t) printf "%s\t%s\n", i, t[i] }')
   done
+  # lazygit views (wt-hub-lazygit) of agents that never got a chain and are gone.
+  for dir in "$HOME/.local/state/wt-hub/lazygit/views"/*; do
+    [[ -d "$dir" ]] || continue
+    id=$(basename "$dir")
+    [[ " $seen " == *" $id "* || -f "$state/$id.worktree" ]] && continue
+    grep -qxF "$id" <<<"$listed" || remove "" "$id" "no chain"
+  done
   # State files of sessions that never got a chain (no turn yet), on the same terms.
   for file in "$state"/*.worktree; do
     [[ -f "$file" ]] || continue
