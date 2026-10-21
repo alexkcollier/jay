@@ -28,9 +28,10 @@ mkdir -p "$STATE"
 # The git signs of the rows, one cell wide, as UTF-8 bytes because bash 3.2 has no \u: Nerd Font
 # Octicons (private use) for states; plain arrows ↑ ↓ (East Asian ambiguous, not wide) for
 # commits to push / pull, which the small repo-push/pull icons did not make clear (Alex); + for
-# commits not in main yet, so it does not read as a push.
+# commits not in main yet, so it does not read as a push. The Octicon home marks the main
+# checkout.
 G_DIFF=$'\xef\x91\x80' G_UP='+' G_ALERT=$'\xef\x90\xa1' G_OK=$'\xef\x90\xae'
-G_MERGE=$'\xef\x90\x99' G_PUSH=$'\xe2\x86\x91' G_PULL=$'\xe2\x86\x93'
+G_MERGE=$'\xef\x90\x99' G_PUSH=$'\xe2\x86\x91' G_PULL=$'\xe2\x86\x93' G_HOME=$'\xef\x91\xad'
 
 refresh_worktrees() {
   wt-all --json >"$CACHE.$$" 2>/dev/null && mv "$CACHE.$$" "$CACHE"
@@ -76,7 +77,7 @@ rows() {
     --argjson hideidle "$hideidle" --arg roots "$WT_ROOTS" --argjson gone "$(gone_dirs "$agents")" \
     --argjson fresh "$(fresh_ids "$agents")" \
     --argjson gl "$(jq -nc --arg diff "$G_DIFF" --arg up "$G_UP" --arg alert "$G_ALERT" --arg ok "$G_OK" \
-      --arg merge "$G_MERGE" --arg push "$G_PUSH" --arg pull "$G_PULL" '$ARGS.named')" \
+      --arg merge "$G_MERGE" --arg push "$G_PUSH" --arg pull "$G_PULL" --arg home "$G_HOME" '$ARGS.named')" \
     --argjson width "$width" --argjson now "$(date +%s)" '
     def c($code): "\u001b[" + $code + "m";
     def age($ms): (($now - ($ms / 1000)) / 60 | floor) as $m
@@ -148,11 +149,13 @@ rows() {
       def cells: gsub("\u001b\\[[0-9;]*m"; "") | length;
       def fit($n): if length > $n then .[:([$n - 1, 1] | max)] + "…" else . end;
       # A worktree row fits the list ($width): the git signs always show, a long branch name is
-      # cut, and the task note shows only in the room left.
+      # cut, and the task note shows only in the room left. The main checkout has a home sign
+      # before its branch.
       def treerow: signs as $s | ($s | cells | if . > 0 then . + 1 else 0 end) as $sw
-        | (.branch | split("/") | last | fit([$width - 2 - $sw, 6] | max)) as $b
-        | ($width - 2 - ($b | length) - $sw - 3) as $room
-        | "wt\t" + .path + "\t  " + (if .idle or (.git and safe) then c("2") else "" end) + $b + c("0")
+        | (if .main then $gl.home + " " else "" end) as $m
+        | (.branch | split("/") | last | fit([$width - 2 - ($m | length) - $sw, 6] | max)) as $b
+        | ($width - 2 - ($m | length) - ($b | length) - $sw - 3) as $room
+        | "wt\t" + .path + "\t  " + (if .idle or (.git and safe) then c("2") else "" end) + $m + $b + c("0")
           + (if $sw > 0 then " " + $s else "" end)
           + (if .task != "" and $room >= 6 then c("2") + " · " + (.task | narrow | fit($room)) + c("0") else "" end);
       def reporows: select((.idle and $hideidle) | not)
@@ -404,6 +407,7 @@ ${KEY}v${OFF}      hide/show review
 ${HEAD}Signs${OFF}
 ${ROW}▸${OFF} agent in the middle pane
 ${ROW}◆ hub${OFF} row: the hub Claude
+${G_HOME} main checkout
 ${YEL}${G_DIFF}${OFF} uncommitted changes
 ${CYN}${G_PUSH}1${OFF} commits to push (remote)
 ${CYN}${G_PULL}2${OFF} commits to pull (remote)

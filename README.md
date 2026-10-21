@@ -620,8 +620,8 @@ The list shows each repo with a `.git` folder 1–2 levels under `$WT_ROOTS` (de
 
 - `<root>/<client>/<repo>` goes under an orange heading for its client.
 - `<root>/<repo>` goes under "Other" at the bottom.
-- Under each repo (bold): its worktrees, the main checkout first; under each worktree, its agents.
-  A repo row acts as its main checkout (`N`, `o`, click).
+- Under each repo (bold): its worktrees, the main checkout first (with a home sign); under each
+  worktree, its agents. A repo row acts as its main checkout (`N`, `o`, click).
 - A removed worktree that still has agents shows as a dim `<branch> (gone)` row of its repo.
   `d` on it removes those agents.
 - Agents in no repo show under "no repo" at the bottom, with their folder.
@@ -643,6 +643,7 @@ point.
 | `●` green | agent works |
 | `○` dim | agent is idle |
 | `bg 12m` (dim, after the name) | background agent; age (m, h, d) |
+| Octicon home (U+F46D), before the branch | the main checkout |
 | Octicon diff (U+F440), yellow | uncommitted changes |
 | `↑N` cyan | commits to push (the branch is on the remote) |
 | `↓N` cyan | commits to pull (the branch is on the remote) |
