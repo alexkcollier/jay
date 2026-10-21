@@ -42,6 +42,16 @@ gone_dirs() {
   done | jq -Rsc 'split("\n") | map(select(. != ""))'
 }
 
+# The background agents in agents JSON $1 that wait for their first prompt, as a JSON array of
+# ids. `claude agents` calls such a new idle agent "blocked", as it does an agent that asks you
+# something; only its job state tells them apart.
+fresh_ids() {
+  local id jobs="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs"
+  jq -r '.[] | select(.kind == "background" and .state == "blocked") | .id // empty' <<<"$1" | while IFS= read -r id; do
+    [[ "$(jq -r '.needs // ""' "$jobs/$id/state.json" 2>/dev/null)" == "send a prompt to start" ]] && printf '%s\n' "$id"
+  done | jq -Rsc 'split("\n") | map(select(. != ""))'
+}
+
 rows() {
   local age=999
   [[ -s "$CACHE" ]] && age=$(($(date +%s) - $(stat -f %m "$CACHE")))
@@ -63,13 +73,16 @@ rows() {
   width=$((${width:-40} - 1))
   jq -rs --argjson agents "$agents" --arg shown "$shown" --arg hubid "$(wtl_hub_claude_id)" \
     --argjson hideidle "$hideidle" --arg roots "$WT_ROOTS" --argjson gone "$(gone_dirs "$agents")" \
+    --argjson fresh "$(fresh_ids "$agents")" \
     --argjson gl "$(jq -nc --arg diff "$G_DIFF" --arg up "$G_UP" --arg alert "$G_ALERT" --arg ok "$G_OK" \
       --arg merge "$G_MERGE" --arg push "$G_PUSH" --arg pull "$G_PULL" '$ARGS.named')" \
     --argjson width "$width" --argjson now "$(date +%s)" '
     def c($code): "\u001b[" + $code + "m";
     def age($ms): (($now - ($ms / 1000)) / 60 | floor) as $m
       | if $m < 60 then "\($m)m" elif $m < 2880 then "\($m / 60 | floor)h" else "\($m / 1440 | floor)d" end;
+    # An agent that waits for its first prompt ($fresh) is idle, not one that needs input.
     def phase: if .state == "failed" then "failed"
+      elif (.id // "") as $i | $fresh | index([$i]) then "idle"
       elif .state == "blocked" or .status == "waiting" then "input"
       elif .state == "working" or (.state == null and .status == "busy") then "working"
       else "idle" end;
