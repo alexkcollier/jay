@@ -48,6 +48,8 @@ the yazi keys and the tuicr config are symlinks into it, so an edit is live at o
   the size of the client that joined last, also after that client leaves (`bin/claude-clear`).
 - Test Claude sessions in a pty with every CLAUDE*/ANTHROPIC* variable unset: an inherited
   `CLAUDE_CODE_CHILD_SESSION` turns off the transcript and hides the session from `claude agents`.
+- A test that starts Claude sessions removes them at the end (`claude rm <id>`): without the
+  CLAUDE* variables, such a session shows in Alex's hub list. Only `wt new` workers stay.
 - Mod: `cd mod && claude plugin test . && claude plugin validate .`; it loads from its folder,
   edits apply at the next session start or `/reload-plugins`.
 - Commits: no Claude-Session trailer, no ticket ids.
