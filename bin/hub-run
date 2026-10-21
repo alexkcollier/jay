@@ -44,10 +44,11 @@ command_line() {
 }
 
 # A short name for a command line: the program, and its first word when that is a short
-# subcommand ("pnpm dev", "docker compose").
+# subcommand ("pnpm dev", "docker compose"); "run" and "exec" give way to the script after them.
 short_name() {
   jq -rn --arg c "$1" '$c | split(" ") | map(select(length > 0 and (test("^[A-Za-z_][A-Za-z0-9_]*=") | not)))
     | (if .[0] == "env" then .[1:] else . end)
+    | (if (.[1] == "run" or .[1] == "exec") and (.[2] // "" | test("^[^-]")) then [.[0]] + .[2:] else . end)
     | ((.[0] // "shell") | split("/") | last) as $a | (.[1] // "") as $b
     | if ($b | test("^[A-Za-z][A-Za-z0-9:_.-]{0,19}$")) then "\($a) \($b)" else $a end'
 }
@@ -111,7 +112,9 @@ stop_group() {
 
 # --- The tasks: panes of the tasks tab, with their processes and ports ---
 
-# One line per pane of the hub: root pid<TAB>tty<TAB>foreground pid<TAB>pids (,)<TAB>foreground command
+# One line per pane of the hub: root pid<TAB>tty<TAB>foreground pid<TAB>pids (,)<TAB>foreground command.
+# The pids are the root's process tree, not the processes on its tty: turbo, for one, runs each
+# dev server on a pty of its own.
 pane_procs() {
   local srv
   # -a: inside a hub pane (the list's tick, the launcher) the server is an ancestor, which
@@ -120,11 +123,16 @@ pane_procs() {
   [[ -n "$srv" ]] || return 0
   ps -ax -o pid=,ppid=,tpgid=,tty=,command= | awk -v srv="$srv" '
     { cmd = $0; sub(/^ *[0-9]+ +[0-9]+ +-?[0-9]+ +[^ ]+ +/, "", cmd)
-      pid[NR] = $1; tty[$1] = $4; tp[$1] = $3; c[$1] = cmd
-      if ($4 != "??") on[$4] = on[$4] (on[$4] == "" ? "" : ",") $1
+      tty[$1] = $4; tp[$1] = $3; c[$1] = cmd
+      kids[$2] = kids[$2] " " $1
       if ($2 == srv && $4 != "??") roots[$1] = 1 }
     END { for (r in roots) { fg = (tp[r] in c) ? tp[r] : r
-            printf "%s\t%s\t%s\t%s\t%s\n", r, tty[r], fg, on[tty[r]], c[fg] } }'
+            tree = r; todo = kids[r]
+            while (todo != "") {
+              n = split(todo, q, " "); todo = ""
+              for (i = 1; i <= n; i++) { tree = tree "," q[i]; todo = todo kids[q[i]] }
+            }
+            printf "%s\t%s\t%s\t%s\t%s\n", r, tty[r], fg, tree, c[fg] } }'
 }
 
 # Ports that pids listen on: pid<TAB>port lines, from one lsof call.
