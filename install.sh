@@ -385,7 +385,7 @@ check_zellij() {
               bind "3" { MoveFocus "right"; MoveFocus "right"; SwitchToMode "locked"; }
               bind ";" { FocusLastPane; SwitchToMode "locked"; }
               bind "Tab" { Run "$BIN/hub-run" "--switch" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }
-              bind "r" { Run "$BIN/hub-run" "--launcher" { floating true; close_on_exit true; x "20%"; y "35%"; width "60%"; height "4"; }; SwitchToMode "locked"; }
+              bind "r" { Run "$BIN/hub-run" "--launcher" { floating true; close_on_exit true; x "20%"; y "35%"; width "60%"; height "3"; }; SwitchToMode "locked"; }
           }
 KDL
   note "the hub expects default_mode \"locked\", with Ctrl g to normal mode and Ctrl q to quit"

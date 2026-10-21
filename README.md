@@ -164,7 +164,7 @@ it off. Without tab control:
        bind "3" { MoveFocus "right"; MoveFocus "right"; SwitchToMode "locked"; }
        bind ";" { FocusLastPane; SwitchToMode "locked"; }
        bind "Tab" { Run "/Users/<you>/.local/bin/hub-run" "--switch" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }
-       bind "r" { Run "/Users/<you>/.local/bin/hub-run" "--launcher" { floating true; close_on_exit true; x "20%"; y "35%"; width "60%"; height "4"; }; SwitchToMode "locked"; }
+       bind "r" { Run "/Users/<you>/.local/bin/hub-run" "--launcher" { floating true; close_on_exit true; x "20%"; y "35%"; width "60%"; height "3"; }; SwitchToMode "locked"; }
    }
    ```
 4. Start the hub: `wt hub`. At the first start, zellij asks for the bar's permissions: click
@@ -424,6 +424,7 @@ _wt_hub_run() {   # Enter puts its name before the line; the line comes back fro
   exit
 }
 bind '"\C-m": "\C-a_wt_hub_run \C-j"'
+PS1='❯ '   # one line: the pane title says where the command runs
 ```
 
 **Ports**: there is no port config. Vite and Next take the next free port by themselves; the hub
