@@ -306,7 +306,9 @@ a cyan `◇` before its name.
   into a worktree (`EnterWorktree`) when you tell it to make a change itself.
 - An agent from another folder that went into a worktree with `EnterWorktree` (Claude keeps that
   in the job's `state.json`) does not belong to the worktree: `d` on the worktree stops until it
-  leaves (`ExitWorktree`), and the prune does not remove it. One from a main checkout stays
+  leaves (`ExitWorktree`), and the prune does not remove it. `d` on the agent itself removes
+  the worktree and then the agent, with the same checks as `d` on the worktree: `claude rm`
+  keeps such an agent while its worktree is on disk. One from a main checkout stays
   under the main checkout with its `◇`, and `→ <branch>` after its age names the worktree it
   is in. Its pick shows that worktree in review.
 - Agents started in another way (`c`, `claude --bg`) get no prompt, but on main they get the `◇`.

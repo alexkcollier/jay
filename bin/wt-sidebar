@@ -104,11 +104,11 @@ rows() {
       ($wts | map(select(.main) | .path)) as $mains
     | ($wts | map({(.path): .branch}) | add // {}) as $branchof
     | ($agents | map(select(.state != "stopped")
-        | ($visit[.id // ""] // "") as $from
+        | ($visit[.id // ""].home // "") as $from
         | ($mains | index([$from]) != null) as $o
         | (.cwd as $d | $gone | any(. == $d)) as $g
         | . + {gone: ($g and ($o | not)), wt: (if $o then $from elif $g then "" else owner(.cwd) end),
-               away: (if $o then .cwd else "" end), phase: phase, orch: $o})) as $all
+               away: (if $o then $visit[.id].tree else "" end), phase: phase, orch: $o})) as $all
     # The hub Claude has its own row at the top ("◆ hub"), not one in its folder.
     | (first($all[] | select(.id == $hubid)) // null) as $hubag
     | ($all | map(select(.id != $hubid))) as $ag
@@ -468,9 +468,11 @@ pause() {
 # Remove the agent or worktree in row kind $1 with id $2, after a confirm. Never forced:
 # `claude rm` and `wt remove` stop on unpushed or uncommitted work and the list shows why. A
 # worktree goes with its idle background agents; a "(gone)" row removes its agents. An agent
-# that works or an interactive session stops both.
+# that works or an interactive session stops both. An agent in a worktree it entered goes with
+# that worktree: `claude rm` keeps it while the worktree is on disk. $3: such an agent's id
+# (from the agent row), which the worktree removal takes along.
 remove() {
-  local kind=$1 id=$2 agents agent out name short top main branch here idle pane tasks tab
+  local kind=$1 id=$2 agents agent out name short top main branch here idle pane tasks tab tree
   agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
   case $kind in
     ag)
@@ -480,6 +482,11 @@ remove() {
       short=$(jq -r '.id // empty' <<<"$agent")
       if [[ "$(jq -r .kind <<<"$agent")" != background || -z "$short" ]]; then
         pause "\"$name\" is an interactive session. Close it in its own tab, or b: make it a background agent."
+        return 0
+      fi
+      tree=$(visitors "$agents" | jq -r --arg id "$short" '.[$id].tree // empty')
+      if [[ -n "$tree" && -d "$tree" ]]; then
+        remove wt "$tree" "$short"
         return 0
       fi
       confirm "Remove agent \"$name\" ($short)?
@@ -495,7 +502,7 @@ $out" ;;
         pause "$top is a main checkout. The list never removes it."
         return 0
       fi
-      here=$(agents_in "$agents" "$top")
+      here=$(agents_in "$agents" "$top" "${3:-}")
       agents_busy "$here" && return 0
       idle=$(awk -F'\t' '$1 == "idle" { print "  " $3 }' <<<"$here")
       tasks=$(hub-run --worktree-tab "$top" --tasks 2>/dev/null)
@@ -541,28 +548,32 @@ Their transcripts stay." || return 0
 }
 
 # The background agents in agents JSON $1 that are in a worktree they entered (EnterWorktree),
-# as a JSON object id: the folder they came from. While they are in it, Claude keeps that
-# worktree (worktreePath) and their own folder (cwd) in the job's state.json. Such an agent
-# does not go with the worktree; from a main checkout, it is an orchestrator.
+# as a JSON object id: {home, tree}, the folder they came from and the worktree. While they
+# are in it, Claude keeps both in the job's state.json (cwd, worktreePath). Such an agent does
+# not go with the worktree; from a main checkout, it is an orchestrator. `claude agents` gives
+# the home as the folder of one that does not run now.
 visitors() {
   local IFS=$' \t\n' id files=()
   for id in $(jq -r '.[] | select(.kind == "background") | .id // empty' <<<"$1"); do
     [[ -f "$HOME/.claude/jobs/$id/state.json" ]] && files+=("$HOME/.claude/jobs/$id/state.json")
   done
   ((${#files[@]})) || { echo '{}'; return 0; }
-  jq -nc '[inputs | select(.worktreePath != null) | {(input_filename | split("/")[-2]): (.cwd // .originCwd // "")}] | add // {}' \
+  jq -nc '[inputs | select(.worktreePath != null)
+      | {(input_filename | split("/")[-2]): {home: (.cwd // .originCwd // ""), tree: .worktreePath}}] | add // {}' \
     "${files[@]}" 2>/dev/null || echo '{}'
 }
 
 # The agents in agents JSON $1 whose folder is $2 or in it, as what<TAB>id<TAB>name. what is open
 # (an interactive session: the list cannot remove it), busy (it works or waits for input), visit
-# (it entered the worktree, see visitors) or idle.
+# (it entered the worktree, see visitors; also when it does not run now) or idle. Agent id $3
+# (optional) is idle when it is a visit: d on that agent takes its worktree with it.
 agents_in() {
-  jq -r --arg p "$2" --argjson visit "$(visitors "$1")" '.[] | (.cwd // "") as $cwd
-    | select(.state != "stopped" and ($cwd == $p or ($cwd | startswith($p + "/"))))
+  jq -r --arg p "$2" --arg take "${3:-}" --argjson visit "$(visitors "$1")" '
+    def inside($d): $d == $p or ($d | startswith($p + "/"));
+    .[] | select(.state != "stopped" and (inside(.cwd // "") or inside($visit[.id // ""].tree // "")))
     | [(if .kind != "background" or .id == null then "open"
         elif (.state | IN("working", "blocked")) or (.status | IN("busy", "waiting")) then "busy"
-        elif $visit[.id] != null then "visit"
+        elif $visit[.id] != null and .id != $take then "visit"
         else "idle" end), (.id // ""), (.name // .id // .sessionId[0:8])] | @tsv' <<<"$1"
 }
 
@@ -582,7 +593,7 @@ $busy
 Interactive (close them in their own tabs, or b: make them background agents):
 $open
 }${visit:+
-Came in from another folder (EnterWorktree). Tell them to leave it first (ExitWorktree):
+Came in from another folder (EnterWorktree). Tell them to leave it first (ExitWorktree), or d on the agent removes it with the worktree:
 $visit
 }"
   return 0
