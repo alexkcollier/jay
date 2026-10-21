@@ -1,5 +1,5 @@
 {
-  "name": "alex-wt-hub",
+  "name": "wt-hub",
   "owner": { "name": "Alex Collier" },
   "description": "wt-hub: the worktree and agent hub's Claude Code mod (/wt, status line, toasts)",
   "plugins": [{ "name": "wt-hub", "source": "./" }]

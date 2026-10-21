@@ -84,7 +84,7 @@ describe('model', () => {
     expect(phaseOf('failed', 'idle')).toBe('failed')
   })
 
-  test('the phase from wt agents --json wins: it knows what Alex saw', () => {
+  test('the phase from wt agents --json wins: it knows what the user saw', () => {
     const rows = parseWorktrees(worktreeLines)
     const busy = parseAgents(JSON.stringify([hub, worker('working')]))
     const unread = parseAgents(JSON.stringify([hub, { ...worker('working'), status: 'idle', phase: 'unread' }]))
@@ -138,10 +138,10 @@ test('/wt go passes the whole name, without quotes, to wt-go', async ($, on) => 
   mock.clock(on, { now: T0 })
   const seen = host(on, { current: [] })
   await $.session.start({ cwd: SHOP, surface: 'terminal', isInteractive: true })
-  await wt($, 'go "des-44 work"')
-  expect(seen.calls.at(-1)).toEqual([`${HOME}/.local/bin/wt-go`, 'des-44 work'])
-  await wt($, 'go des-44 work')
-  expect(seen.calls.at(-1)).toEqual([`${HOME}/.local/bin/wt-go`, 'des-44 work'])
+  await wt($, 'go "login-44 work"')
+  expect(seen.calls.at(-1)).toEqual([`${HOME}/.local/bin/wt-go`, 'login-44 work'])
+  await wt($, 'go login-44 work')
+  expect(seen.calls.at(-1)).toEqual([`${HOME}/.local/bin/wt-go`, 'login-44 work'])
 })
 
 test('the hub polls, toasts state changes, draws the sidebar and reaches agents', async ($, on) => {

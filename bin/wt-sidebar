@@ -30,7 +30,7 @@ mkdir -p "$STATE"
 
 # The git signs of the rows, one cell wide, as UTF-8 bytes because bash 3.2 has no \u: Nerd Font
 # Octicons (private use) for states; plain arrows ↑ ↓ (East Asian ambiguous, not wide) for
-# commits to push / pull, which the small repo-push/pull icons did not make clear (Alex); + for
+# commits to push / pull, which the small repo-push/pull icons did not make clear; + for
 # commits not in main yet, so it does not read as a push. The Octicon home marks the main
 # checkout.
 G_DIFF=$'\xef\x91\x80' G_UP='+' G_ALERT=$'\xef\x90\xa1' G_OK=$'\xef\x90\xae'

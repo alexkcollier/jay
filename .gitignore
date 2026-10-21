@@ -1,3 +1,5 @@
 node_modules/
 .DS_Store
 __pycache__/
+# Your own notes and Claude instructions for this checkout (see CLAUDE.md)
+*.local.md

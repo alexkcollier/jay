@@ -61,7 +61,7 @@ if [[ "$kind" == background ]] && { wtl_in_hub || wtl_hub_live; }; then
   exit 0
 fi
 
-# Without the hub, the agent comes in front through a tab (Ghostty only, see wtl_gh_ok). Alex
+# Without the hub, the agent comes in front through a tab (Ghostty only, see wtl_gh_ok). The user
 # sees it there: not unread (wtl_agent_phases). In the hub, wtl_hub_show marks it.
 if ! wtl_gh_ok; then
   if [[ "$kind" == background ]]; then

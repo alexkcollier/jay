@@ -322,7 +322,7 @@ wtl_trust() {
 # --- Agent phases: the one rule of the list, wt all, wt agents and the mod (`wt agents --json`) ---
 # input    blocked, or it asks (status waiting)
 # failed   state failed
-# unread   a turn ended after Alex last saw the agent
+# unread   a turn ended after the user last saw the agent
 # working  the process works (status busy); state working with status idle (it waits for its
 #          workers) is not working
 # idle     seen since its last turn, shown in the middle column now, or new (no first prompt)
@@ -471,7 +471,7 @@ wtl_hub_wait_shown() {
 wtl_hub_write_target() {
   local file
   file=$(wtl_hub_target_file "$1")
-  # Alex saw the agent that leaves the middle column and the one that comes (wtl_agent_phases).
+  # The user saw the agent that leaves the middle column and the one that comes (wtl_agent_phases).
   if [[ "$1" == agent ]]; then
     wtl_mark seen "$(cut -f1 "$file" 2>/dev/null)"
     wtl_mark seen "${2%%$'\t'*}"

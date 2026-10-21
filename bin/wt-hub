@@ -141,7 +141,7 @@ if [[ "$where" != --here ]] && hub_answers && tab=$(wtl_gh_tab_for_session "$SES
   exit 0
 fi
 
-# Else in this terminal (Alex: no new tab by default). Not possible without a terminal (an
+# Else in this terminal (no new tab by default). Not possible without a terminal (an
 # agent, a script) or inside another zellij session (nested zellij): then a new tab.
 if [[ "$where" == --here ]] || [[ "$where" != --tab && -t 0 && -t 1 && -z "${ZELLIJ:-}" ]]; then
   hub_answers && exec zellij attach "$SESSION"

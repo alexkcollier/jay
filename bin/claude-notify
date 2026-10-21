@@ -51,7 +51,7 @@ claude_pid() {
   return 1
 }
 
-# No notice while the selected Ghostty tab, with Ghostty in front, shows this agent (Alex; the
+# No notice while the selected Ghostty tab, with Ghostty in front, shows this agent (the
 # zellij pane in that tab does not matter): its own tab (`claude attach`, its zellij session,
 # or the terminal of an interactive session), or the hub on its "hub" tab, whose list shows
 # every agent (on its tasks tab the list is not on screen).
@@ -66,7 +66,7 @@ if wtl_gh_ok && [[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
     tty=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
     [[ -n "$tty" && "$tty" != "??" ]] && tabs=$(wtl_gh_tab_for_tty "$tty" || true)
   fi
-  # In its own tab Alex sees the agent end its turn: it is not unread. (In the hub, the agent
+  # In its own tab the user sees the agent end its turn: it is not unread. (In the hub, the agent
   # in the middle column is seen; the list alone does not show the turn.)
   if [[ -n "$selected" ]] && grep -qxF "$selected" <<<"$tabs"; then
     [[ "$event" == Stop ]] && wtl_mark seen "$key"

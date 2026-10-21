@@ -6,7 +6,7 @@ agent's work (tuicr on its turns, or yazi on its files). Built on
 [worktrunk](https://github.com/max-sixty/worktrunk) and Claude Code background agents.
 
 Install with `./install.sh` ([Install](#install)). Open items and known faults:
-[TODO.md](TODO.md). Rules for edits: [CLAUDE.md](CLAUDE.md).
+[docs/open-items.md](docs/open-items.md). Rules for edits: [CLAUDE.md](CLAUDE.md).
 
 - [What the hub is](#what-the-hub-is)
 - [Requirements](#requirements)
@@ -148,7 +148,7 @@ it off. Without tab control:
    | the hub's worktrunk settings | `~/.config/worktrunk/config.toml`, copied when missing; else the missing keys are listed |
    | the hooks (SessionStart, Stop, UserPromptSubmit, PostToolUse, Notification) | added to `~/.claude/settings.json`, only the missing ones, after a backup |
    | zjstatus v0.25.0 (the bar) | `~/.local/share/wt-hub/`, sha256 checked |
-   | the mod (`/wt`), with `--with-mod` | `~/.local/share/wt-hub/mod`, marketplace `alex-wt-hub` |
+   | the mod (`/wt`), with `--with-mod` | `~/.local/share/wt-hub/mod`, marketplace `wt-hub` |
    | `wt-setup` as worktrunk's `pre-start` hook, with `--with-setup` | `~/.config/worktrunk/config.toml` (see `wt setup` in [Commands](#commands)) |
 
    It never replaces a file that it did not install: it lists it as a TODO (`--force`
@@ -951,7 +951,7 @@ config/
   worktrunk/config.toml        hub settings to copy into ~: worktree path <repo>.<branch>, Task column, task alias
   yazi/keymap.toml             hub-only yazi keys: e, O, W
 mod/
-  .claude-plugin/              plugin.json, marketplace.json (marketplace alex-wt-hub)
+  .claude-plugin/              plugin.json, marketplace.json (marketplace wt-hub)
   hooks/hooks.json             loads register.tsx
   hooks/register.tsx           /wt command, status line, toasts, dock pane
   hooks/model.ts               parsing and grouping of worktrees and agents
@@ -960,5 +960,5 @@ mod/
   tsconfig.json
 install.sh               installer: copies or links, configs, hooks, zjstatus; --check, --uninstall
 CLAUDE.md                rules for edits in this repo
-TODO.md                  the hub's to-do list and decisions
+docs/open-items.md       open items and known faults
 ```

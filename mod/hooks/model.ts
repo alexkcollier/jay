@@ -8,7 +8,7 @@ const text = (value: unknown) => (typeof value === 'string' ? value : '')
 const PHASES: readonly Phase[] = ['input', 'failed', 'unread', 'working', 'idle']
 
 // The phase comes from `wt agents --json` (wtl_agent_phases in wt-lib.sh), the rule of the list
-// and wt all, which also knows what Alex saw (unread). Without it, this fallback: state working
+// and wt all, which also knows what the user saw (unread). Without it, this fallback: state working
 // with status idle (an agent that waits for its workers) is not working.
 export function phaseOf(state: unknown, status: unknown, phase?: unknown): Phase {
   if (PHASES.includes(phase as Phase)) return phase as Phase

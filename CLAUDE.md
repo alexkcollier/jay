@@ -1,10 +1,20 @@
 # CLAUDE.md
 
-A shareable worktree and agent hub (see README.md); `install.sh` installs it. On Alex's machine
-the main checkout is the live install (`./install.sh --link`): `~/.local/bin`, `~/.local/lib`,
-the yazi keys and the tuicr config are symlinks into it, so an edit is live at once. Not linked:
-`~/.config/worktrunk/config.toml` (a real file with the client settings) and
-`~/.claude/settings.json`. The mod loads from `~/mods/wt-hub` (a link to `mod/`).
+A shareable worktree and agent hub (see README.md and docs/); `install.sh` installs it. For
+work on the hub itself, `./install.sh --link` makes the main checkout the live install: the
+scripts, the yazi keys, the lazygit settings and the tuicr config are symlinks into it, so an
+edit is live at once. `~/.config/worktrunk/config.toml` and `~/.claude/settings.json` are never
+links.
+
+Facts about your own machine (where the live install is, how your mod loads, your open items)
+go in `CLAUDE.local.md` and `TODO.local.md` in the repo root. Git ignores `*.local.md`, and
+Claude Code loads `CLAUDE.local.md` with this file.
+
+## Tests
+
+- Shell part: `tests/run.sh` (bash 3.2, no network; a fake HOME, stubs for claude and zellij).
+  `tests/run.sh <name>` runs the test files whose name has `<name>`.
+- Mod: see "Mod" below.
 
 ## Rules
 
@@ -13,8 +23,8 @@ the yazi keys and the tuicr config are symlinks into it, so an edit is live at o
   for worktrunk in `~/.config/worktrunk/config.toml`.
 - No machine-specific paths in the repo: the scripts use `$HOME/.local/...` (the install
   prefix) and find other tools on PATH.
-- A new script in `bin/`: run `./install.sh --link` in the main checkout for its link. A new
-  tool, config or hook the hub needs goes into `install.sh` (and README "Install") too.
+- A new script in `bin/`: with a `--link` install, run `./install.sh --link` again for its link.
+  A new tool, config or hook the hub needs goes into `install.sh` (and `docs/install.md`) too.
 - Test `install.sh` with a fake `HOME` (`HOME=<tmp> ./install.sh`), never against the real
   `~/.claude/settings.json`; `--check` is safe anywhere.
 - Edit with the Edit/Write tools (so `/diff` tracks changes), never python/sed via Bash.
@@ -22,7 +32,7 @@ the yazi keys and the tuicr config are symlinks into it, so an edit is live at o
   copy, then `mv` it over the file. Bash reads a running script lazily.
 - macOS `/bin/bash` is 3.2: empty arrays under `set -u` need `${arr[@]+...}`.
 - No wide (East Asian W) glyphs in sidebar rows: they shift lines in zellij.
-- Test zellij actions in a throwaway session, never Alex's live `hub`:
+- Test zellij actions in a throwaway session, never the live hub (the session `hub`):
   `env -u CLAUDE_JOB_DIR zellij attach --create-background <name> options --default-layout <kdl>`,
   drive it with a pty client from `python3 -I` (`pty.fork`, SGR mouse sequences for clicks and
   drags; focus by a click or `move-focus`), and stop it by killing its server process
@@ -51,7 +61,7 @@ the yazi keys and the tuicr config are symlinks into it, so an edit is live at o
 - Test Claude sessions in a pty with every CLAUDE*/ANTHROPIC* variable unset: an inherited
   `CLAUDE_CODE_CHILD_SESSION` turns off the transcript and hides the session from `claude agents`.
 - A test that starts Claude sessions removes them at the end (`claude rm <id>`): without the
-  CLAUDE* variables, such a session shows in Alex's hub list. Only `wt new` workers stay.
+  CLAUDE* variables, such a session shows in the user's hub list. Only `wt new` workers stay.
 - Mod: `cd mod && claude plugin test . && claude plugin validate .`; it loads from its folder,
   edits apply at the next session start or `/reload-plugins`.
 - Commits: no Claude-Session trailer, no ticket ids.

@@ -12,7 +12,7 @@
 #                                    there); else the hub's keys it lacks are listed
 #   ~/.claude/settings.json          the hub's hooks, only the missing ones (a backup first)
 #   ~/.local/share/wt-hub/           zjstatus v0.25.0 for the bar (sha256 checked)
-#   --with-mod                       also the Claude Code mod (/wt), marketplace alex-wt-hub
+#   --with-mod                       also the Claude Code mod (/wt), marketplace wt-hub
 #   --with-setup                     also worktrunk's pre-start = "wt-setup": in each new
 #                                    worktree, copy ignored files and install dependencies
 # It never changes a file it did not install (--force: replace it), and it never edits
@@ -65,8 +65,11 @@ tool() {
     need "$name not found: $how"
     return 0
   }
-  version=$("$path" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
-  if [[ -n "$min" && -n "$version" ]] && ! version_ge "$version" "$min"; then
+  # A program that fails or prints no version (a broken shim) must not stop the script.
+  version=$("$path" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1) || true
+  if [[ -z "$version" ]] && ! "$path" --version >/dev/null 2>&1; then
+    need "$name ($path) does not run: $how"
+  elif [[ -n "$min" && -n "$version" ]] && ! version_ge "$version" "$min"; then
     need "$name $version is older than $min: $how"
   else
     ok "$name ${version:-?}"
@@ -360,11 +363,19 @@ install_zjstatus() {
   fi
 }
 
+# The mod's marketplace as `claude plugin marketplace list` names it: wt-hub, or alex-wt-hub (its
+# old name; Claude keeps the name a marketplace had when it was added). Prints name<TAB>source.
+mod_marketplace() {
+  claude plugin marketplace list 2>/dev/null | awk '
+    $1 == "❯" { name = ($2 == "wt-hub" || $2 == "alex-wt-hub") ? $2 : ""; next }
+    name != "" && /Source:/ { sub(/^.*Source: /, ""); printf "%s\t%s\n", name, $0; exit }'
+}
+
 install_mod() {
-  local where
-  where=$(claude plugin marketplace list 2>/dev/null | awk '/alex-wt-hub/ { f = 1; next } f && /Source:/ { print; exit }')
-  if [[ -n "$where" ]]; then
-    ok "mod: marketplace alex-wt-hub is there (${where#*Source: })"
+  local name where
+  IFS=$'\t' read -r name where < <(mod_marketplace) || true
+  if [[ -n "${name:-}" ]]; then
+    ok "mod: marketplace $name is there ($where)"
     return 0
   fi
   if [[ $mode == check ]]; then
@@ -372,9 +383,9 @@ install_mod() {
     return 0
   fi
   put "$repo/mod" "$SHARE/mod"
-  claude plugin marketplace add "$SHARE/mod" >/dev/null && claude plugin install wt-hub@alex-wt-hub >/dev/null \
-    && did "mod wt-hub@alex-wt-hub (from $SHARE/mod)" \
-    || need "mod: claude plugin marketplace add $SHARE/mod && claude plugin install wt-hub@alex-wt-hub"
+  claude plugin marketplace add "$SHARE/mod" >/dev/null && claude plugin install wt-hub@wt-hub >/dev/null \
+    && did "mod wt-hub@wt-hub (from $SHARE/mod)" \
+    || need "mod: claude plugin marketplace add $SHARE/mod && claude plugin install wt-hub@wt-hub"
 }
 
 check_zellij() {
@@ -418,8 +429,10 @@ uninstall() {
   done
   dest="$HOME/.config/tuicr/config.toml"
   if [[ -e "$dest" || -L "$dest" ]] && is_ours "$dest"; then rm -f "$dest"; did "removed $dest"; fi
-  if claude plugin marketplace list 2>/dev/null | grep -q alex-wt-hub; then
-    need "the mod: claude plugin uninstall wt-hub@alex-wt-hub && claude plugin marketplace remove alex-wt-hub"
+  local name
+  IFS=$'\t' read -r name _ < <(mod_marketplace) || true
+  if [[ -n "${name:-}" ]]; then
+    need "the mod: claude plugin uninstall wt-hub@$name && claude plugin marketplace remove $name"
   fi
   rm -rf "$SHARE" && did "removed $SHARE (zjstatus, mod copy, list of installed files)"
   need "remove the hub's hooks (claude-notify, claude-turn-snapshot, hub-run --hook) from $SETTINGS"
