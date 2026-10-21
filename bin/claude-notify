@@ -26,9 +26,10 @@ case $event in
     text=$(jq -r '.message // ""' <<<"$input")
     ;;
   Stop)
-    # The hub's unread sign (wtl_agent_phases): the agent's turn ended now.
+    # The hub's unread sign (wtl_agent_phases): the agent's turn ended now. Not while it has
+    # background tasks: the turn goes on when they end.
     key=$(wtl_agent_key "$sid")
-    wtl_mark ended "$key"
+    jq -e '(.background_tasks // []) | length > 0' <<<"$input" >/dev/null || wtl_mark ended "$key"
     icon="✓" headline="Turn finished"
     text=$(jq -r '.last_assistant_message // ""' <<<"$input" | awk '
       /^(result|needs input|failed):/ { flagged = $0 }

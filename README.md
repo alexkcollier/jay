@@ -757,7 +757,7 @@ In `~/.local/state/`:
 | `wt-worktrees.ndjson` | cache of `wt all --json` (refreshed after 30 s) |
 | `wt-sidebar.<pid>.sock`, `.count`, `.sum`, `.help`, `.restart` | a running list: its fzf socket, row count, agent counts, `?` state, `r` flag |
 | `wt-turns/<id>.worktree`, `<id>.prompt` | the worktree of each turn chain; the prompt of the current turn |
-| `wt-hub/ended/<id>`, `wt-hub/seen/<id>` | empty files; the time of each is when the agent's last turn ended (Stop hook) and when you last saw the agent (unread sign); removed after 14 days |
+| `wt-hub/ended/<id>`, `wt-hub/seen/<id>` | empty files; the time of each is when the agent's last turn ended (Stop hook; not while the agent has background tasks) and when you last saw the agent (unread sign); removed after 14 days |
 | `wt-hub-prune.stamp` | time of the last automatic prune |
 | `wt-hub-prune.log` | each agent the list pruned, and each turn chain removed |
 | `claude-notify.log` | one line per notify hook call, and the output of notice clicks |
