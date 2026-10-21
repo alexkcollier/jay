@@ -306,8 +306,9 @@ a cyan `◇` before its name.
   into a worktree (`EnterWorktree`) when you tell it to make a change itself.
 - An agent from another folder that went into a worktree with `EnterWorktree` (Claude keeps that
   in the job's `state.json`) does not belong to the worktree: `d` on the worktree stops until it
-  leaves (`ExitWorktree`), and the prune does not remove it. One from a main checkout keeps its
-  `◇` in the worktree.
+  leaves (`ExitWorktree`), and the prune does not remove it. One from a main checkout stays
+  under the main checkout with its `◇`, and `→ <branch>` after its age names the worktree it
+  is in. Its pick shows that worktree in review.
 - Agents started in another way (`c`, `claude --bg`) get no prompt, but on main they get the `◇`.
 
 ### Review by turn
@@ -659,6 +660,7 @@ point.
 | `▸` (bold cyan, agent name cyan) | the agent in the middle column |
 | `◆ hub` row (cyan) | the hub Claude, with its state sign |
 | `◇` cyan, before the name | an orchestrator: an agent in a main checkout, or one from there in a worktree it entered |
+| `→ feat` (dim, after the age) | the orchestrator is in that worktree now (`EnterWorktree`); it shows under its main checkout |
 | `!` yellow | agent needs input |
 | `✗` red | agent failed |
 | `●` green | agent works |

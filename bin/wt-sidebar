@@ -100,12 +100,15 @@ rows() {
     | ($wts | map(.path) | sort_by(length) | reverse) as $paths
     | def owner($cwd): first($paths[] | select($cwd == . or ($cwd | startswith(. + "/")))) // "";
       # An orchestrator: an agent in a main checkout (set below), or one from there in a worktree
-      # it entered.
+      # it entered. That one stays under its main checkout, and .away is the folder it is in.
       ($wts | map(select(.main) | .path)) as $mains
+    | ($wts | map({(.path): .branch}) | add // {}) as $branchof
     | ($agents | map(select(.state != "stopped")
         | ($visit[.id // ""] // "") as $from
+        | ($mains | index([$from]) != null) as $o
         | (.cwd as $d | $gone | any(. == $d)) as $g
-        | . + {gone: $g, wt: (if $g then "" else owner(.cwd) end), phase: phase, orch: ($mains | index([$from]) != null)})) as $all
+        | . + {gone: ($g and ($o | not)), wt: (if $o then $from elif $g then "" else owner(.cwd) end),
+               away: (if $o then .cwd else "" end), phase: phase, orch: $o})) as $all
     # The hub Claude has its own row at the top ("◆ hub"), not one in its folder.
     | (first($all[] | select(.id == $hubid)) // null) as $hubag
     | ($all | map(select(.id != $hubid))) as $ag
@@ -137,7 +140,9 @@ rows() {
     | ($ag | map(select(.wt == "" and (.sessionId as $s | $housed | index([$s]) | not))) | byrank) as $stray
     | def lead($col): (" " * ($col - 2)) + (if shown then c("1;36") + "▸ " + c("0") else "  " end);
       def agrow($col; $tail): "ag\t" + .sessionId + "\t" + lead($col) + (.phase | glyph) + " " + title + " " + c("2") + $tail + c("0");
-      def bgage: (if .kind == "background" then "bg " else "" end) + age(.startedAt // 0);
+      # An orchestrator in a worktree it entered: "→ <branch>" of that worktree.
+      def away: if .away != "" then " → " + (($branchof[owner(.away)] // (.away | split("/") | last)) | split("/") | last | narrow) else "" end;
+      def bgage: (if .kind == "background" then "bg " else "" end) + age(.startedAt // 0) + away;
       # Git signs: conflicts now or a rebase/merge in progress, uncommitted
       # changes, commits to push / to pull when the branch is on the remote (its tracking branch
       # or origin/<branch>, as for a PR) else commits not in the default branch yet, a merge into
