@@ -8,6 +8,12 @@ the README of the "Cost" list below. tuicr stays the default. The study text bel
 written before that step. The patch in the review column got its own renderers later: see
 [7. The diff](#7-the-diff).
 
+Names: the project is now jay. This study keeps the names of its time: `wt-hub-lazygit` is now
+`jay-lazygit`, `wt-hub-pane` `jay-pane`, `wt-hub-keys` `jay-keys`, `wt-hub-diff` `jay-diff`,
+`wt-sidebar` `jay-sidebar`, `claude-turn-snapshot` `jay-snapshot`, `lib/wt-lib.sh`
+`lib/jay-lib.sh`, `WT_REVIEW` `JAY_REVIEW`, `WT_HUB_SESSION` `JAY_SESSION`, and
+`~/.config/wt-hub`, `~/.local/state/wt-hub` are `~/.config/jay`, `~/.local/state/jay`.
+
 This study answers six questions: can lazygit be the review pane of the hub, in place of tuicr
 or next to it? The evidence is the lazygit 0.66.2 source (tag `v0.66.2`), commands, and tests
 in throwaway zellij sessions with a fake HOME. The test repo is `shop`, with a real turn chain

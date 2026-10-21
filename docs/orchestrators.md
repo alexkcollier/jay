@@ -19,9 +19,9 @@
 ## What an orchestrator is
 
 An orchestrator is a background agent in a repo's main checkout that has the orchestrator
-prompt (`wtl_orchestrator_prompt` in `lib/wt-lib.sh`). It is the orchestrator of that repo, as
+prompt (`jay_orchestrator_prompt` in `lib/jay-lib.sh`). It is the orchestrator of that repo, as
 the hub Claude is for all repos. It plans, reads, reviews and answers questions, and it gives
-each change to a worker: a background agent in a new worktree (`wt new <branch> -t <task> --
+each change to a worker: a background agent in a new worktree (`jay new <branch> -t <task> --
 <prompt>`). So no work piles up on main, the main checkout stays free of work, and agents do not
 move between worktrees. The list marks an orchestrator with a cyan `◇` before its name.
 
@@ -63,12 +63,12 @@ The list adds this text to the agent's system prompt (`--append-system-prompt`),
 repo's name for `<repo>` and the path of its main checkout for `<main checkout>`:
 
 ```text
-You are the orchestrator of the repo <repo>, in its main checkout <main checkout>, in a worktree hub: a list of
-worktrees and Claude agents. Each worker is a background Claude session in its own git worktree
-(siblings named <repo>.<branch>). Plan, read, review and answer questions here; give each change to
-a worker. Keep the main checkout free of work.
+You are the orchestrator of the repo <repo>, in its main checkout <main checkout>, in jay, a worktree hub: a list
+of worktrees and Claude agents. Each worker is a background Claude session in its own git
+worktree (siblings named <repo>.<branch>). Plan, read, review and answer questions here; give each
+change to a worker. Keep the main checkout free of work.
 
-- New worker for a change: here, `wt new <branch> -t "<task>" -- <prompt>` (a new worktree
+- New worker for a change: here, `jay new <branch> -t "<task>" -- <prompt>` (a new worktree
   and a background agent in it). Give it a prompt it can act on alone: the goal, the files, how
   to test. Start workers only when the user asks or agrees.
 - Do not edit files in the main checkout, and do not use EnterWorktree: a change that you make
@@ -77,10 +77,14 @@ a worker. Keep the main checkout free of work.
 - Workers: `claude agents --json --all` (id, name, cwd, state, status); recent output:
   `claude logs <id>`; what a worker did per turn: `git log refs/wt-turns/<id>/base..refs/wt-turns/<id>/head`
   in its worktree. Send a prompt to a worker: the ListAgents and SendMessage tools.
-- Worktrees with git state and task notes: `wt list`.
+- Worktrees with git state and task notes: `wt list` (worktrunk).
 - Read the workers' worktrees in place; do not edit files in them. Never merge, and never remove
   worktrees or agents (`wt merge`, `wt remove`, `claude rm`), unless the user asks.
 ```
+
+`wt list`, `wt merge` and `wt remove` are worktrunk's own commands; `jay new` makes the worktree
+through worktrunk too. An orchestrator started before the rename keeps the old prompt (with
+`wt new`): the shim runs `jay new` for it.
 
 What each part tells the agent:
 
@@ -98,12 +102,12 @@ What each part tells the agent:
   them. It merges and removes only when you ask.
 
 The prompt's first words, "You are the orchestrator", are the mark that tells an orchestrator
-from another agent in the main checkout (`WT_ORCH_MARK`). See [The signs](#the-signs).
+from another agent in the main checkout (`JAY_ORCH_MARK`). See [The signs](#the-signs).
 
 ## How it makes workers
 
-The orchestrator runs `wt new <branch> -t "<task>" -- <prompt>` in the main checkout
-(`bin/wt-new`):
+The orchestrator runs `jay new <branch> -t "<task>" -- <prompt>` in the main checkout
+(`bin/jay-new`):
 
 1. `wt switch <branch> --no-cd --format=json` makes the worktree, with `--create` when the
    branch does not exist yet, locally or as `origin/<branch>` (`-b <base>`: the branch to start
@@ -120,7 +124,7 @@ turn off its transcript. A worker has no orchestrator prompt: it is a plain back
 its worktree. The repo is trusted already, because the orchestrator runs in it.
 
 You can make a worker yourself too: `N` on the repo row (an idle agent in a new worktree), or
-`wt new` in a shell.
+`jay new` in a shell.
 
 ## How it follows and steers workers
 
@@ -166,7 +170,7 @@ flow:
 | no `◇` | any other agent, also one in the main checkout without the prompt |
 | `→ <branch>` after the age | the orchestrator is in that worktree now (see below) |
 
-How the list finds the orchestrator (`wtl_jobs`, `wtl_orch_ranks`, `wtl_orchestrators`):
+How the list finds the orchestrator (`jay_jobs`, `jay_orch_ranks`, `jay_orchestrators`):
 
 - Claude keeps the options that a background agent started with in its job's state:
   `respawnFlags` in `~/.claude/jobs/<id>/state.json`. An agent whose options have a string that
@@ -181,17 +185,17 @@ How the list finds the orchestrator (`wtl_jobs`, `wtl_orch_ranks`, `wtl_orchestr
 
 Why this rule: the `◇` follows the prompt, so an agent with a `◇` always acts as an
 orchestrator. The oldest one keeps the `◇`, so the sign does not move to a new agent. The list,
-`n` and the hub Claude (`wt agents --orchestrators`) use the same rule, so they find the same
+`n` and the hub Claude (`jay agents --orchestrators`) use the same rule, so they find the same
 agent.
 
 ## Fresh context
 
 `c` on an orchestrator row (cyan or yellow `◇`) or on the "◆ hub" row clears the agent's
 context. After a confirm, the list types `/clear` into the agent through a hidden
-`claude attach` (`claude-clear`).
+`claude attach` (`jay clear`).
 
 - **What stays**: the system prompt (so the orchestrator prompt), the name, the short id and the
-  process. So its turn chain, `~/.local/state/wt-hub-claude` (for the hub Claude) and the middle
+  process. So its turn chain, `~/.local/state/jay/hub-claude` (for the hub Claude) and the middle
   column stay correct.
 - **What changes**: the session id. The agent starts a new conversation. The old conversation
   stays in its transcript.
@@ -205,13 +209,13 @@ context. After a confirm, the list types `/clear` into the agent through a hidde
 - **Not** for an orchestrator in a worktree that it entered: that worktree would stay its folder
   after the `/clear`. Tell it to leave the worktree first (`ExitWorktree`), then press `c` again.
 - **The shared input box**: all `claude attach` clients of an agent share one input box.
-  `claude-clear` deletes a draft in it first (Ctrl+U), so a draft that you typed in the middle
+  `jay clear` deletes a draft in it first (Ctrl+U), so a draft that you typed in the middle
   column is lost.
 - **The screen size**: the agent's screen takes the size of the client that joined last. So the
   hidden client takes the size of a client that is attached already (the middle column).
 - For another agent, type `/clear` in the agent.
 
-`claude-clear <id>` exits 0 when the session id changed, 1 when it did not, 2 for a usage error
+`jay clear <id>` exits 0 when the session id changed, 1 when it did not, 2 for a usage error
 and 3 when the agent is missing or not idle.
 
 ## An orchestrator in a worktree it entered
@@ -238,14 +242,14 @@ also one that did not come from a main checkout.
 ## The hub Claude and orchestrators
 
 The hub Claude ([The hub Claude](working.md#the-hub-claude)) works across repos. Its prompt
-(`wtl_hub_claude_prompt`) says:
+(`jay_hub_claude_prompt`) says:
 
 - A repo can have one orchestrator, an agent in its main checkout with an orchestrator prompt
   (`◇` in the list).
-- `wt agents --orchestrators` lists them, one line each: main checkout, id, name.
-  `wt agents --orchestrators <main checkout>` gives only the one of that repo.
+- `jay agents --orchestrators` lists them, one line each: main checkout, id, name.
+  `jay agents --orchestrators <main checkout>` gives only the one of that repo.
 - Send work for such a repo to its orchestrator (SendMessage).
-- For a repo without one, start workers yourself with `wt new`, or tell the user that `n` on the
+- For a repo without one, start workers yourself with `jay new`, or tell the user that `n` on the
   repo's main checkout row starts one.
 
 So you can give a change to the hub Claude from anywhere, and it goes to the right repo's
@@ -262,7 +266,7 @@ A test that starts Claude sessions (for example a check of the orchestrator prom
   shows in your hub list (and an orchestrator probe would take the `◇` of a repo, or get a yellow
   one).
 
-Only workers that `wt new` made for real work stay. See [CLAUDE.md](../CLAUDE.md).
+Only workers that `jay new` made for real work stay. See [CLAUDE.md](../CLAUDE.md).
 
 ## Example: from start to merge
 
@@ -272,7 +276,7 @@ A made-up repo `acme/shop` with a bug in the login redirect:
    orchestrator. The middle column shows `shop/main`; its row gets a cyan `◇`.
 2. Type: "Login loses the return URL after the redirect. Find the cause and give the fix to a
    worker." The orchestrator reads the code and tells you its plan.
-3. You agree. It runs `wt new fix-login -t "keep the return URL on login" -- <prompt>`. A new
+3. You agree. It runs `jay new fix-login -t "keep the return URL on login" -- <prompt>`. A new
    worktree row `fix-login` shows under `shop`, with the task note, and the worker
    `shop/fix-login` (`●`) under it.
 4. Pick the worker row: the middle column shows the worker, and review shows its turns, the

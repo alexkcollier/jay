@@ -19,31 +19,31 @@ The review column (right) has three choices. They do not depend on each other.
 | Choice | Options | How to change | When it applies |
 |---|---|---|---|
 | What you review (the mode) | **turns** (default): the agent's work, one commit per turn. **commits**: the branch's own commits | `t` in review | at once; it stays for the next picks |
-| The program in the review column | **tuicr** (default) or **lazygit** | `WT_REVIEW=tuicr\|lazygit` in `~/.config/wt-hub/config` | at the next hub start (Ctrl g, Ctrl q, then `wt hub`) |
-| How lazygit draws the patch (lazygit only) | **delta** (default), **difft** or **plain** | `WT_REVIEW_DIFF=delta\|difft\|plain` in `~/.config/wt-hub/config`; `\|` in lazygit cycles them for now | at the next start of lazygit in the pane (a pick, `t` or `q`) |
+| The program in the review column | **tuicr** (default) or **lazygit** | `JAY_REVIEW=tuicr\|lazygit` in `~/.config/jay/config` | at the next hub start (Ctrl g, Ctrl q, then `jay`) |
+| How lazygit draws the patch (lazygit only) | **delta** (default), **difft** or **plain** | `JAY_REVIEW_DIFF=delta\|difft\|plain` in `~/.config/jay/config`; `\|` in lazygit cycles them for now | at the next start of lazygit in the pane (a pick, `t` or `q`) |
 
 `e` in review opens [files](#files) (yazi) over review with either program, and Ctrl g `v`
 [hides review](#hide-review).
 
 ### tuicr or lazygit
 
-| | tuicr (default) | lazygit (`WT_REVIEW=lazygit`) |
+| | tuicr (default) | lazygit (`JAY_REVIEW=lazygit`) |
 |---|---|---|
 | Good for | reading a turn and writing review comments for the agent | git actions: stage, commit, rebase (commits mode) |
 | Review comments | yes | no |
 | Turns | the range `base..head` of the turn chain; `(` goes to the newest turn, again for all turns | a view repo with one row per turn (see [Review with lazygit](#review-with-lazygit)) |
 | Commits mode | the branch's own commits, read only | lazygit on the worktree itself, with all its git actions |
 | A new turn | tuicr starts again on the newest turn | the new row comes in; your place stays |
-| The patch | tuicr's own | the hub's renderers: `WT_REVIEW_DIFF` (see [The patch in lazygit](#the-patch-in-lazygit)) |
+| The patch | tuicr's own | the hub's renderers: `JAY_REVIEW_DIFF` (see [The patch in lazygit](#the-patch-in-lazygit)) |
 | Needs | tuicr 0.27+ | lazygit 0.66+ and delta (`brew install lazygit git-delta`); difftastic for `difft` |
-| Keys | [Review (tuicr)](keys.md#review-tuicr) | [Review (lazygit)](keys.md#review-lazygit-wt_reviewlazygit) |
+| Keys | [Review (tuicr)](keys.md#review-tuicr) | [Review (lazygit)](keys.md#review-lazygit-jay_reviewlazygit) |
 
 `t`, `e` and `q` do the same in both: `t` toggles the mode, `e` opens files, `q` goes back to
 the start (the picker, or the newest turn).
 
 ### The patch renderers (lazygit only)
 
-| `WT_REVIEW_DIFF` | What it shows | Needs |
+| `JAY_REVIEW_DIFF` | What it shows | Needs |
 |---|---|---|
 | `delta` (default) | one column of line numbers, a bar on each file (`3/8`, status, path), a line on each hunk (`path:line`, `2/3`), long lines wrapped under the code; `n`/`N` and `l`/`h` jump by file and hunk when the patch has the focus | delta |
 | `difft` | a diff of the syntax (difftastic): a reformat or a moved argument shows as what it is; two number columns | difftastic |
@@ -54,7 +54,7 @@ the missing program. tuicr does not use these renderers.
 
 ## Review by turn
 
-The hooks of `claude-turn-snapshot` (UserPromptSubmit, Stop, PostToolUse) save the worktree at
+The hooks of `jay-snapshot` (UserPromptSubmit, Stop, PostToolUse) save the worktree at
 each turn as a hidden commit chain per agent: `refs/wt-turns/<id>/base` and
 `refs/wt-turns/<id>/head`. They never touch the branch, the index or the files.
 
@@ -72,18 +72,20 @@ each turn as a hidden commit chain per agent: `refs/wt-turns/<id>/base` and
 - An agent that goes into another worktree of the repo (`EnterWorktree`, `ExitWorktree`) keeps
   its chain. After the tool (PostToolUse), the turn's changes so far get a commit
   `turn, in <old folder> · <prompt>`, then a commit `worktree · <new folder>` takes the files of
-  the new worktree. Thus the next turn shows only its own changes. `wt-turns/<id>.worktree`
-  follows the agent.
+  the new worktree. Thus the next turn shows only its own changes.
+  `~/.local/state/jay/turns/<id>.worktree` follows the agent.
 - `<id>` is the background agent's short id, else the first 8 characters of the session id. A
   background agent keeps its chain after a resume or `/clear`.
+- The refs keep the name `refs/wt-turns` from before the rename to jay: they live in each repo,
+  and a new name would lose the old chains.
 
 By hand: `tuicr -r <turn>~1..<turn>` reviews one turn, `tuicr -r refs/wt-turns/<id>/base..refs/wt-turns/<id>/head`
-all of them, and `claude-turn-snapshot --list [path]` lists the chains of a worktree.
+all of them, and `jay snapshot --list [path]` lists the chains of a worktree.
 
 ## Modes: turns and commits
 
 Review has two modes. The pane title starts with the mode, and `t` in tuicr toggles it. The mode
-stays for the next picks (`~/.local/state/wt-hub-review.mode`).
+stays for the next picks (`~/.local/state/jay/review.mode`).
 
 - **turns**: the picked agent's chain. A worktree pick opens the newest chain of that worktree.
   With no chain, tuicr's own picker opens. A chain opens on its newest turn (the pane types `(`
@@ -107,13 +109,13 @@ The list's keys act in the list only. The list has no key for review's mode or f
 
 ## Review with lazygit
 
-`WT_REVIEW=lazygit` in `~/.config/wt-hub/config` puts lazygit (0.66 or newer) in the review pane
+`JAY_REVIEW=lazygit` in `~/.config/jay/config` puts lazygit (0.66 or newer) in the review pane
 in place of tuicr. Start the hub again after you change it. The modes and `t`, `e`, `q` stay the
 same. lazygit has no review comments: use tuicr when you want to write comments for the agent.
 See `notes/lazygit-review.md` for the study.
 
 - **turns**: lazygit cannot open the hidden turn refs, so it runs on a view repo,
-  `~/.local/state/wt-hub/lazygit/views/<id>`: a repo of its own that reads your repo's objects.
+  `~/.local/state/jay/lazygit/views/<id>`: a repo of its own that reads your repo's objects.
   Its branch `turns` is the chain head, `turns-base` the base. A turn is one row: a yellow `*`
   marks the turns, a green `*` the history under them. A commit, branch or rebase there changes
   only the view, never your repo. While the agent works, the top row is the running turn
@@ -128,33 +130,33 @@ turn, else the head) into the view every 2 s, and lazygit refreshes when the bra
 place stays. When the newest turn was selected, the new turn is selected (the pane types `<`).
 When the running turn changes or ends, its row stays where it is and shows the new state.
 
-lazygit reads your own `config.yml` (theme), then the hub's `~/.config/wt-hub/lazygit/hub.yml`
+lazygit reads your own `config.yml` (theme), then the hub's `~/.config/jay/lazygit/hub.yml`
 over it: one tab group, list on top, no author or hash, the hub's diff renderers, and the hub's
-`t` and `e`. Its state (recent repos) goes to `~/.local/state/wt-hub/lazygit/state`, not into
-yours. `claude-turn-snapshot --prune` removes a view with its chain.
+`t` and `e`. Its state (recent repos) goes to `~/.local/state/jay/lazygit/state`, not into
+yours. `jay snapshot --prune` removes a view with its chain.
 
 ### The patch in lazygit
 
 The review column is narrow, so the hub has its own diff renderers (`git.diffRenderers` in
-`hub.yml`). `WT_REVIEW_DIFF` puts one first; `|` in lazygit goes to the next one.
+`hub.yml`). `JAY_REVIEW_DIFF` puts one first; `|` in lazygit goes to the next one.
 
-- `delta` (default): `wt-hub-diff` with delta. One column of line numbers (the new line; the
+- `delta` (default): `jay-diff` with delta. One column of line numbers (the new line; the
   old one on a removed line, in red). A bar on each file: its place in the diff (`3/8`), the
   status (`M`, `A`, `D`, `R`), the path, `+12 -3`. A line on each hunk: `path:line`, its place
   in the file (`2/3`) and the function. A long line wraps under its own code. With the patch
   focused (`0` or a click), the rendering stays, and `n` / `N` go to the next or previous file,
   `l` / `h` to the next or previous hunk.
-- `difft`: `wt-hub-diff` with difftastic in inline mode: a diff of the syntax, so a reformat or
+- `difft`: `jay-diff` with difftastic in inline mode: a diff of the syntax, so a reformat or
   a moved argument shows as what it is. The same file bar and hunk lines (no line in the hunk
   line), difftastic's two number columns, the same wrap. With the patch focused, lazygit shows
   git's raw diff.
-- `plain`: delta alone, without `wt-hub-diff`: one number column, `path:line` on each hunk. Long
+- `plain`: delta alone, without `jay-diff`: one number column, `path:line` on each hunk. Long
   lines do not wrap: they stop at the edge, and `H` / `L` scroll the patch to the side. With the
   patch focused, lazygit shows git's raw diff.
 
 The hub's renderers do not read your `~/.gitconfig` `[delta]` settings, and use 24-bit color.
 See `notes/lazygit-review.md` ("7. The diff") and the screen dumps in `notes/lazygit-diff/`.
-Keys: [Review (lazygit)](keys.md#review-lazygit-wt_reviewlazygit).
+Keys: [Review (lazygit)](keys.md#review-lazygit-jay_reviewlazygit).
 
 ## Files
 
@@ -165,7 +167,7 @@ moves files to the new worktree.
 In files:
 
 - `o` opens the hovered file in this pane (yazi's own open).
-- `O` opens the hovered file or folder in your editor, in its project, in a new tab (`wt-edit`,
+- `O` opens the hovered file or folder in your editor, in its project, in a new tab (`jay edit`,
   see [Open your editor](working.md#open-your-editor)).
 - `W` is yazi's "open with" menu (yazi's own `O`).
 
@@ -178,7 +180,7 @@ on a worktree row also show a hidden review, and move the focus to it.
 - tuicr runs on while review is hidden: your place and draft comments stay. New turns come in
   when review shows again.
 - Files closes when review hides, and opens again when review shows.
-- A fresh hub (`wt hub` after a quit) starts with review shown.
+- A fresh hub (`jay` after a quit) starts with review shown.
 
 zellij cannot hide a tiled pane, so a hidden review is a floating pane of no size in the bottom
 right corner, and the hub tab's floating panes are hidden. A new floating pane (Ctrl g Tab,

@@ -5,7 +5,7 @@
 
 ## Rows
 
-The list shows each repo with a `.git` folder 1–2 levels under `$WT_ROOTS` (default
+The list shows each repo with a `.git` folder 1–2 levels under `$JAY_ROOTS` (default
 `~/Documents/projects`; more roots with `:`).
 
 - `<root>/<client>/<repo>` goes under an orange heading for its client.
@@ -56,11 +56,11 @@ point.
 The agents sort in the order of their state signs in the table (`!`, `✗`, `✓`, `●`, `○`). An
 agent whose turn goes on while its process is idle (state `working`, status `idle`: it waits
 for workers it started) does not work: it is unread or idle. You see an agent when it comes
-into or leaves the middle column, when `wt go` shows it, and when its turn ends while its own
-Ghostty tab is in front. The Stop hook (`claude-notify`) records when a turn ends; not while the
+into or leaves the middle column, when `jay go` shows it, and when its turn ends while its own
+Ghostty tab is in front. The Stop hook (`jay-notify`) records when a turn ends; not while the
 agent has background tasks, because its turn goes on when they end. An agent with no turn since
-this record started is idle. The list, `wt all`, `wt agents` and the mod use one rule
-(`wtl_agent_phases` in `lib/wt-lib.sh`). `c` and `d` use it too.
+this record started is idle. The list, `jay all`, `jay agents` and the mod use one rule
+(`jay_agent_phases` in `lib/jay-lib.sh`). `c` and `d` use it too.
 
 "On the remote" means the branch has a tracking branch, or `origin/<branch>` exists (as for a PR
 pushed without `-u`). The list uses local refs only; it does not fetch.

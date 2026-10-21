@@ -6,7 +6,7 @@
 - [List](#list)
 - [Agent viewer (middle column)](#agent-viewer-middle-column)
 - [Review (tuicr)](#review-tuicr)
-- [Review (lazygit, WT_REVIEW=lazygit)](#review-lazygit-wt_reviewlazygit)
+- [Review (lazygit, JAY_REVIEW=lazygit)](#review-lazygit-jay_reviewlazygit)
 - [Files (yazi)](#files-yazi)
 - [Panes (zellij, every session)](#panes-zellij-every-session)
 - [Pane titles](#pane-titles)
@@ -19,13 +19,13 @@
 | click, double-click | open the row; an agent moves the focus, a worktree keeps it in the list |
 | `n` | new idle background agent in this row's worktree (on a main checkout: the repo's orchestrator; when it has one, the hub shows it) |
 | `N` | new worktree of this row's repo (asks the branch) + idle agent |
-| `o` | the row's own Ghostty tab: an interactive agent's tab, else the worktree's zellij session (`wt open`) |
+| `o` | the row's own Ghostty tab: an interactive agent's tab, else the worktree's zellij session (`jay open`) |
 | `d` | remove the agent, or the worktree with its idle agents (asks first) |
 | `b` | an idle interactive session goes on as a background agent (asks first) |
 | `c` | an idle orchestrator (`◇`) or the hub Claude (`◆ hub` row) gets a fresh context: `/clear`, same prompt, name and id (asks first) |
 | `a` | hide / show idle repos and main checkouts |
 | `p` | prune dead agents now (asks first) |
-| `r` | reload the list (fresh git signs; starts the newest `wt-sidebar`) |
+| `r` | reload the list (fresh git signs; starts the newest `jay-sidebar`) |
 | `j` / `k`, ↓ / ↑, wheel | move |
 | `h` / `l` | narrower / wider |
 | `?` | all keys and signs (press again: fewer keys) |
@@ -45,13 +45,13 @@ The list's keys act in the list only. The list has no key for review's mode or f
 
 ## Review (tuicr)
 
-`wt-hub-keys` runs tuicr and takes `t` and `e` while tuicr's status line shows NORMAL or SELECT.
+`jay-keys` runs tuicr and takes `t` and `e` while tuicr's status line shows NORMAL or SELECT.
 In a comment, a `:` or `/` prompt or a paste, they go to tuicr.
 
 | Key | Action |
 |---|---|
-| `t` | toggle turns ⇄ commits (from `wt-hub-keys`) |
-| `e` | show files (yazi) over review (from `wt-hub-keys`) |
+| `t` | toggle turns ⇄ commits (from `jay-keys`) |
+| `e` | show files (yazi) over review (from `jay-keys`) |
 | `q` | back: tuicr starts again at its start (`q_quits`, `config/tuicr/config.toml`) |
 | `(` | newest turn; press again for all turns (tuicr) |
 | `i`, `:` | tuicr's include filter and commands |
@@ -60,7 +60,7 @@ In a comment, a `:` or `/` prompt or a paste, they go to tuicr.
 
 tuicr's own `e` (exclude filter) is not available in the hub.
 
-## Review (lazygit, WT_REVIEW=lazygit)
+## Review (lazygit, JAY_REVIEW=lazygit)
 
 `t` and `e` are lazygit custom commands (`config/lazygit/hub.yml`): lazygit does not run them
 while you type in a prompt.
@@ -84,7 +84,7 @@ lazygit's own `t` (revert) and `e` (edit file) are not available in the hub; `o`
 
 ## Files (yazi)
 
-From `config/yazi/keymap.toml` (hub only: `YAZI_CONFIG_HOME=~/.config/wt-hub/yazi`). The other
+From `config/yazi/keymap.toml` (hub only: `YAZI_CONFIG_HOME=~/.config/jay/yazi`). The other
 keys are yazi's own (yazi's help: `~` or F1).
 
 | Key | Action |
@@ -92,7 +92,7 @@ keys are yazi's own (yazi's help: `~` or F1).
 | `e` | back to review |
 | `q` | quit yazi: back to review |
 | `o` | open the hovered file in this pane (yazi's open) |
-| `O` | open the hovered file or folder in your editor, in its project, in a new tab (`wt-edit`) |
+| `O` | open the hovered file or folder in your editor, in its project, in a new tab (`jay edit`) |
 | `W` | open with... (yazi's "open with" menu) |
 
 ## Panes (zellij, every session)

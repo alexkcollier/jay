@@ -1,14 +1,19 @@
 # Hub to-do
 
 Open items, known faults, and the decisions behind the hub, with the dates they were made. Read
-CLAUDE.md and README.md first. The hub is the zellij session "hub" (layout written by
-bin/wt-hub): worktree list (fzf, bin/wt-sidebar) | agent viewer (bin/wt-hub-pane agent; opens
-on the hub Claude, a background agent, since 2026-10-21) | review (tuicr via bin/wt-hub-pane) ⇄
-files (yazi).
+CLAUDE.md and README.md first. The project is jay (called wt-hub until 2026-10-21; the dated
+entries below keep the names of their time). The hub is the zellij session "jay" (layout
+written by bin/jay): worktree list (fzf, bin/jay-sidebar) | agent viewer (bin/jay-pane agent;
+opens on the hub Claude, a background agent, since 2026-10-21) | review (tuicr via
+bin/jay-pane) ⇄ files (yazi).
 
 ## Open items
 
-- A key that marks a task pane as private, so that `hub-run log` refuses to read it (the bar
+- Remove the shims of the old wt-hub names (`compat/`, `lib/wt-lib.sh`, the links at the old
+  paths that `install.sh` leaves) and the `WT_` fallbacks of the settings, when no running
+  agent's prompt, no config and no habit uses the old names any more. Until then
+  `./install.sh --no-compat` removes them on one machine.
+- A key that marks a task pane as private, so that `jay run log` refuses to read it (the bar
   would still show its state and ports). Not built; the README notes it.
 - Tab control for terminals other than Ghostty.
 - On record, not accepted yet (do not build unless the user asks): a tuicr config for the narrow
@@ -23,7 +28,7 @@ at a time). Be careful with `wt step prune` in your own repos: in one repo it wo
 ## Known faults
 
 - The agent viewer sometimes stops taking the mouse (item 5 below; closed, not seen since the
-  clean restart). If it comes back: quit the hub (Ctrl g, Ctrl q) and run `wt hub` in a terminal
+  clean restart). If it comes back: quit the hub (Ctrl g, Ctrl q) and run `jay` in a terminal
   that no agent started. Notes: "Item 5 (closed): what we know".
 - Tab control is Ghostty only; other terminals get the hub without tab control.
 - macOS only: AppleScript, `lsappinfo`, BSD `stat`, `cp -c`.
@@ -172,6 +177,18 @@ at a time). Be careful with `wt step prune` in your own repos: in one repo it wo
   pane shows the hidden ones, and the last one keeps the focus after it closes, so hub-run
   --switch/--launcher and the list's tick hide them again; `hide-floating-panes` from outside
   needs `-t <tab id>`; tuicr survives a 0x0 pane.
+- The rename to jay (after a blue jay: a real tree beside the worktrees). One command, `jay`:
+  alone it opens the hub, `jay <name>` runs `jay-<name>` (git style); `hub-run` is `jay run`,
+  `c` stays as the short name of `jay c`. worktrunk stays for the worktree operations; the hub
+  no longer uses its `wt <name>` dispatch. Settings `JAY_*` (the `WT_*` names still work), all
+  state under `~/.local/state/jay`, the zellij session `jay`, the mod `/jay` (marketplace `jay`).
+  The git refs stay `refs/wt-turns` (a new name would orphan the old chains). Shims under the
+  old names in `compat/`, kept for a while (Alex's choice): running agents have prompts with the
+  old commands, the old hub runs the old scripts until its restart, and old hooks and pane keys
+  call the old names. `install.sh` moves the old folders (a symlink stays at each old path),
+  replaces the old hooks and installs the mod again: Claude cannot load an installed mod after
+  its plugin name changes ("Plugin wt-hub not found in marketplace wt-hub"). The checkout folder
+  keeps its name for now (see docs/install.md, "Move the checkout folder").
 
 ## How to work
 
@@ -184,7 +201,7 @@ at a time). Be careful with `wt step prune` in your own repos: in one repo it wo
   shown in it (since 2026-10-21), never a pane under it.
 - Test zellij behaviour in a throwaway session as CLAUDE.md says, never on the live hub. Apply to
   the live hub only when an item is done, and restart a live pane in place (focus it, `zellij -s
-  hub run --in-place --close-replaced-pane ... -- env -u CLAUDE_JOB_DIR <cmd>`, refocus) — never
+  jay run --in-place --close-replaced-pane ... -- env -u CLAUDE_JOB_DIR <cmd>`, refocus) — never
   quit the hub session.
 - Edit running scripts write-then-mv. Commit each finished item (no Claude-Session trailer, no
   ticket ids).

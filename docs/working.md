@@ -32,14 +32,15 @@
 - macOS notices when an agent finishes a turn or needs input, with a click that shows the agent.
 - Your editor on any file of the worktree (`O` in files).
 - Dev servers in a tasks tab per worktree: their state and ports in the bar, their output
-  readable by agents (`hub-run`), no port or repo config ([Tasks](tasks.md)).
+  readable by agents (`jay run`), no port or repo config ([Tasks](tasks.md)).
 
 ## Start the hub
 
-`wt hub` goes to the hub's Ghostty tab when the hub runs in one. Else it opens the hub in this
-terminal: it attaches to a hub that answers, or it starts a fresh hub. It opens a new Ghostty tab
-only when it has no terminal (an agent, a script, `/wt hub`) or runs inside another zellij
-session. `--here` and `--tab` choose. See [Commands](commands.md).
+`jay` goes to the hub's Ghostty tab when the hub runs in one. Else it opens the hub in this
+terminal: it attaches to a hub that answers, or it starts a fresh hub (the zellij session
+`jay`). It opens a new Ghostty tab only when it has no terminal (an agent, a script,
+`/jay hub`) or runs inside another zellij session. `--here` and `--tab` choose. See
+[Commands](commands.md).
 
 ## Start agents in the background
 
@@ -66,17 +67,17 @@ From the list:
   checkout, the agent is the repo's orchestrator (see [Orchestrators](orchestrators.md)). When
   the repo has one already, the hub shows that one.
 - `N` on a repo, worktree or agent row: the list asks for a branch, makes a new worktree of that
-  repo (`wt new <branch> --agent`) and starts an idle agent in it.
+  repo (`jay new <branch> --agent`) and starts an idle agent in it.
 
 The new agent shows in the middle column, with the focus there. Type its first prompt. Agents
 started by the list are named `<repo>/<branch>`.
 
-From a shell: `wt new <branch> -- <prompt>` makes the worktree and starts the agent with a prompt.
+From a shell: `jay new <branch> -- <prompt>` makes the worktree and starts the agent with a prompt.
 
 `claude --bg` has no trust prompt: in a repo where Claude never ran, it fails with "Workspace not
 trusted". Claude keeps the trust per repo, under its main checkout, for all its worktrees; a
 trusted parent folder does not count. So `n`, `N` and `c` ask first, in one key (`y`), and write
-the trust into `~/.claude.json` as the trust prompt of `claude` would. `wt new` does not ask.
+the trust into `~/.claude.json` as the trust prompt of `claude` would. `jay new` does not ask.
 
 ## Pick agents and worktrees
 
@@ -91,7 +92,7 @@ Click a row or press Enter on it.
 | ◆ hub | the hub Claude in the middle column; review does not change | middle column |
 
 ▸ beside an agent marks the agent in the middle column. A pick made elsewhere (a notice click,
-`wt go`, a new agent) moves the list's cursor to that agent.
+`jay go`, a new agent) moves the list's cursor to that agent.
 
 A click on a pane that does not have the focus only gives it the focus (zellij). Click again to
 pick.
@@ -110,41 +111,43 @@ You type to the agent here, as in any `claude attach`.
 
 ## The hub Claude
 
-A background agent named `hub`, for work across agents and repos: ask it to start agents (`wt
+A background agent named `hub`, for work across agents and repos: ask it to start agents (`jay
 new`), to send a prompt to an agent, to tell you what the agents did, or to answer a question
-that needs several repos. It starts in the first `WT_ROOTS` folder (the other roots are added
-folders), with a short system prompt about the hub's commands (`wtl_hub_claude_prompt` in
-`lib/wt-lib.sh`). It works in no worktree, so a pick of it does not change review.
+that needs several repos. It starts in the first `JAY_ROOTS` folder (the other roots are added
+folders), with a short system prompt about the hub's commands (`jay_hub_claude_prompt` in
+`lib/jay-lib.sh`). It works in no worktree, so a pick of it does not change review.
 
 - A fresh hub opens on it, with the focus in the middle column. The "◆ hub" row at the top of
-  the list, or `wt go hub` from anywhere, shows it again.
-- It is started the first time the hub needs it. Its id is in `~/.local/state/wt-hub-claude`.
+  the list, or `jay go hub` from anywhere, shows it again.
+- It is started the first time the hub needs it. Its id is in `~/.local/state/jay/hub-claude`.
   It is like any background agent: it keeps running when you leave it, and a stopped one opens
   again on a pick.
-- It knows the orchestrators (`wt agents --orchestrators`). It sends work for a repo to the
+- It knows the orchestrators (`jay agents --orchestrators`). It sends work for a repo to the
   orchestrator of that repo (SendMessage). For a repo without one, it starts workers itself
-  (`wt new`), or it tells you to press `n` on the repo's main checkout row. See
+  (`jay new`), or it tells you to press `n` on the repo's main checkout row. See
   [The hub Claude and orchestrators](orchestrators.md#the-hub-claude-and-orchestrators).
 - `c` on the "◆ hub" row gives it a fresh context (see
   [Fresh context](orchestrators.md#fresh-context)). To start a new hub Claude, `claude rm <id>`:
-  the next pick starts a new one.
+  the next pick starts a new one. A hub Claude started before the rename keeps its old prompt
+  (with `wt new`, `hub-run`): the shims run those commands. A new hub Claude gets the new
+  prompt.
 
 ## Open your editor
 
-`wt-edit <file or folder>` (and `O` in files) opens the project of that path: its git root, or
+`jay edit <file or folder>` (and `O` in files) opens the project of that path: its git root, or
 outside git its folder (the file's folder). A file opens in a buffer.
 
-- The editor is `$WT_EDITOR`, else `$VISUAL`, else `$EDITOR`, else `nvim`.
+- The editor is `$JAY_EDITOR`, else `$VISUAL`, else `$EDITOR`, else `nvim`.
 - A terminal editor runs in a new Ghostty tab in the project: `<editor> .` or
   `<editor> <file>`. When the editor quits, the tab's shell stays in the project.
 - A GUI editor (`code`, `code-insiders`, `cursor`, `windsurf`, `zed`, `subl`, `idea`,
   `webstorm`, `pycharm`, `goland`, `rubymine`, `fleet`) gets `<editor> <project> [file]` and
   opens its own window.
-- `WT_EDITOR_GUI=1` or `0` overrides that guess.
+- `JAY_EDITOR_GUI=1` or `0` overrides that guess.
 
 ## Notices
 
-The `claude-notify` hook posts a macOS notice:
+The `jay-notify` hook posts a macOS notice:
 
 - **✓ Turn finished** (Stop): the first line of the agent's last message, or its line that starts
   with `result:`, `needs input:` or `failed:`. No notice while the agent has background tasks.
@@ -159,10 +162,10 @@ agent's own tab (`claude attach`, `c`, its zellij session, or an interactive ses
 or the hub's tab. The hub's tab counts for every agent, whatever pane has the focus, but only
 while the hub shows its "hub" tab: on a tasks tab the list is not on screen, so notices come.
 
-A click on a notice runs `wt go <session>`: Ghostty comes to the front and shows the agent. A
+A click on a notice runs `jay go <session>`: Ghostty comes to the front and shows the agent. A
 background agent opens in the hub's middle column when the hub runs; else in its `claude attach`
 tab (a new one if needed). An interactive session goes to its own tab. The click's output goes
-to `~/.local/state/claude-notify.log`.
+to `~/.local/state/jay/notify.log`.
 
 ## Remove and prune
 
@@ -184,9 +187,9 @@ to `~/.local/state/claude-notify.log`.
 Dead agents are background agents whose folder is gone (a removed worktree) and that do not run
 now. An agent that came into the worktree with `EnterWorktree` is not dead. The list removes
 them by itself every 10 minutes, with plain `claude rm`, and logs each one in
-`~/.local/state/wt-hub-prune.log`. `claude rm` keeps an agent when its recorded worktree is
+`~/.local/state/jay/prune.log`. `claude rm` keeps an agent when its recorded worktree is
 still on disk (no WorktreeRemove hook here) or has unpushed work. After that, the list prunes the
-turn chains of gone agents (`claude-turn-snapshot --prune`). `p` prunes the dead agents now,
+turn chains of gone agents (`jay snapshot --prune`). `p` prunes the dead agents now,
 after a confirm.
 
 Idle background agents stay until you remove them.
@@ -196,12 +199,12 @@ Idle background agents stay until you remove them.
 - `a` hides the idle repos and idle main checkouts (dim rows), and shows them again. A last row
   says how many are hidden.
 - `h` / `l` make the list narrower or wider. A mouse drag on the border works too. The hub keeps
-  the width (`wt-hub-sidebar.pct`, 10–60 %) for its next fresh start.
+  the width (`sidebar.pct`, 10–60 %) for its next fresh start.
 - `r` reloads the list: fresh git signs now, and the list starts again as the newest version of
-  `wt-sidebar` (new keys apply). Else git signs update every 30 s.
+  `jay-sidebar` (new keys apply). Else git signs update every 30 s.
 
 ## Quit
 
 Quit the hub: Ctrl g, then Ctrl q. The bar shows this hint when you press Ctrl g. The agents keep
-running. Closing the hub's Ghostty tab only detaches it: `wt hub` attaches it again. The list has
+running. Closing the hub's Ghostty tab only detaches it: `jay` attaches it again. The list has
 no quit key.
