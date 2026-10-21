@@ -502,7 +502,9 @@ banner at the top of each tab says where you are: `◆ HUB › worktrees <picked
 hub tab, `◆ HUB › tasks <its worktree>` on a tasks tab, with where Ctrl g Tab goes.
 
 - **Ctrl g Tab**: from the hub tab to the tasks tab of the worktree you picked (agent or
-  worktree row; a new tab when it has none); from a tasks tab back to the hub. zellij has no key
+  worktree row; a new tab when it has none); from a tasks tab back to the hub. With an agent
+  picked whose worktree runs no task, it goes to the tab of the newest task that agent started
+  with `hub-run` (a dev server in another worktree). zellij has no key
   action for a tab by name, so the key runs `hub-run --switch` in a floating pane of 1 cell that
   closes at once. A pick does not change the tab you are on.
 - **Console**: each tasks tab has one, a shell in its worktree at its prompt (pane title
@@ -580,12 +582,16 @@ outside the hub's tasks tabs. Not built yet, in case it is needed: a key that ma
 private, so that `hub-run log` refuses to read it (the bar would still show its state and ports).
 
 **Hub restart**: the tasks are panes of the hub session, so they stop when the hub quits or
-starts fresh. Start them again after `wt hub`.
+starts fresh. `hub-run` keeps a record of each task it started (in
+`~/.local/state/hub-tasks/started`, by hub server and pane id: pane ids start at 0 again in each
+new hub). After a restart, `hub-run ls` lists those tasks as `gone` for a day, with the command
+that starts each one again; `hub-run log|wait|stop <name>` say the same. `hub-run stop <name>`
+forgets a gone task, and starting it again in its folder forgets it too.
 
 | Command | What |
 |---|---|
 | `hub-run [-n name] [-w [-t s]] [--] <command...>` | a new pane in this worktree's tasks tab, in this folder; refuses a second copy of a command that runs in the same folder |
-| `hub-run ls [--json]` | the tasks: pane, tab, name, state (running, idle, exited), ports, worktree, command |
+| `hub-run ls [--json]` | the tasks: pane, tab, name, state (running, idle, exited; gone after a hub restart), ports, worktree, command; in JSON also `agent` (who started it) and, for a gone task, `start` |
 | `hub-run log <task> [-n lines \| --all]` | the pane's text (default: the last 100 lines) |
 | `hub-run wait <task> [-t s]` | wait until the task listens (default 120 s); print its URLs, or its last lines when it ends |
 | `hub-run stop <task>` | Ctrl-C to the command (TERM after 10 s, KILL after 5 s more); a pane that `hub-run` started closes, a shell stays |

@@ -4,7 +4,8 @@
 # you type in, or a pane that hub-run started. Output stays in zellij's scrollback: no log files.
 #   hub-run [-n name] [-w [-t s]] [--] <command...>   a new pane in this worktree's tab, in this
 #                            folder. -w: wait until it listens (see wait). Without the hub: runs here.
-#   hub-run ls [--json]      the tasks: name, state, ports, worktree, command
+#   hub-run ls [--json]      the tasks: name, state, ports, worktree, command; and the ones that a
+#                            hub restart took (state gone), with the command that starts them again
 #   hub-run log <task> [-n lines | --all]   what the pane shows, as plain text (default 100 lines)
 #   hub-run wait <task> [-t seconds]   wait until the task listens on a port; print its URLs
 #   hub-run stop <task>      Ctrl-C to the task; a pane that hub-run started closes
@@ -17,6 +18,9 @@ source "$HOME/.local/lib/wt-lib.sh"
 # The hub's own tab (list, agent, review); every other tab of the hub is a worktree's tasks tab.
 HUB_TAB=hub
 STATE_DIR="$HOME/.local/state/hub-tasks"
+# A record of each task that hub-run started (see record_task), and of the ones a hub restart took.
+STARTED="$STATE_DIR/started"
+GONE="$STATE_DIR/gone"
 SELF="$HOME/.local/bin/hub-run"
 
 die() { printf 'hub-run: %s\n' "$*" >&2; exit 1; }
@@ -112,14 +116,16 @@ stop_group() {
 
 # --- The tasks: panes of the tasks tab, with their processes and ports ---
 
+# The pid of the hub's zellij server. -a: inside a hub pane (the list's tick, the launcher) the
+# server is an ancestor, which pgrep leaves out without it.
+hub_server() { pgrep -a -f "zellij --server .*/$WT_HUB_SESSION\$" | head -1; }
+
 # One line per pane of the hub: root pid<TAB>tty<TAB>foreground pid<TAB>pids (,)<TAB>foreground command.
 # The pids are the root's process tree, not the processes on its tty: turbo, for one, runs each
 # dev server on a pty of its own.
 pane_procs() {
   local srv
-  # -a: inside a hub pane (the list's tick, the launcher) the server is an ancestor, which
-  # pgrep leaves out without it.
-  srv=$(pgrep -a -f "zellij --server .*/$WT_HUB_SESSION\$" | head -1)
+  srv=$(hub_server)
   [[ -n "$srv" ]] || return 0
   ps -ax -o pid=,ppid=,tpgid=,tty=,command= | awk -v srv="$srv" '
     { cmd = $0; sub(/^ *[0-9]+ +[0-9]+ +-?[0-9]+ +[^ ]+ +/, "", cmd)
@@ -214,21 +220,23 @@ panes_raw() {
 }
 
 tasks_json() {
-  local raw
+  local raw srv
   raw=$(panes_raw) || return 1
-  # Exit codes of panes whose command ended (hub-run --exec writes them), names, worktrees and
-  # docker ports.
-  local line root rc name cwd cmd wt dport top branch repo
+  srv=$(hub_server)
+  # Exit codes of panes whose command ended (hub-run --exec writes them), names, who started
+  # them, worktrees and docker ports.
+  local line id root rc name cwd cmd wt dport top branch repo agent
   local -a out=()
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    IFS=$'\x1f' read -r root name cwd cmd < <(fields '[(.root // ""), (if .owned then .title else "" end), .cwd, (.command // "")]' <<<"$line")
+    IFS=$'\x1f' read -r id root name cwd cmd < <(fields '[.id, (.root // ""), (if .owned then .title else "" end), .cwd, (.command // "")]' <<<"$line")
     rc=""
     [[ -n "$root" && -f "$STATE_DIR/$root.exit" ]] && rc=$(cat "$STATE_DIR/$root.exit")
+    agent=$(jq -r '.agent // ""' "$STARTED/$srv-$id.json" 2>/dev/null)
     # A console's command that the launcher typed: its name comes from that line (ps shows the
     # program behind it, as node for pnpm).
     local lf
-    lf="$STATE_DIR/console-$(jq -r .id <<<"$line").line"
+    lf="$STATE_DIR/console-$id.line"
     if [[ -z "$name" && -n "$cmd" && -f "$lf" ]]; then name=$(short_name "$(cat "$lf")"); fi
     if [[ -z "$name" ]]; then
       if [[ -n "$cmd" ]]; then name=$(short_name "$cmd"); else name=shell; fi
@@ -241,8 +249,9 @@ tasks_json() {
     fi
     dport=""
     [[ "$cmd" == *docker* ]] && dport=$(docker_ports "$cwd" "$cmd" | paste -sd, -)
-    out+=("$(jq -c --arg rc "$rc" --arg name "$name" --arg wt "$wt" --arg dport "$dport" '
+    out+=("$(jq -c --arg rc "$rc" --arg name "$name" --arg wt "$wt" --arg dport "$dport" --arg agent "$agent" '
       .name = $name | .worktree = (if $wt == "" then null else $wt end)
+      | .agent = (if $agent == "" then null else $agent end)
       | (if $rc != "" then .exit = ($rc | tonumber) else . end)
       | .ports = ((.ports + ($dport | split(",") | map(select(length > 0) | tonumber))) | unique)
       | .urls = [.ports[] | "http://localhost:\(.)"]' <<<"$line")")
@@ -254,12 +263,82 @@ tasks_json() {
     pid=${f##*/}; pid=${pid%.exit}
     kill -0 "$pid" 2>/dev/null || rm -f "$f"
   done
+  [[ -n "$srv" ]] && tidy_records "$srv" " $(jq -r .id <<<"$raw" | tr '\n' ' ') "
   printf '%s\n' ${out[@]+"${out[@]}"} | jq -s .
 }
 
-# The task that selector $1 names, as JSON. Fails with a message when none or several match.
+# --- Task records: <server pid>-<pane id>.json in $STARTED, for each pane that hub-run starts ---
+# zellij starts the pane ids at 0 again in each new hub, so the hub's server pid is in the key. A
+# record says who started the task (the agent's key, as a pick in the list has it: see
+# cmd_switch) and how to start it again after a hub restart, which takes all panes with it.
+
+# Record the task that hub-run started in pane id $2 of server $1: name $3, command line $4.
+record_task() {
+  local srv=$1 id=$2 name=$3 line=$4 agent="" cwd f
+  [[ -n "$srv" ]] || return 0
+  [[ -n "${CLAUDE_CODE_SESSION_ID:-}" ]] && agent=$(wtl_agent_key "$CLAUDE_CODE_SESSION_ID")
+  cwd=$(pwd -P)
+  mkdir -p "$STARTED"
+  jq -nc --arg name "$name" --arg cwd "$cwd" --arg line "$line" --arg agent "$agent" \
+    '{name: $name, cwd: $cwd, line: $line, agent: (if $agent == "" then null else $agent end), started: (now | floor)}' \
+    >"$STARTED/$srv-$id.json"
+  # The same task that a hub restart took: it runs again.
+  for f in "$GONE"/*.json; do
+    [[ -f "$f" ]] || continue
+    jq -e --arg n "$name" --arg c "$cwd" '.name == $n and .cwd == $c' "$f" >/dev/null 2>&1 && rm -f "$f"
+  done
+  return 0
+}
+
+# Records of server $1, whose panes are ids $2 (" 3 4 "): a closed pane's record goes (not in its
+# first 10 s: the list of panes may be older than the pane). A record of an earlier server is a
+# task that a hub restart took: it moves to $GONE, whose file time is then the restart, for a day.
+tidy_records() {
+  local srv=$1 ids=$2 f key now
+  now=$(date +%s)
+  for f in "$STARTED"/*.json; do
+    [[ -f "$f" ]] || continue
+    key=${f##*/}; key=${key%.json}
+    if [[ "${key%%-*}" != "$srv" ]]; then
+      mkdir -p "$GONE"
+      mv -f "$f" "$GONE/" && touch "$GONE/${f##*/}"
+    elif [[ "$ids" != *" ${key#*-} "* ]] && ((now - $(stat -f %m "$f") > 10)); then
+      rm -f "$f"
+    fi
+  done
+  find "$GONE" -name '*.json' -mtime +1 -delete 2>/dev/null
+  return 0
+}
+
+# The command that starts gone task $1 (a record, as JSON) again.
+start_again() {
+  local cwd name line sq="'" esc="'\\''"
+  IFS=$'\x1f' read -r cwd name line < <(fields '[.cwd, .name, .line]' <<<"$1")
+  # The line in single quotes: one arg, which hub-run runs as a shell line.
+  printf "cd %q && hub-run -n %q -w -- '%s'\n" "$cwd" "$name" "${line//$sq/$esc}"
+}
+
+# The tasks that a hub restart took, as a JSON array, oldest first: the records, with .gone (the
+# time of the restart), .file and .start (the command that starts the task again).
+gone_tasks() {
+  local f rec
+  for f in "$GONE"/*.json; do
+    [[ -f "$f" ]] || continue
+    rec=$(jq -c --arg t "$(stat -f %m "$f")" --arg f "$f" '. + {gone: ($t | tonumber), file: $f}' "$f" 2>/dev/null) || continue
+    jq -c --arg s "$(start_again "$rec")" '.start = $s' <<<"$rec"
+  done | jq -s 'sort_by(.gone)'
+}
+
+# The text for gone task $1: when it went, and how to start it again.
+gone_text() {
+  jq -r '"\(.name) is gone: the hub started again at \(.gone | strflocaltime("%H:%M")), and its pane went with the old hub. Start it again with:\n  \(.start)"' <<<"$1"
+}
+
+# The task that selector $1 names, as JSON. Fails with a message when none or several match;
+# for a task that a hub restart took, the message says how to start it again. --forget ($2, for
+# stop): such a task is forgotten, and the output is a line that says so, not JSON.
 find_task() {
-  local sel=$1 tasks found n
+  local sel=$1 tasks found n gone
   tasks=$(tasks_json) || die "the hub does not answer (start it with: wt hub)"
   found=$(jq -c --arg s "$sel" '
     ($s | ascii_downcase) as $l
@@ -270,7 +349,18 @@ find_task() {
     | ([$byid, $byname, $bypart] | map(select(length > 0)) | first // [])
     | if length > 1 and any(.state != "idle") then map(select(.state != "idle")) else . end' <<<"$tasks")
   n=$(jq length <<<"$found")
-  ((n == 0)) && die "no task matches \"$sel\" (hub-run ls)"
+  if ((n == 0)); then
+    gone=$(gone_tasks | jq -c --arg s "$sel" '($s | ascii_downcase) as $l
+      | (map(select((.name | ascii_downcase) == $l)) | last)
+        // (map(select([.name, .line, .cwd] | map(ascii_downcase) | any(contains($l)))) | last) // empty')
+    if [[ -n "$gone" && "${2:-}" == --forget ]]; then
+      rm -f "$(jq -r .file <<<"$gone")"
+      jq -r '"\(.name): gone already (the hub started again at \(.gone | strflocaltime("%H:%M"))); hub-run forgets it"' <<<"$gone"
+      exit 0
+    fi
+    [[ -n "$gone" ]] && die "$(gone_text "$gone")"
+    die "no task matches \"$sel\" (hub-run ls)"
+  fi
   if ((n > 1)); then
     printf 'hub-run: %s tasks match "%s"; use a pane id:\n' "$n" "$sel" >&2
     jq -r '.[] | "  \(.pane)  \(.name)  \(.worktree // .cwd)"' <<<"$found" >&2
@@ -315,18 +405,25 @@ ensure_tab() {
 
 # Ctrl g Tab (a zellij Run binding, in a pane that closes at once): from the hub tab to the
 # tasks tab of the worktree picked in the hub (made when it has none); from any other tab back
-# to the hub tab. Its pane shows a hidden review too (see wtl_hub_keep_hidden).
+# to the hub tab. With an agent picked whose worktree runs no task, the tab of the newest task
+# that agent started (a dev server in another worktree). Its pane shows a hidden review too (see
+# wtl_hub_keep_hidden).
 cmd_switch() {
-  local active dir tid
+  local active dir agent tid="" tasks
   wtl_hub_keep_hidden "${ZELLIJ_PANE_ID:-}"
   active=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null | jq -r 'first(.[] | select(.active) | .name) // empty')
   if [[ "$active" != "$HUB_TAB" ]]; then
     zellij -s "$WT_HUB_SESSION" action go-to-tab-name "$HUB_TAB" >/dev/null 2>&1
     return 0
   fi
-  dir=$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)
+  IFS=$'\t' read -r dir agent 2>/dev/null <"$(wtl_hub_target_file review)"
   [[ -n "$dir" && -d "$dir" ]] || dir=${WT_ROOTS%%:*}
-  tid=$(ensure_tab "$dir") || return 0
+  if [[ -n "$agent" ]] && tasks=$(tasks_json 2>/dev/null); then
+    tid=$(jq -r --arg t "$(tab_name "$(wtl_toplevel "$dir")")" --arg a "$agent" '
+      if any(.[]; .tab == $t and .state == "running") then empty
+      else [.[] | select(.agent == $a)] | max_by(.id) // empty | .tab_id end' <<<"$tasks")
+  fi
+  [[ -n "$tid" ]] || tid=$(ensure_tab "$dir") || return 0
   zellij -s "$WT_HUB_SESSION" action go-to-tab-by-id "$tid" >/dev/null 2>&1
 }
 
@@ -459,6 +556,7 @@ cmd_start() {
   tid=$(ensure_tab "$PWD") || die "the hub did not open a tab for $(tab_name "$PWD")"
   pane=$(env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --tab-id "$tid" \
     --cwd "$PWD" --name "$name" --close-on-exit -- "$SELF" --exec "$line") || die "zellij did not open the pane"
+  [[ "$pane" == terminal_* ]] && record_task "$(hub_server)" "${pane#terminal_}" "$name" "$line"
   printf '%s: started in the hub, tab %s (%s)\n' "$name" "$(tab_name "$PWD")" "$pane"
   if ((wait)); then
     sleep 1
@@ -552,24 +650,31 @@ console_run() {
 }
 
 cmd_ls() {
-  local tasks
+  local tasks gone
   tasks=$(tasks_json) || die "the hub does not answer (start it with: wt hub)"
+  gone=$(gone_tasks)
   if [[ "${1:-}" == --json ]]; then
-    jq . <<<"$tasks"
+    # The gone tasks after the others, without a pane: .start starts one again.
+    jq -n --argjson t "$tasks" --argjson g "$gone" '$t + [$g[] | {pane: null, tab: null, owned: true,
+      name, state: "gone", command: .line, cwd, agent, ports: [], urls: [],
+      gone: (.gone | todate), start}]'
     return
   fi
   if [[ "$(jq length <<<"$tasks")" == 0 ]]; then
     printf 'No tasks tabs in the hub (Ctrl g Tab, or hub-run <command>, opens one).\n'
-    return
+  else
+    jq -r --arg home "$HOME" '
+      ["PANE", "TAB", "NAME", "STATE", "PORTS", "WHERE", "COMMAND"],
+      (.[] | [.pane, .tab, .name,
+              (if .state == "exited" then "exited \(.exit // "?")" else .state end),
+              (if .ports == [] then "-" else (.ports | map(tostring) | join(",")) end),
+              (.worktree // (.cwd | sub("^" + $home; "~"))),
+              (.command // "-" | sub("^/[^ ]*/"; ""))])
+      | @tsv' <<<"$tasks" | column -t -s $'\t'
   fi
-  jq -r --arg home "$HOME" '
-    ["PANE", "TAB", "NAME", "STATE", "PORTS", "WHERE", "COMMAND"],
-    (.[] | [.pane, .tab, .name,
-            (if .state == "exited" then "exited \(.exit // "?")" else .state end),
-            (if .ports == [] then "-" else (.ports | map(tostring) | join(",")) end),
-            (.worktree // (.cwd | sub("^" + $home; "~"))),
-            (.command // "-" | sub("^/[^ ]*/"; ""))])
-    | @tsv' <<<"$tasks" | column -t -s $'\t'
+  [[ "$(jq length <<<"$gone")" == 0 ]] && return 0
+  printf '\nGone with a hub restart (hub-run stop <name> forgets one); start one again with its line:\n'
+  jq -r '.[] | "  \(.name) (\(.gone | strflocaltime("%H:%M"))): \(.start)"' <<<"$gone"
 }
 
 cmd_log() {
@@ -623,7 +728,9 @@ cmd_wait() {
 cmd_stop() {
   local task owned root fg state name pane
   [[ -n "${1:-}" ]] || die "which task? (hub-run ls)"
-  task=$(find_task "$1") || exit 1
+  task=$(find_task "$1" --forget) || exit 1
+  # A gone task: find_task forgot it and printed that.
+  [[ "$task" == "{"* ]] || { printf '%s\n' "$task"; return 0; }
   IFS=$'\x1f' read -r owned root fg state name pane < <(fields '[.owned, (.root // ""), (.fg // ""), .state, .name, .pane]' <<<"$task")
   if [[ "$owned" == true ]]; then
     [[ -n "$root" ]] && { stop_group "$root" "$root" || die "$name: still runs after Ctrl-C, TERM and KILL"; }
@@ -784,7 +891,9 @@ running after you stop.
 user started by hand; `hub-run log <task>` shows a task's recent output; `hub-run wait <task>`
 waits until it listens; `hub-run stop|restart <task>`; `hub-run port <n>` tells who holds a port
 (for "address in use"). Stop or restart only tasks you started, unless the user asks. When
-hub-run says the hub does not run, use a background Bash call.
+hub-run says the hub does not run, use a background Bash call. The user sees a task with Ctrl g
+Tab when you or its worktree is picked in the hub list. A hub restart stops all tasks: then
+`hub-run ls` lists them as gone, with the command that starts each one again.
 EOF
 }
 
