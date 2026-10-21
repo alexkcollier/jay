@@ -91,6 +91,15 @@ Alex's to-do list, in his words (2026-10-19):
   to be on both tabs"): the hub tab has the banner too (`◆ HUB › worktrees`). Then (Alex:
   "programs and running commands are the only thing that should block moving"): every shell at
   its prompt follows the pick; a used one gets Ctrl-C and ` cd -- <worktree>` typed.
+- Tasks tabs, round 3 (Alex: "instead of following, does it make sense to switch the terminal,
+  tie the session to the agent?"): a tasks tab per worktree (not per agent: a server runs in a
+  folder), made on first need with `new-tab --no-focus`; the follow logic is gone. Ctrl g Tab is
+  a zellij `Run` binding (`hub-run --switch` in a 1-cell floating pane that closes at once),
+  because zellij 0.45 has no key action for a tab by name; Alex picked that over moving the
+  pick's tab to position 2 at each pick ("a sounds awful": a CLI tab switch at each pick). The
+  bar has no tab list; the banners say where you are. `d` on a worktree closes its tab. Cost
+  measured: the hub server used 68 MB with 5 plugin panes; a tab adds a shell and two zjstatus
+  instances.
 
 ## Other open items
 

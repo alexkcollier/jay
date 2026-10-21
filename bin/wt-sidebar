@@ -413,7 +413,7 @@ pause() {
 # worktree goes with its idle background agents; a "(gone)" row removes its agents. An agent
 # that works or an interactive session stops both.
 remove() {
-  local kind=$1 id=$2 agents agent out name short top main branch here idle pane
+  local kind=$1 id=$2 agents agent out name short top main branch here idle pane tasks tab
   agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
   case $kind in
     ag)
@@ -441,12 +441,17 @@ $out" ;;
       here=$(agents_in "$agents" "$top")
       agents_busy "$here" && return 0
       idle=$(awk -F'\t' '$1 == "idle" { print "  " $3 }' <<<"$here")
+      tasks=$(hub-run --worktree-tab "$top" --tasks 2>/dev/null)
+      tab=$(hub-run --worktree-tab "$top" --name 2>/dev/null)
       confirm "Remove worktree ${branch:-$top}${idle:+ and its agents}?
 
 $top
 ${idle:+
 Agents (their transcripts stay):
 $idle
+}${tasks:+
+Tasks that stop (its tab in the hub closes):
+$tasks
 }
 The branch is deleted only if it is merged. Uncommitted changes stop the removal." || return 0
       if [[ "$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)" == "$top" ]]; then
@@ -457,6 +462,7 @@ The branch is deleted only if it is merged. Uncommitted changes stop the removal
       # The worktree goes first: `claude rm` keeps an agent while its worktree is on disk.
       if out=$(wt -C "$top" remove --foreground 2>&1); then
         rm_agents "$here"
+        [[ -n "$tab" ]] && hub-run --close-tab "$tab" >/dev/null 2>&1
       else
         pause "Not removed:
 

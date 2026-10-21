@@ -47,11 +47,11 @@ Install with `./install.sh` ([Install](#install)). Open items and known faults:
   [The hub Claude](#the-hub-claude)); the "◆ hub" row in the list brings it back.
 - **Review** (right). tuicr on the picked agent's turns (one commit per turn), or on the branch's
   commits. **Files** (yazi in the same worktree) opens over review and closes back to it.
-- **Banner** (top, zjstatus, blue). `◆ HUB › worktrees` (or `› tasks` on the tasks tab), the
-  picked worktree, and `Ctrl g Tab` to the other tab.
-- **Bar** (bottom, zjstatus). `◆ hub`, the agent counts from the list, the tasks (`● web:5174`),
-  the zellij mode when it is not locked, the tabs and the time.
-- **Tasks tab** (second tab, Ctrl g Tab). Shell panes for dev servers, watchers and
+- **Banner** (top, zjstatus, blue). `◆ HUB › worktrees` and the picked worktree (on a tasks tab:
+  `◆ HUB › tasks` and its worktree), and where `Ctrl g Tab` goes.
+- **Bar** (bottom, zjstatus). `◆ hub`, the agent counts from the list, the tasks of all worktrees
+  (`● web:5174`), the zellij mode when it is not locked and the time.
+- **Tasks tabs** (one per worktree, Ctrl g Tab). Shell panes for dev servers, watchers and
   `docker compose up`, which you and the agents both see. See [Tasks](#tasks-dev-servers).
 
 The hub supports:
@@ -67,8 +67,8 @@ The hub supports:
 - Removal of agents and worktrees after a confirm, and automatic prune of dead agents.
 - macOS notices when an agent finishes a turn or needs input, with a click that shows the agent.
 - Your editor on any file of the worktree (`O` in files).
-- Dev servers in a tasks tab: their state and ports in the bar, their output readable by agents
-  (`hub-run`), no port or repo config.
+- Dev servers in a tasks tab per worktree: their state and ports in the bar, their output
+  readable by agents (`hub-run`), no port or repo config.
 
 ## Requirements
 
@@ -162,7 +162,7 @@ it off. Without tab control:
        bind "2" { MoveFocus "left"; MoveFocus "left"; MoveFocus "right"; SwitchToMode "locked"; }
        bind "3" { MoveFocus "right"; MoveFocus "right"; SwitchToMode "locked"; }
        bind ";" { FocusLastPane; SwitchToMode "locked"; }
-       bind "Tab" { GoToNextTab; SwitchToMode "locked"; }
+       bind "Tab" { Run "/Users/<you>/.local/bin/hub-run" "--switch" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }
    }
    ```
 4. Start the hub: `wt hub`. At the first start, zellij asks for the bar's permissions: click
@@ -351,7 +351,7 @@ note. macOS groups the notices of one agent.
 There is no notice when Ghostty is the front app and its selected tab shows the agent: the
 agent's own tab (`claude attach`, `c`, its zellij session, or an interactive session's terminal),
 or the hub's tab. The hub's tab counts for every agent, whatever pane has the focus, but only
-while the hub shows its "hub" tab: on the tasks tab the list is not on screen, so notices come.
+while the hub shows its "hub" tab: on a tasks tab the list is not on screen, so notices come.
 
 A click on a notice runs `wt go <session>`: Ghostty comes to the front and shows the agent. A
 background agent opens in the hub's middle column when the hub runs; else in its `claude attach`
@@ -360,26 +360,24 @@ to `~/.local/state/claude-notify.log`.
 
 ### Tasks (dev servers)
 
-The hub's second tab, "tasks", is for long-running commands: `pnpm dev`, watchers,
-`docker compose up`. Ctrl g Tab goes there and back (or click the tab in the bar). Each pane in
-the tab is a task. You and the agents see the same panes. A blue banner at the top of each tab
-says which tab of the hub it is (`◆ HUB › worktrees`, `◆ HUB › tasks`), with the picked worktree
-and the key to the other tab.
+Each worktree gets its own tasks tab in the hub for long-running commands: `pnpm dev`, watchers,
+`docker compose up`. The tab is named `<repo>/<branch> · <client>` and is made the first time it
+is needed. Each pane in a tasks tab is a task. You and the agents see the same panes. A blue
+banner at the top of each tab says where you are: `◆ HUB › worktrees <picked worktree>` on the
+hub tab, `◆ HUB › tasks <its worktree>` on a tasks tab, with where Ctrl g Tab goes.
 
-- **By hand**: type the command in a shell of the tab, as in any terminal. The tab always has a
-  free shell in the worktree that you picked in the hub:
-  - At each pick (agent or worktree), each shell of the tab goes to the picked worktree, with
-    `<repo>/<branch>` as its title. Only a command or program that runs in it keeps it where it
-    is. A fresh shell starts again there, in the same place. A used one gets Ctrl-C (typed text
-    is dropped) and ` cd -- <worktree>`, so its output stays.
-  - When a command takes the last free shell, the hub opens a new one (within 3 s), in the
-    picked worktree, without moving your focus.
-  - More panes: Ctrl g `p` `n` (zellij's pane mode; the new pane starts in the folder of the
-    focused pane). Close a pane: Ctrl g `p` `x`.
+- **Ctrl g Tab**: from the hub tab to the tasks tab of the worktree you picked (agent or
+  worktree row; a new tab when it has none); from a tasks tab back to the hub. zellij has no key
+  action for a tab by name, so the key runs `hub-run --switch` in a floating pane of 1 cell that
+  closes at once. A pick does not change the tab you are on.
+- **By hand**: type the command in a shell of the tab, as in any terminal. A tab always has a
+  free shell in its worktree: when a command takes the last one, the hub opens a new one (within
+  3 s), without moving your focus. More panes: Ctrl g `p` `n` (zellij's pane mode; the new pane
+  starts in the folder of the focused pane). Close a pane: Ctrl g `p` `x`.
 - **From elsewhere**: `hub-run <command>` in any folder (a Ghostty tab, `! hub-run pnpm dev` in a
-  Claude prompt) opens a new pane in the tasks tab, in that folder, and leaves you where you are.
-  `-n <name>` names it; `-w` waits until it listens and prints its URL. When the hub does not
-  run, it runs the command in your terminal.
+  Claude prompt) opens a new pane in that worktree's tasks tab, in that folder, and leaves you
+  where you are. `-n <name>` names it; `-w` waits until it listens and prints its URL. When the
+  hub does not run, it runs the command in your terminal.
 - **Agents**: a SessionStart hook (`hub-run --hook`) tells each Claude session to start dev
   servers with `hub-run -n <name> -w -- <command>`, not with a background Bash call. Then the
   task runs where you see it, and it keeps running after the agent stops. Agents read any task,
@@ -406,9 +404,9 @@ variables (`${DB_PORT:-5432}:5432`).
 
 **Output and secrets**: there are no log files. A pane's output stays in zellij's scrollback
 (`scroll_buffer_size`, default 10000 lines), as in any zellij pane; `hub-run log` reads it with
-`zellij action dump-screen` at that moment. Every pane in the tasks tab is readable by agents, and
+`zellij action dump-screen` at that moment. Every pane in a tasks tab is readable by agents, and
 what an agent reads goes into its transcript. Run a command that prints secrets in a terminal
-outside the hub's tasks tab. Not built yet, in case it is needed: a key that marks a pane as
+outside the hub's tasks tabs. Not built yet, in case it is needed: a key that marks a pane as
 private, so that `hub-run log` refuses to read it (the bar would still show its state and ports).
 
 **Hub restart**: the tasks are panes of the hub session, so they stop when the hub quits or
@@ -416,8 +414,8 @@ starts fresh. Start them again after `wt hub`.
 
 | Command | What |
 |---|---|
-| `hub-run [-n name] [-w [-t s]] [--] <command...>` | a new pane in the tasks tab, in this folder; refuses a second copy of a command that runs in the same folder |
-| `hub-run ls [--json]` | the tasks: pane, name, state (running, idle, exited), ports, worktree, command |
+| `hub-run [-n name] [-w [-t s]] [--] <command...>` | a new pane in this worktree's tasks tab, in this folder; refuses a second copy of a command that runs in the same folder |
+| `hub-run ls [--json]` | the tasks: pane, tab, name, state (running, idle, exited), ports, worktree, command |
 | `hub-run log <task> [-n lines \| --all]` | the pane's text (default: the last 100 lines) |
 | `hub-run wait <task> [-t s]` | wait until the task listens (default 120 s); print its URLs, or its last lines when it ends |
 | `hub-run stop <task>` | Ctrl-C to the command (TERM after 10 s, KILL after 5 s more); a pane that `hub-run` started closes, a shell stays |
@@ -434,8 +432,9 @@ worktree. When several match, `hub-run` lists them; use the pane id.
 - **Background agent**: `claude rm <id>`. It deletes the session and the worktree that Claude
   made for it, if any. Unpushed commits stop the removal. The transcript stays.
 - **Interactive agent**: not removed. Close it in its tab, or `b` first.
-- **Worktree**: `wt remove`, then `claude rm` for each idle background agent in it (the confirm
-  names them). The list never removes a main checkout. An agent that works, or an interactive
+- **Worktree**: `wt remove`, then `claude rm` for each idle background agent in it, then its tasks
+  tab closes (the confirm names the agents and the tasks that run). The list never removes a
+  main checkout. An agent that works, or an interactive
   session in the worktree, stops the removal (the list names it). The branch is deleted only
   when it is merged. Uncommitted changes stop the removal, and then the agents stay. A dim check
   sign and a dim name mark a worktree that is safe to remove.
@@ -537,7 +536,7 @@ to locked mode.
 | Ctrl g, `1` / `2` / `3` | list / middle / right column |
 | Ctrl g, `h` / `l` | pane to the left / right |
 | Ctrl g, `;` | last pane |
-| Ctrl g, Tab | hub tab ⇄ tasks tab |
+| Ctrl g, Tab | hub tab ⇄ the picked worktree's tasks tab |
 | Ctrl g, Ctrl q | quit the hub (the agents keep running) |
 | Ctrl g, Ctrl g / Esc / Enter | back to locked mode |
 | Ctrl g, `p` `t` `r` `s` `m` `o` | zellij's pane, tab, resize, scroll, move and session modes |
@@ -599,7 +598,7 @@ All of these are in `~/.local/bin`. worktrunk runs `wt-<name>` for `wt <name>`, 
 |---|---|
 | `wt hub [--here \| --tab \| --print-layout]` | Go to the hub's Ghostty tab, else open the hub in this terminal (attach, or a fresh start). A new tab without a terminal or inside another zellij session. `--here`: this terminal. `--tab`: a new tab. `--print-layout`: print the zellij layout. |
 | `c [claude --bg options] [prompt]` | Claude in this folder as a background agent, attached here. Use it in place of `claude`. |
-| `hub-run <command>` | Run a command in a new pane of the hub's tasks tab; `ls`, `log`, `wait`, `stop`, `restart`, `port`. See [Tasks](#tasks-dev-servers). |
+| `hub-run <command>` | Run a command in a new pane of this worktree's tasks tab in the hub; `ls`, `log`, `wait`, `stop`, `restart`, `port`. See [Tasks](#tasks-dev-servers). |
 | `wt go <agent>` | Bring an agent in front: id, session id (or its start), name, or a part of a name (any case); `hub` is the hub Claude. Several name matches: the live ones win; still several is an error that lists them. A background agent opens in the hub when the hub runs (from anywhere, also from an agent), else in a `claude attach` tab. An interactive one: its own tab (or zellij pane). |
 | `wt new <branch\|pr:N> [-b base] [-t "task"] [-a] [-- prompt...]` | Make (or reuse) the worktree and store the task note. With a prompt, or `-a` for an idle one, start a background agent there. Without `-t`, the first line of the prompt (60 characters) is the task note. |
 | `wt-edit <file or folder>` | Open it in your editor, in its project. See [Open your editor](#open-your-editor). |
@@ -615,10 +614,10 @@ All of these are in `~/.local/bin`. worktrunk runs `wt-<name>` for `wt <name>`, 
 
 Hooks and internal commands (not for hand use): `claude-notify` (Stop, Notification),
 `claude-turn-snapshot` (UserPromptSubmit, Stop), `hub-run --hook` (SessionStart), `hub-run --bar`
-(the bar's tasks), `hub-run --tick` (the list's tick: a free shell, then the bar's tasks),
-`hub-run --follow <dir>` (a pick: the banner and the empty shells), `hub-run --where` (the
-banner's worktree), `hub-run --exec` (a pane that `hub-run` started), `hub-run --tab` (adds the
-tasks tab, with its bar, to a hub that has none; `hub-run` does it too), `wt-sidebar` (the list),
+(the bar's tasks), `hub-run --tick` (the list's tick: a free shell in each tasks tab, then the
+bar's tasks), `hub-run --where` (the hub banner's worktree, at each pick), `hub-run --switch`
+(Ctrl g Tab), `hub-run --worktree-tab <dir> --name|--tasks` and `hub-run --close-tab <name>`
+(`d` on a worktree), `hub-run --exec` (a pane that `hub-run` started), `wt-sidebar` (the list),
 `wt-hub-pane agent|review|files` (the panes), `wt-hub-keys` (tuicr's `t` and `e`).
 
 ### The mod (`/wt` in Claude Code)
@@ -699,8 +698,8 @@ bin/
   c                      Claude as a background agent, attached here
   claude-notify          hook (Stop, Notification): macOS notice; a click runs wt go
   claude-turn-snapshot   hook (UserPromptSubmit, Stop): turn chains; --list, --prune
-  hub-run                tasks in the hub's tasks tab: start, ls, log, wait, stop, restart, port;
-                         --bar (the bar), --hook (SessionStart), --exec (its panes)
+  hub-run                tasks in a tasks tab per worktree: start, ls, log, wait, stop, restart,
+                         port; --switch (Ctrl g Tab), --tick, --bar, --hook, --exec (its panes)
   wt-agents              wt agents: Claude sessions in fzf
   wt-all                 wt all: worktrees of every repo; --json for the list
   wt-pick -> wt-all      wt pick: the same in fzf, Enter opens

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # wt hub — zellij session "hub": the live worktree list (left), the picked agent (middle; at
-# start the hub Claude) and review + files (right); a second tab "tasks" for dev servers
+# start the hub Claude) and review + files (right); a tasks tab per worktree for dev servers
 # (hub-run). Goes to the hub's Ghostty tab when it has one, else opens the hub in this
 # terminal; a new tab only without a terminal or from inside another zellij session.
 # --here: in this terminal.  --tab: in a new tab.  --print-layout: the zellij layout it starts.
-# --print-tasks-tab: the layout of the tasks tab alone.
+# --print-tasks-tab <worktree> <name>: the layout of a worktree's tasks tab (hub-run makes it).
 set -euo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
 [[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,7s/^# \{0,1\}//p' "$0"; exit 0; }
@@ -17,7 +17,8 @@ layout="$HOME/.local/state/wt-hub-layout.kdl"
 ZJSTATUS="$HOME/.local/share/wt-hub/zjstatus-v0.25.0.wasm"
 
 # The bar at the bottom of the hub, in kanagawa colors: the agent counts and the tasks (both
-# sent by the list, see wt-sidebar), the zellij mode when it is not locked, the tabs and the time.
+# sent by the list, see wt-sidebar), the zellij mode when it is not locked and the time. No tab
+# list: there is a tab per worktree, and the banner says which one is shown.
 bar() {
   if [[ ! -f "$ZJSTATUS" ]]; then
     printf '%s\n' 'plugin location="zellij:compact-bar"'
@@ -28,7 +29,7 @@ bar() {
   cat <<KDL
 plugin location="file:$ZJSTATUS" {
                 format_left   "#[fg=#7E9CD8,bold] ◆ hub  {pipe_agents}   {pipe_tasks}"
-                format_right  "{mode}{tabs}#[fg=#727169] {datetime} "
+                format_right  "{mode}#[fg=#727169] {datetime} "
                 format_space  ""
                 pipe_agents_format     "{output}"
                 pipe_agents_rendermode "raw"
@@ -37,9 +38,6 @@ plugin location="file:$ZJSTATUS" {
                 mode_locked          ""
                 mode_normal          "#[fg=#1F1F28,bg=#E6C384,bold] {name} #[fg=#727169] Ctrl q: quit hub · Ctrl g: lock  "
                 mode_default_to_mode "normal"
-                tab_active    "#[fg=#DCD7BA,bold] {name} "
-                tab_normal    "#[fg=#727169] {name} "
-                tab_separator "#[fg=#54546D]│"
                 datetime          "{format}"
                 datetime_format   "%H:%M"
                 datetime_timezone "$tz"
@@ -48,14 +46,16 @@ KDL
 }
 
 # The banner at the top of each tab, so that each tab says it is the hub's: "◆ HUB › <what the
-# tab is>" ($1), the picked worktree (sent at each pick, see wtl_hub_target and wt-sidebar) and
-# the key to the other tab ($2). Without zjstatus, none.
+# tab is>" ($1), the worktree ($3; without it the picked one, sent at each pick, see
+# wtl_hub_target and wt-sidebar) and where Ctrl g Tab goes ($2). Without zjstatus, none.
 banner() {
   [[ -f "$ZJSTATUS" ]] || return 0
+  local where='{pipe_where}'
+  [[ -n "${3:-}" ]] && where=$(sed 's/[\\"]/\\&/g; s/#\[/# [/g' <<<"$3")
   cat <<KDL
 pane size=1 borderless=true {
             plugin location="file:$ZJSTATUS" {
-                format_left   "#[fg=#1F1F28,bg=#7E9CD8,bold] ◆ HUB › $1 #[fg=#1F1F28,bg=#7E9CD8]  {pipe_where}"
+                format_left   "#[fg=#1F1F28,bg=#7E9CD8,bold] ◆ HUB › $1 #[fg=#1F1F28,bg=#7E9CD8]  $where"
                 format_right  "#[fg=#1F1F28,bg=#7E9CD8] Ctrl g Tab: $2 "
                 format_space  "#[bg=#7E9CD8]"
                 pipe_where_format     "#[fg=#1F1F28,bg=#7E9CD8]{output}"
@@ -80,7 +80,7 @@ layout {
         }
     }
     tab name="hub" focus=true {
-        $(banner worktrees tasks)
+        $(banner worktrees "its tasks")
         pane split_direction="vertical" {
             pane size="$list%" name="worktrees" command="$HOME/.local/bin/wt-sidebar"
             pane size="$middle%" name="hub" focus=true command="$HOME/.local/bin/wt-hub-pane" {
@@ -90,10 +90,6 @@ layout {
                 args "review"
             }
         }
-    }
-    tab name="tasks" {
-        $(banner tasks "back to the hub")
-        pane cwd="$root"
     }
 }
 KDL
@@ -113,13 +109,13 @@ fresh_start() {
   wtl_hub_reset
 }
 
-# The tasks tab alone, with the bar: hub-run adds it to a hub that has none (one started from an
-# older layout, or one whose tasks tab was closed).
+# The tasks tab of worktree $1, named $2 (hub-run makes it, see ensure_tab there): the banner,
+# a shell in the worktree, the bar.
 tasks_tab_layout() {
   cat <<KDL
 layout {
-    $(banner tasks "back to the hub")
-    pane cwd="$root"
+    $(banner tasks "back to the hub" "$2")
+    pane cwd="$1"
     pane size=1 borderless=true {
         $(bar)
     }
@@ -132,7 +128,8 @@ if [[ "${1:-}" == --print-layout ]]; then
   exit 0
 fi
 if [[ "${1:-}" == --print-tasks-tab ]]; then
-  tasks_tab_layout
+  [[ -n "${2:-}" && -n "${3:-}" ]] || { echo "wt hub --print-tasks-tab <worktree> <name>" >&2; exit 2; }
+  tasks_tab_layout "$(sed 's/[\\"]/\\&/g' <<<"$2")" "$3"
   exit 0
 fi
 

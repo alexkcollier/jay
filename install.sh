@@ -361,12 +361,14 @@ check_zellij() {
   head_ "zellij keys (optional, in ~/.config/zellij/config.kdl; this script never edits it)"
   local conf="$HOME/.config/zellij/config.kdl"
   if [[ -f "$conf" ]] && grep -qF 'MoveFocus "left"; MoveFocus "left"; MoveFocus "right"' "$conf" \
-    && grep -qF 'GoToNextTab; SwitchToMode "locked"' "$conf"; then
+    && grep -qF 'hub-run" "--switch"' "$conf"; then
     ok "pane keys (Ctrl g, then 1 2 3 h l ; Tab)"
     return 0
   fi
-  note "for the pane keys, add these binds to the normal block of keybinds:"
-  cat <<'KDL'
+  note "for the pane keys, add these binds to the normal block of keybinds (Tab: a worktree's"
+  note "tasks tab and back, through a pane of 1 cell that closes at once; zellij has no key action"
+  note "for a tab by name):"
+  cat <<KDL
           normal {
               bind "h" { MoveFocus "left"; SwitchToMode "locked"; }
               bind "l" { MoveFocus "right"; SwitchToMode "locked"; }
@@ -374,7 +376,7 @@ check_zellij() {
               bind "2" { MoveFocus "left"; MoveFocus "left"; MoveFocus "right"; SwitchToMode "locked"; }
               bind "3" { MoveFocus "right"; MoveFocus "right"; SwitchToMode "locked"; }
               bind ";" { FocusLastPane; SwitchToMode "locked"; }
-              bind "Tab" { GoToNextTab; SwitchToMode "locked"; }
+              bind "Tab" { Run "$BIN/hub-run" "--switch" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }
           }
 KDL
   note "the hub expects default_mode \"locked\", with Ctrl g to normal mode and Ctrl q to quit"

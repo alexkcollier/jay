@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# hub-run — long-running commands (dev servers, watchers, docker compose) in the hub's "tasks"
-# tab, where you and agents both see them. Each pane in that tab is a task: a shell you type in,
-# or a pane that hub-run started. Output stays in zellij's scrollback: no log files.
-#   hub-run [-n name] [-w [-t s]] [--] <command...>   a new pane in the tasks tab, in this folder.
-#                            -w: wait until it listens (see wait). Without the hub: runs here.
+# hub-run — long-running commands (dev servers, watchers, docker compose) in the hub, in a tab per
+# worktree, where you and agents both see them. Each pane outside the "hub" tab is a task: a shell
+# you type in, or a pane that hub-run started. Output stays in zellij's scrollback: no log files.
+#   hub-run [-n name] [-w [-t s]] [--] <command...>   a new pane in this worktree's tab, in this
+#                            folder. -w: wait until it listens (see wait). Without the hub: runs here.
 #   hub-run ls [--json]      the tasks: name, state, ports, worktree, command
 #   hub-run log <task> [-n lines | --all]   what the pane shows, as plain text (default 100 lines)
 #   hub-run wait <task> [-t seconds]   wait until the task listens on a port; print its URLs
@@ -14,7 +14,8 @@
 set -uo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
 
-TAB=${WT_HUB_TASKS_TAB:-tasks}
+# The hub's own tab (list, agent, review); every other tab of the hub is a worktree's tasks tab.
+HUB_TAB=hub
 STATE_DIR="$HOME/.local/state/hub-tasks"
 SELF="$HOME/.local/bin/hub-run"
 
@@ -148,13 +149,13 @@ tasks_json() {
   listen=$(listen_ports)
   cwds=$(proc_cwds "$fgs")
   local raw
-  raw=$(jq -c --arg tab "$TAB" --arg procs "$procs" --arg listen "$listen" --arg cwds "$cwds" --arg self "hub-run --exec " '
+  raw=$(jq -c --arg hub "$HUB_TAB" --arg procs "$procs" --arg listen "$listen" --arg cwds "$cwds" --arg self "hub-run --exec " '
     def lines: split("\n") | map(select(length > 0) | split("\t"));
     ($procs | lines | map({root: (.[0] | tonumber), tty: .[1], fg: (.[2] | tonumber),
                            pids: (.[3] | split(",") | map(tonumber)), fgcmd: .[4]}) | sort_by(.root)) as $R
     | ($listen | lines | reduce .[] as $l ({}; .[$l[0]] += [$l[1] | tonumber])) as $L
     | ($cwds | lines | map({key: .[0], value: .[1]}) | from_entries) as $C
-    | [.[] | select((.is_plugin | not) and .tab_name == $tab)] | sort_by(.id)
+    | [.[] | select((.is_plugin | not) and .tab_name != $hub)] | sort_by(.id)
     # A pane gets the first free root process whose foreground command is the pane command,
     # in the same folder when there is one (panes and roots both go in start order). When
     # zellij gives no command (it can be null), the only free root in the pane folder.
@@ -170,13 +171,13 @@ tasks_json() {
         | .out += [{pane: $p, proc: $m}])
     | .out[]
     | .pane as $p | .proc as $m
-    # A shell at its prompt: a default pane, or one that hub-run --follow opened ($SHELL -l).
+    # A shell at its prompt: a default pane, or a free shell that hub-run opened ($SHELL -l).
     | ($m != null and $m.fg == $m.root
        and ($p.terminal_command == null or ($m.fgcmd | test("^-?(/[^ ]*/)?(zsh|bash|fish|sh)( -l| -i| --login)*$")))) as $prompt
     | (($p.terminal_command // "") | index($self)) as $at
     | ($at != null) as $owned
     | (if $owned then $p.terminal_command[($at + ($self | length)):] else null end) as $line
-    | {id: $p.id, pane: "terminal_\($p.id)", owned: $owned, title: $p.title,
+    | {id: $p.id, pane: "terminal_\($p.id)", tab: $p.tab_name, tab_id: $p.tab_id, owned: $owned, title: $p.title,
        root: ($m.root // null), fg: ($m.fg // null), pids: ($m.pids // []),
        state: (if $p.exited then "exited"
                elif $m == null then "unknown"
@@ -245,23 +246,74 @@ find_task() {
   jq -c '.[0]' <<<"$found"
 }
 
-# The id of the hub's tasks tab. A hub without one (started from an older layout, or its tasks
-# tab closed) gets it, with the bar (wt hub --print-tasks-tab); the view goes back to the tab it
-# was on.
+# The tasks tab of the worktree (or folder outside git) that holds $1: its name, and its label
+# for the banner. "<repo>/<branch>", with the client when there is one, so that two clients'
+# repos of the same name get two tabs.
+tab_name() {
+  local client repo branch top
+  IFS=$'\t' read -r client repo branch top < <(wtl_describe "$1")
+  if [[ -n "$client" && "$client" != "$repo" ]]; then printf '%s/%s · %s\n' "$repo" "$branch" "$client"
+  else printf '%s/%s\n' "$repo" "$branch"; fi
+}
+
+tab_id_of() {
+  zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null \
+    | jq -r --arg t "$1" 'first(.[] | select(.name == $t) | .tab_id) // empty' 2>/dev/null
+}
+
+# The id of the tasks tab of the worktree that holds $1. A worktree without one gets it, with
+# the banner and the bar (wt hub --print-tasks-tab), without moving the view.
 ensure_tab() {
-  local tabs tid back layout strip=() var
-  tabs=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null)
-  tid=$(jq -r --arg t "$TAB" 'first(.[] | select(.name == $t) | .tab_id) // empty' <<<"$tabs" 2>/dev/null)
+  local top name tid layout strip=() var
+  top=$(wtl_toplevel "$1")
+  name=$(tab_name "$top")
+  tid=$(tab_id_of "$name")
   [[ -n "$tid" ]] && { printf '%s\n' "$tid"; return 0; }
-  back=$(jq -r 'first(.[] | select(.active) | .name) // empty' <<<"$tabs" 2>/dev/null)
   mkdir -p "$STATE_DIR"
-  layout="$STATE_DIR/tasks-tab.kdl"
-  "$HOME/.local/bin/wt-hub" --print-tasks-tab >"$layout" || return 1
+  layout="$STATE_DIR/tasks-tab.$$.kdl"
+  "$HOME/.local/bin/wt-hub" --print-tasks-tab "$top" "$name" >"$layout" || return 1
   for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
-  env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-tab --layout "$layout" --name "$TAB" >/dev/null 2>&1
-  [[ -n "$back" ]] && zellij -s "$WT_HUB_SESSION" action go-to-tab-name "$back" >/dev/null 2>&1
-  tid=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null | jq -r --arg t "$TAB" 'first(.[] | select(.name == $t) | .tab_id) // empty')
+  env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-tab --no-focus --layout "$layout" \
+    --name "$name" --cwd "$top" >/dev/null 2>&1
+  rm -f "$layout"
+  tid=$(tab_id_of "$name")
   [[ -n "$tid" ]] && printf '%s\n' "$tid"
+}
+
+# Ctrl g Tab (a zellij Run binding, in a pane that closes at once): from the hub tab to the
+# tasks tab of the worktree picked in the hub (made when it has none); from any other tab back
+# to the hub tab.
+cmd_switch() {
+  local active dir tid
+  active=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null | jq -r 'first(.[] | select(.active) | .name) // empty')
+  if [[ "$active" != "$HUB_TAB" ]]; then
+    zellij -s "$WT_HUB_SESSION" action go-to-tab-name "$HUB_TAB" >/dev/null 2>&1
+    return 0
+  fi
+  dir=$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)
+  [[ -n "$dir" && -d "$dir" ]] || dir=${WT_ROOTS%%:*}
+  tid=$(ensure_tab "$dir") || return 0
+  zellij -s "$WT_HUB_SESSION" action go-to-tab-by-id "$tid" >/dev/null 2>&1
+}
+
+# The tasks tab of worktree $1, for the list's remove (wt-sidebar): --name prints its name (read
+# it before `wt remove`: the name comes from git); --tasks prints its running tasks ("  name:
+# command" lines, for the confirm). `--close-tab <name>` closes it.
+cmd_worktree_tab() {
+  local name
+  name=$(tab_name "${1:?}")
+  case ${2:-} in
+    --name) printf '%s\n' "$name" ;;
+    --tasks) tasks_json 2>/dev/null | jq -r --arg t "$name" '.[] | select(.tab == $t and .state == "running") | "  \(.name): \(.command // "")"' ;;
+  esac
+  return 0
+}
+
+cmd_close_tab() {
+  local tid
+  tid=$(tab_id_of "${1:?}")
+  [[ -n "$tid" ]] && zellij -s "$WT_HUB_SESSION" action close-tab-by-id "$tid" >/dev/null 2>&1
+  return 0
 }
 
 # --- Commands ---
@@ -298,10 +350,10 @@ cmd_start() {
   fi
   local strip=() var
   for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
-  tid=$(ensure_tab) || die "the hub has no $TAB tab, and a new one did not open"
+  tid=$(ensure_tab "$PWD") || die "the hub did not open a tab for $(tab_name "$PWD")"
   pane=$(env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --tab-id "$tid" \
     --cwd "$PWD" --name "$name" --close-on-exit -- "$SELF" --exec "$line") || die "zellij did not open the pane"
-  printf '%s: started in the hub'"'"'s %s tab (%s)\n' "$name" "$TAB" "$pane"
+  printf '%s: started in the hub, tab %s (%s)\n' "$name" "$(tab_name "$PWD")" "$pane"
   if ((wait)); then
     sleep 1
     cmd_wait "$pane" -t "$secs"
@@ -318,12 +370,12 @@ cmd_ls() {
     return
   fi
   if [[ "$(jq length <<<"$tasks")" == 0 ]]; then
-    printf 'No panes in the hub'"'"'s %s tab.\n' "$TAB"
+    printf 'No tasks tabs in the hub (Ctrl g Tab, or hub-run <command>, opens one).\n'
     return
   fi
   jq -r --arg home "$HOME" '
-    ["PANE", "NAME", "STATE", "PORTS", "WHERE", "COMMAND"],
-    (.[] | [.pane, .name,
+    ["PANE", "TAB", "NAME", "STATE", "PORTS", "WHERE", "COMMAND"],
+    (.[] | [.pane, .tab, .name,
             (if .state == "exited" then "exited \(.exit // "?")" else .state end),
             (if .ports == [] then "-" else (.ports | map(tostring) | join(",")) end),
             (.worktree // (.cwd | sub("^" + $home; "~"))),
@@ -450,23 +502,22 @@ cmd_bar() {
     | join("  ")' <<<"$tasks"
 }
 
-# Keep one free shell in the tasks tab: when a command takes the last shell at its prompt,
-# open a new one, in the worktree of the hub's review, without moving the focus. Not while a
+# Keep one free shell in each tasks tab: when a command takes the last shell at its prompt in a
+# tab, open a new one there, in that tab's worktree, without moving the focus. Not while a
 # pane's process is unknown (it may be that shell).
 spare_shell() {
-  local tasks=$1 tid dir client repo branch top strip=() var
-  jq -e 'length > 0 and all(.[]; .state != "idle" and .state != "unknown")' <<<"$tasks" >/dev/null || return 0
-  tid=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null | jq -r --arg t "$TAB" 'first(.[] | select(.name == $t) | .tab_id) // empty')
-  [[ -n "$tid" ]] || return 0
-  dir=$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)
-  [[ -n "$dir" && -d "$dir" ]] || dir=${WT_ROOTS%%:*}
-  IFS=$'\t' read -r client repo branch top < <(wtl_describe "$dir")
+  local tasks=$1 tid cwd top strip=() var
   for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
-  env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --tab-id "$tid" --close-on-exit \
-    --cwd "$top" --name "$repo/$branch" -- "${SHELL:-/bin/zsh}" -l >/dev/null 2>&1
+  while IFS=$'\t' read -r tid cwd; do
+    [[ -n "$tid" ]] || continue
+    top=$(wtl_toplevel "$cwd")
+    env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --tab-id "$tid" --close-on-exit \
+      --cwd "$top" -- "${SHELL:-/bin/zsh}" -l >/dev/null 2>&1
+  done < <(jq -r 'group_by(.tab_id)[] | select(all(.[]; .state != "idle" and .state != "unknown"))
+    | "\(.[0].tab_id)\t\(.[0].cwd)"' <<<"$tasks")
 }
 
-# The list's tick (wt-sidebar, every 3 s): a free shell in the tasks tab, then the bar text.
+# The list's tick (wt-sidebar, every 3 s): a free shell in each tasks tab, then the bar text.
 cmd_tick() {
   local tasks
   tasks=$(tasks_json 2>/dev/null) || return 0
@@ -474,8 +525,8 @@ cmd_tick() {
   cmd_bar "$tasks"
 }
 
-# The banner of the tasks tab (see wt-hub) shows worktree $1 as <repo>/<branch>; without $1,
-# the worktree of the hub's review.
+# The banner of the hub tab (see wt-hub) shows the picked worktree $1 as <repo>/<branch> (a pick
+# sends it, see wtl_hub_target); without $1, the worktree of the hub's review.
 cmd_where() {
   local dir=${1:-} client repo branch top
   [[ -n "$dir" ]] || dir=$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)
@@ -484,45 +535,13 @@ cmd_where() {
   zellij -s "$WT_HUB_SESSION" pipe "zjstatus::pipe::pipe_where::$repo/$branch" >/dev/null 2>&1
 }
 
-# A pick in the hub moved to worktree $1 (wtl_hub_target): the banner shows it, and each shell
-# of the tasks tab in another folder goes there, unless a command or program runs in it (Alex:
-# only that blocks the move). A fresh shell (at most 3 lines on screen, as a prompt can have
-# two, and no prompt with a command after it) starts again in the worktree, in the same place.
-# A used one gets Ctrl-C (it drops typed text; at the prompt nothing else gets it), then
-# `cd <worktree>` typed, so its scrollback stays.
-PROMPT_CMD='(%|\$|#|>|❯|➜)[[:space:]]+[^[:space:]]'
-cmd_follow() {
-  local top real tasks pane screen client repo branch strip=() var
-  top=$(wtl_toplevel "${1:?}")
-  [[ -d "$top" ]] || return 0
-  cmd_where "$top"
-  IFS=$'\t' read -r client repo branch _ < <(wtl_describe "$top")
-  real=$(cd "$top" && pwd -P)
-  tasks=$(tasks_json) || return 0
-  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
-  for pane in $(jq -r --arg d "$real" '.[] | select(.state == "idle" and .cwd != $d) | .pane' <<<"$tasks"); do
-    screen=$(zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | grep '[^[:space:]]')
-    if [[ -n "$screen" ]] && (($(wc -l <<<"$screen") <= 3)) && ! grep -qE "$PROMPT_CMD" <<<"$screen"; then
-      # In place without a command, zellij keeps the old folder: give the shell as the command.
-      env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --in-place --pane-id "$pane" \
-        --close-replaced-pane --close-on-exit --cwd "$top" --name "$repo/$branch" -- "${SHELL:-/bin/zsh}" -l >/dev/null 2>&1
-    else
-      # A leading space keeps the line out of the history (HIST_IGNORE_SPACE).
-      zellij -s "$WT_HUB_SESSION" action write-chars --pane-id "$pane" $'\x03' >/dev/null 2>&1
-      sleep 0.2
-      zellij -s "$WT_HUB_SESSION" action write-chars --pane-id "$pane" " cd -- $(printf '%q' "$top")"$'\r' >/dev/null 2>&1
-      zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "$repo/$branch" >/dev/null 2>&1
-    fi
-  done
-  return 0
-}
-
 # SessionStart hook: tells each Claude session about the tasks tab (stdout becomes context).
 cmd_hook() {
   cat <<'EOF'
 Long-running commands (dev servers, watchers, `docker compose up`): when the user's hub runs, start
 them with `hub-run -n <name> -w -- <command>` in the folder they run in, not with a background Bash
-call. They run in the hub's "tasks" tab, where the user sees them, and keep running after you stop.
+call. They run in the hub, in the tab of that worktree, where the user sees them, and keep
+running after you stop.
 `hub-run ls --json` lists the tasks (name, state, ports, URLs, worktree, command), also the ones the
 user started by hand; `hub-run log <task>` shows a task's recent output; `hub-run wait <task>`
 waits until it listens; `hub-run stop|restart <task>`; `hub-run port <n>` tells who holds a port
@@ -537,9 +556,10 @@ case ${1:-} in
   --bar) cmd_bar ;;
   --tick) cmd_tick ;;
   --hook) cmd_hook ;;
-  --follow) shift; cmd_follow "$@" ;;
   --where) shift; cmd_where "$@" ;;
-  --tab) hub_answers || die "the hub does not run"; ensure_tab >/dev/null || die "no $TAB tab" ;;
+  --switch) cmd_switch ;;
+  --worktree-tab) shift; cmd_worktree_tab "$@" ;;
+  --close-tab) shift; cmd_close_tab "$@" ;;
   ls) shift; cmd_ls "$@" ;;
   log) shift; cmd_log "$@" ;;
   wait) shift; cmd_wait "$@" ;;
