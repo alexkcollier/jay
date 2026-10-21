@@ -1,0 +1,14 @@
+# WT_REVIEW_DIFF=plain: the hub's lazygit (wt-hub-lazygit) loads this file over hub.yml.
+# delta alone, without wt-hub-diff: one column of line numbers, path:line on each hunk. Long
+# lines do not wrap: they stop at the edge, and H and L scroll the patch to the side. | cycles.
+gui:
+  wrapLinesInDiffView: false
+git:
+  diffRenderers:
+    - name: delta (plain)
+      command: "delta --no-gitconfig --{{colorScheme}} --paging=never --true-color=always --line-numbers --line-numbers-left-format= --line-numbers-right-format='{np:>4}│' --hunk-header-style='file line-number syntax' --hunk-header-decoration-style=none --file-decoration-style=ol"
+    - name: delta (hub)
+      command: "$HOME/.local/bin/wt-hub-diff delta {{width}} {{colorScheme}}"
+    - name: difftastic (hub)
+      type: extDiff
+      command: "$HOME/.local/bin/wt-hub-diff difft {{width}} {{colorScheme}}"

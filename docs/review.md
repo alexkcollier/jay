@@ -7,6 +7,7 @@
 - [Modes: turns and commits](#modes-turns-and-commits)
 - [New turns](#new-turns)
 - [Review with lazygit](#review-with-lazygit)
+  - [The patch in lazygit](#the-patch-in-lazygit)
 - [Files](#files)
 - [Hide review](#hide-review)
 
@@ -86,10 +87,33 @@ turn, else the head) into the view every 2 s, and lazygit refreshes when the bra
 place stays. When the newest turn was selected, the new turn is selected (the pane types `<`).
 When the running turn changes or ends, its row stays where it is and shows the new state.
 
-lazygit reads your own `config.yml` (theme, diff renderer), then the hub's
-`~/.config/wt-hub/lazygit/hub.yml` over it: one tab group, list on top, no author or hash, and
-the hub's `t` and `e`. Its state (recent repos) goes to `~/.local/state/wt-hub/lazygit/state`,
-not into yours. `claude-turn-snapshot --prune` removes a view with its chain.
+lazygit reads your own `config.yml` (theme), then the hub's `~/.config/wt-hub/lazygit/hub.yml`
+over it: one tab group, list on top, no author or hash, the hub's diff renderers, and the hub's
+`t` and `e`. Its state (recent repos) goes to `~/.local/state/wt-hub/lazygit/state`, not into
+yours. `claude-turn-snapshot --prune` removes a view with its chain.
+
+### The patch in lazygit
+
+The review column is narrow, so the hub has its own diff renderers (`git.diffRenderers` in
+`hub.yml`). `WT_REVIEW_DIFF` puts one first; `|` in lazygit goes to the next one.
+
+- `delta` (default): `wt-hub-diff` with delta. One column of line numbers (the new line; the
+  old one on a removed line, in red). A bar on each file: its place in the diff (`3/8`), the
+  status (`M`, `A`, `D`, `R`), the path, `+12 -3`. A line on each hunk: `path:line`, its place
+  in the file (`2/3`) and the function. A long line wraps under its own code. With the patch
+  focused (`0` or a click), the rendering stays, and `n` / `N` go to the next or previous file,
+  `l` / `h` to the next or previous hunk.
+- `difft`: `wt-hub-diff` with difftastic in inline mode: a diff of the syntax, so a reformat or
+  a moved argument shows as what it is. The same file bar and hunk lines (no line in the hunk
+  line), difftastic's two number columns, the same wrap. With the patch focused, lazygit shows
+  git's raw diff.
+- `plain`: delta alone, without `wt-hub-diff`: one number column, `path:line` on each hunk. Long
+  lines do not wrap: they stop at the edge, and `H` / `L` scroll the patch to the side. With the
+  patch focused, lazygit shows git's raw diff.
+
+The hub's renderers do not read your `~/.gitconfig` `[delta]` settings, and use 24-bit color.
+See `notes/lazygit-review.md` ("7. The diff") and the screen dumps in `notes/lazygit-diff/`.
+Keys: [Review (lazygit)](keys.md#review-lazygit-wt_reviewlazygit).
 
 ## Files
 

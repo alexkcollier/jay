@@ -5,7 +5,8 @@ zellij 0.45.1, git 2.54.0.
 
 Status: lazygit is now an option (`WT_REVIEW=lazygit`), with the install steps, the prune and
 the README of the "Cost" list below. tuicr stays the default. The study text below is as
-written before that step.
+written before that step. The patch in the review column got its own renderers later: see
+[7. The diff](#7-the-diff).
 
 This study answers six questions: can lazygit be the review pane of the hub, in place of tuicr
 or next to it? The evidence is the lazygit 0.66.2 source (tag `v0.66.2`), commands, and tests
@@ -366,6 +367,109 @@ Then: `./install.sh --link` in the main checkout for the new script, a test with
 - Commits mode runs lazygit on the worktree. An agent can work there at the same time. Two git
   writers can collide on `index.lock`. tuicr only reads.
 - Views stay on disk until a prune removes them (about 100K each).
+
+## 7. The diff
+
+Date: 2026-10-21. Branch: `lazygit-diff`. Versions: lazygit 0.66.2, delta 0.19.2, difftastic
+0.71.0 (installed for this work: `brew install difftastic`, 119 MB), zellij 0.45.1.
+
+Before: the hub's lazygit used your renderer from `config.yml`
+(`delta --dark --paging=never --24-bit-color=never`, with `line-numbers` and `navigate` from
+`~/.gitconfig`). Three complaints in a column of 60 to 80 columns:
+
+1. The line numbers take 10 columns (`  7 ⋮ 10 │`).
+2. The patch has no position: you cannot see the file, the part of it, or your progress.
+3. Long lines wrap badly.
+
+### Facts
+
+- **Width.** A renderer command is a Go template with `{{width}}` (the patch view's inner
+  width: 58 in a pane of 60), `{{columnWidth}}` (`width/2 - 6`), `{{colorScheme}}` (`dark` or
+  `light`); `{{if gt .width 100}}` works too (`pkg/config/diff_renderer_config_manager.go:108`).
+  lazygit runs it in a pty of the view's size and sets `COLUMNS` and `TERM=dumb`
+  (`pkg/gui/pty.go:14`, `main_view_render.go:254`). Thus delta knows the width: its rules fill
+  the view.
+- **Wrap (complaint 3).** delta wraps only in side-by-side mode (`wrap-max-lines`, `↵` marks).
+  In unified mode it writes each line in full, and lazygit wraps it
+  (`gui.wrapLinesInDiffView`): the rest of the line starts at column 0, under the numbers. With
+  `wrapLinesInDiffView: false` lazygit cuts the line at the edge, and `H` / `L` scroll the patch
+  to the side. Nothing marks a cut line.
+- **Position (complaint 2).** The patch view has no footer and no "x of y"; only the lists have
+  one, and its scrollbar. Enter on a turn shows its files, one file at a time in the patch; the
+  frame shows the row ("9 of 13", folders count too). A focused patch (`0`, a click) has `n` /
+  `N` (next / previous file), `l` / `h` (next / previous hunk) and a selection. Ctrl g (jump to
+  file) is zellij's key in the hub.
+- **Focused patch.** lazygit 0.66 acts on a focused patch only when it can read it: git's raw
+  diff, or a renderer that writes OSC 1717 records (`ESC ] 1717 ; 1 ; type ; new ; old ; path
+  BEL` before each row, a handshake first; `diff_line_parser.go:421`). For any other renderer it
+  shows git's raw diff while the patch has the focus (`diff_line_raw_fallback.go`): no syntax
+  colours. This is the raw diff that you saw after a click on the patch.
+- **Colour.** lazygit draws 24-bit colour (`gocui.OutputTrue`), and zellij passes it: the
+  `--ansi` dumps have `48;2;0;40;0` cells. `--24-bit-color=never` is not necessary in the hub.
+- **delta.** `--line-numbers-left-format` / `--line-numbers-right-format` (`{nm}`, `{np}`) give
+  one column. `--hunk-header-style='file line-number syntax'` puts `path:line:` on each hunk. The
+  labels (`--file-modified-label`, `--hunk-label`) are fixed text. No option counts files or
+  hunks. `--navigate` does not work in lazygit (lazygit's docs). Tabs are 8 columns.
+- **difftastic.** `difft --display=inline` shows one number on each row: the old column for an
+  unchanged or removed row, the new column for an added row (two columns that alternate, 6
+  columns for a file under 100 lines). Each hunk has `path --- 2/3 --- Python`. Inline mode does
+  not wrap; side-by-side wraps, but has 29 columns a side at 60. A removed line whose tokens all
+  stay in the new code does not show (a diff of the syntax). Run as git's external diff
+  (`type: extDiff`), it gets `GIT_DIFF_PATH_COUNTER` / `GIT_DIFF_PATH_TOTAL` from git.
+- lazygit's built-in diff has no syntax colours: not an option.
+
+### The options
+
+`bin/wt-hub-diff` is a new filter (python, like `wt-hub-keys`). With delta it is a stdin filter:
+it reads git's diff, counts the files and hunks, runs delta with fixed options (marks on the
+file and hunk headers, a gutter of `<old>|<new>|`, `--no-gitconfig`), and draws the result
+again for the width. With difftastic it is git's external diff, one file a call.
+`config/lazygit/hub.yml` lists three renderers; `WT_REVIEW_DIFF` loads `diff-difft.yml` or
+`diff-plain.yml` over it, which puts that one first. `|` in lazygit goes to the next one.
+
+| | 1. numbers | 2. position | 3. wrap | focused patch |
+|---|---|---|---|---|
+| own (before) | 10 columns | the file box; `• 24: def …` on a hunk | under the numbers | git's raw diff |
+| **`delta`** (default) | 3 columns: `10│` (new line; old line in red on a removed row) | bar `5/8  M  src/orders.py  +12 -3`; `── src/orders.py:24 2/3 def handler_3(…`; `n`/`N`/`l`/`h` | under the code, at a space or comma | stays; `n`/`N`/`l`/`h` |
+| `difft` | 6 columns (difftastic's two) | the same bar (language for counts); `── src/orders.py 2/3` | under the code | git's raw diff |
+| `plain` | 5 columns: `  10│` (no number on a removed row) | `src/orders.py:24: def …` on a hunk | no wrap: cut, `H` / `L` | git's raw diff |
+
+In the files panel (one file in the patch) the bar has no `1/1`: the frame shows the place.
+
+Tests (navigation, from the `--ansi` dumps, `delta` at 60 columns): after `0` and `l` the
+selection is on the first change (`Makefile` line 3); after `l l` on the deleted
+`docs/README.md`; after `n` on the bar `4/8 scripts/deploy.sh`; after `n` on `5/8 src/orders.py`.
+Edge cases with both modes: a binary file (`bin`), an empty new file, a mode change (`+x`), a
+path with a space, a rename (`R  web/price.js -> web/format.js`), a 700-character line, tabs,
+wide characters (`価格`, an emoji). Time: 12,000 lines of `git log -p` in 0.5 s (delta alone:
+0.24 s).
+
+The screen dumps are in `notes/lazygit-diff/60.txt`, `80.txt` and `120.txt`: the four
+renderers at each width, in three views (the turn with the list, `src/orders.py` alone, the
+focused patch after `n` four times). Plain text: the colours and the selection do not show.
+
+### Recommendation
+
+**`delta` (the default).** It is the only option that solves all three complaints, and the
+only one that keeps its colours when the patch has the focus, where `n` / `N` and `l` / `h` jump
+by file and hunk. `difft` is better to read a reformat or a moved argument, but has wider
+numbers and the raw diff on focus: keep it a `|` away. `plain` has no script: use it if
+`wt-hub-diff` breaks on a diff.
+
+Limits of `wt-hub-diff`:
+
+- It reads delta's output: the marks and the gutter come from options that it sets itself. A
+  delta release that changes that output stops the bars and the gutter (the rows then show as
+  delta wrote them). Tested with delta 0.19.2.
+- It reads the whole diff before it writes (for the counts). A very large diff shows later.
+- Your `~/.gitconfig` `[delta]` settings do not apply in the hub (a `side-by-side` there would
+  break the parse). Extra delta options go after `{{colorScheme}}` in `hub.yml`.
+- difftastic's hunk line has no line number: its header has none.
+
+How to repeat: as in "How to repeat the tests" above, with the chain of `shop` (3 turns; turn 2
+has 8 files and 13 hunks with long lines), `WT_REVIEW_DIFF=<option>` in the fake config, a pane
+of 60, 80 or 120 columns (`borderless=true`, `--pane-frames false`), 40 rows, and the keys `j`,
+Enter, `j` x 8, Esc, `0`, `+`, `n` x 4.
 
 ## Incident during the study
 

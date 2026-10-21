@@ -1,0 +1,361 @@
+#!/usr/bin/python3 -I
+# wt-hub-diff delta|difft WIDTH SCHEME [ARGS...] — the diff renderer of the hub's lazygit review
+# (git.diffRenderers in config/lazygit/hub.yml; WT_REVIEW_DIFF picks the first, | cycles). It
+# fits a diff to the narrow review column:
+#   - a bar on each file: its place in the diff (3/8), the status (M A D R) and the path
+#   - a line on each hunk: path:line, its place in the file (2/3) and the function
+#   - a long line wraps under its own code, not under the line numbers
+# delta  WIDTH SCHEME [delta options]: a stdin filter (GIT_PAGER): git's diff on stdin, through
+#        delta (syntax colours), with one column of line numbers (the new line, or the old one
+#        on a removed line). It also writes OSC 1717 records (lazygit 0.66): lazygit then knows
+#        the file and line of each row and keeps this rendering when the patch has the focus
+#        (else it shows git's raw diff there). Your ~/.gitconfig [delta] is not read.
+# difft  WIDTH SCHEME <git's 7 or 9 arguments>: git's external diff (GIT_EXTERNAL_DIFF), one
+#        file a call: difftastic in inline mode (a diff of the syntax, not of the lines). Its
+#        two number columns stay (old, new). DFT_* variables set its other options.
+# WIDTH and SCHEME (dark or light) come from lazygit: {{width}} {{colorScheme}}.
+import os, re, signal, subprocess, sys, threading, unicodedata
+
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+ESC = re.compile(r"(\x1b\[[0-9;:?]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))")
+RESET = "\x1b[0m"
+# Markers that delta writes in front of its file and hunk headers; this script replaces them.
+FILE_MARK, HUNK_MARK = "@@wt-file@@", "@@wt-hunk@@"
+# delta's gutter as this script asks for it: "<old>|<new>|", 6 columns each.
+GUTTER = re.compile(r"^([ \d]{6})\|([ \d]{6})\|")
+HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$")
+
+mode, width, scheme, args = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4:]
+width = max(width, 20)
+osc = os.environ.get("OSC1717") == "V1"
+out = sys.stdout
+
+if scheme == "light":
+    BAR, HUNK_STYLE, DIM, ADD, DEL, RULE = ("\x1b[1;38;5;16;48;5;153m", "\x1b[38;5;25m", "\x1b[38;5;245m",
+                                            "\x1b[38;5;28m", "\x1b[38;5;124m", "\x1b[38;5;250m")
+else:
+    BAR, HUNK_STYLE, DIM, ADD, DEL, RULE = ("\x1b[1;38;5;231;48;5;24m", "\x1b[38;5;75m", "\x1b[38;5;244m",
+                                            "\x1b[38;5;71m", "\x1b[38;5;167m", "\x1b[38;5;238m")
+
+
+def plain(s):
+    return ESC.sub("", s)
+
+
+def cw(ch):
+    if unicodedata.combining(ch):
+        return 0
+    return 2 if unicodedata.east_asian_width(ch) in "WF" else 1
+
+
+def cells(s):
+    """The visible characters of s, each with the SGR codes in force, and the SGR in force at an
+    erase to the end of the line (delta's background fill), or None."""
+    res, sgr, fill = [], "", None
+    for tok in ESC.split(s):
+        if not tok:
+            continue
+        if tok[0] == "\x1b":
+            if tok.startswith("\x1b[") and tok.endswith("m"):
+                sgr = "" if tok in ("\x1b[0m", "\x1b[m") else sgr + tok
+            elif tok.startswith("\x1b[") and tok.endswith("K"):
+                fill = sgr
+            continue
+        for ch in tok:
+            if ch not in "\r\x07":
+                res.append((sgr, ch))
+    return res, fill
+
+
+def render(cs, fill):
+    parts, cur = [], None
+    for sgr, ch in cs:
+        if sgr != cur:
+            parts.append(RESET + sgr)
+            cur = sgr
+        parts.append(ch)
+    if fill:
+        parts.append(RESET + fill + "\x1b[K")
+    parts.append(RESET)
+    return "".join(parts)
+
+
+def wrap(cs, room, indent):
+    """Rows of cells: the first `room` columns wide, the next ones room - indent. A row ends
+    after a space or a comma when one is in its last 40 %."""
+    rows, first = [], True
+    while True:
+        r = room if first else room - indent
+        col = i = 0
+        while i < len(cs) and col + cw(cs[i][1]) <= r:
+            col += cw(cs[i][1])
+            i += 1
+        if i >= len(cs):
+            rows.append(cs)
+            return rows
+        j = i
+        while j > r * 0.6 and cs[j - 1][1] not in " ,;":
+            j -= 1
+        if j <= r * 0.6:
+            j = max(i, 1)
+        rows.append(cs[:j])
+        cs, first = cs[j:], False
+
+
+def record(kind, new="", old="", path=""):
+    return f"\x1b]1717;1;{kind};{new};{old};{path}\x07" if osc else ""
+
+
+def fit(text, room):
+    """text cut from the left to room columns ("…" in front)."""
+    if len(text) <= room:
+        return text
+    return "…" + text[len(text) - room + 1:] if room > 1 else ""
+
+
+def bar(place, status, path, counts, rec=""):
+    """The file's bar. No place for the only file of a diff (lazygit's files panel shows one
+    file at a time, and its frame shows the place)."""
+    left = f" {place}  {status}  " if place not in ("1/1", "") else f" {status}  "
+    right = f"  {counts} " if counts else " "
+    room = width - len(left) - len(right)
+    text = left + fit(path, max(room, 0))
+    pad = max(width - len(text) - len(right), 0)
+    return rec + BAR + text + " " * pad + right + RESET
+
+
+def hunk_line(where, place, frag, rec=""):
+    """── path:line 2/3 function"""
+    extra = len(place) + 1 if place else 0
+    where = fit(where, max(width - 3 - extra, 4))
+    tail = frag[:max(width - 3 - len(where) - extra - 1, 0)]
+    return (rec + RULE + "── " + HUNK_STYLE + where + (DIM + " " + place if place else "")
+            + RESET + (" " + tail if tail else ""))
+
+
+def write_wrapped(line, gutter="", cont="", gw=0, rec=""):
+    """Write a row: gutter + content, wrapped to the width under the content."""
+    cs, fill = cells(line)
+    room = width - gw
+    lead = 0
+    while lead < len(cs) and cs[lead][1] == " ":
+        lead += 1
+    indent = min(lead, room // 3) if gw else 0
+    for n, row in enumerate(wrap(cs, room, indent)):
+        if n:
+            row = [(fill or "", " ")] * indent + row
+        out.write(rec + (cont if n else gutter) + render(row, fill) + "\n")
+
+
+# --- delta ---------------------------------------------------------------------------------
+
+def strip_prefix(p):
+    # git puts a tab after a path with a space in "+++ b/my file".
+    p = p.rstrip("\t").strip('"')
+    return p.split("/", 1)[1] if "/" in p else p
+
+
+def scan(text):
+    """The files of a diff, in order: path, status, counts, hunks, widest line number."""
+    files, f, left = [], None, None
+    for raw in text.splitlines():
+        line = plain(raw)
+        if left:
+            if line.startswith("\\"):
+                continue
+            c = line[:1]
+            if c in (" ", ""):
+                left = (left[0] - 1, left[1] - 1)
+            elif c == "-":
+                left, f["dels"] = (left[0] - 1, left[1]), f["dels"] + 1
+            elif c == "+":
+                left, f["adds"] = (left[0], left[1] - 1), f["adds"] + 1
+            if left[0] <= 0 and left[1] <= 0:
+                left = None
+            continue
+        if line.startswith("diff --git "):
+            rest = line[len("diff --git "):]
+            half = (len(rest) - 1) // 2
+            if len(rest) % 2 == 1 and rest[half] == " " and strip_prefix(rest[:half]) == strip_prefix(rest[half + 1:]):
+                a = b = strip_prefix(rest[:half])
+            else:
+                a, _, b = rest.partition(" b/")
+                a, b = strip_prefix(a), b
+            f = {"path": b, "old": a, "status": "M", "adds": 0, "dels": 0, "hunks": [], "max": 1}
+            files.append(f)
+        elif f is None:
+            continue
+        elif line.startswith("new file mode"):
+            f["status"] = "A"
+        elif line.startswith("deleted file mode"):
+            f["status"] = "D"
+            f["path"] = f["old"]
+        elif line.startswith("rename from "):
+            f["status"], f["old"] = "R", line[len("rename from "):]
+        elif line.startswith("rename to "):
+            f["path"] = line[len("rename to "):]
+        elif line.startswith("copy from "):
+            f["status"], f["old"] = "C", line[len("copy from "):]
+        elif line.startswith("copy to "):
+            f["path"] = line[len("copy to "):]
+        elif line.startswith("Binary files "):
+            f["binary"] = True
+        elif line.startswith("new mode "):
+            f["mode"] = "+x" if line.endswith("755") else "-x"
+        elif line.startswith("+++ ") and not line.startswith("+++ /dev/null"):
+            f["path"] = strip_prefix(line[4:])
+        elif m := HUNK.match(line):
+            o, ol, n, nl = int(m[1]), int(m[2] or 1), int(m[3]), int(m[4] or 1)
+            # A deleted file's hunk starts at new line 0: show the old line.
+            f["hunks"].append((n, n or o, m[5]))
+            f["max"] = max(f["max"], o + ol, n + nl)
+            left = (ol, nl)
+    return files
+
+
+def delta():
+    text = sys.stdin.buffer.read().decode("utf-8", "replace")
+    if osc:
+        out.write("\x1b]1717;1\x07")
+    files = scan(text)
+    cmd = ["delta", "--no-gitconfig", f"--{scheme}", "--paging=never", f"--width={width}",
+           "--true-color=always", "--tabs=4", "--line-numbers",
+           "--line-numbers-left-format={nm:>6}|", "--line-numbers-right-format={np:>6}|",
+           "--file-style=normal", "--file-decoration-style=none",
+           f"--file-modified-label={FILE_MARK}", f"--file-added-label={FILE_MARK}",
+           f"--file-removed-label={FILE_MARK}", f"--file-renamed-label={FILE_MARK}",
+           f"--file-copied-label={FILE_MARK}",
+           # line-number: else delta leaves out the header of a hunk with no function.
+           f"--hunk-label={HUNK_MARK}", "--hunk-header-style=line-number",
+           "--hunk-header-decoration-style=none"] + args
+    try:
+        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    except OSError:
+        out.write(DEL + "delta is not installed: brew install git-delta" + RESET + "\n")
+        for line in text.splitlines():
+            write_wrapped(line)
+        return
+
+    def feed():
+        try:
+            p.stdin.write(text.encode())
+            p.stdin.close()
+        except OSError:
+            pass
+
+    threading.Thread(target=feed, daemon=True).start()
+    # after_bar is True at the start too: no blank line on top. blanks: blank lines not yet
+    # written; one at most comes before a file bar.
+    fi, hi, f, nw, cur_new, after_bar, blanks = -1, 0, None, 3, 0, True, 0
+    for raw in p.stdout:
+        line = raw.decode("utf-8", "replace").rstrip("\n")
+        text_ = plain(line)
+        if not text_.strip() and not GUTTER.match(text_):
+            blanks += 0 if after_bar else 1
+            continue
+        if blanks:
+            out.write("\n" * (min(blanks, 1) if text_.startswith(FILE_MARK) else blanks))
+            blanks = 0
+        if text_.startswith(FILE_MARK):
+            fi, hi = fi + 1, 0
+            name = text_[len(FILE_MARK):].strip()
+            f = files[fi] if fi < len(files) else {"path": name, "old": name, "status": "M",
+                                                   "adds": 0, "dels": 0, "hunks": [], "max": 1}
+            nw = max(2, len(str(f["max"])))
+            path = f["path"] if f["status"] not in "RC" else f"{f['old']} -> {f['path']}"
+            counts = "bin" if f.get("binary") else (f"+{f['adds']} -{f['dels']}" if f["adds"] or f["dels"] else "")
+            counts = f"{f['mode']} {counts}".strip() if f.get("mode") else counts
+            out.write(bar(f"{fi + 1}/{max(len(files), fi + 1)}", f["status"], path, counts,
+                          record("f", path=f["path"])) + "\n")
+            after_bar = True
+            continue
+        after_bar = False
+        if text_.startswith(HUNK_MARK) and f is not None:
+            hunks = f["hunks"]
+            start, shown, frag = hunks[hi] if hi < len(hunks) else (0, 0, text_[len(HUNK_MARK):].strip())
+            hi += 1
+            cur_new = start
+            place = f"{hi}/{len(hunks)}" if len(hunks) > 1 else ""
+            out.write(hunk_line(f"{f['path']}:{shown}", place, frag, record("h", start, path=f["path"])) + "\n")
+            continue
+        m = GUTTER.match(text_)
+        if m and f is not None:
+            nm, np = m[1].strip(), m[2].strip()
+            if nm and np:
+                num, style, rec = np, DIM, record("c", np, path=f["path"])
+            elif np:
+                num, style, rec = np, ADD, record("a", np, path=f["path"])
+            else:
+                num, style, rec = nm, DEL, record("d", cur_new, nm, f["path"])
+            if np:
+                cur_new = int(np) + 1
+            # The content: what follows delta's gutter (14 columns).
+            cs, fill = cells(line)
+            content = render(cs[14:], fill)
+            gutter = style + num.rjust(nw) + RULE + "│" + RESET
+            cont = " " * nw + RULE + "│" + RESET
+            write_wrapped(content, gutter, cont, nw + 1, rec)
+            continue
+        write_wrapped(line)
+    p.wait()
+
+
+# --- difft ---------------------------------------------------------------------------------
+
+DFT_OLD = re.compile(r"^\x1b\[[0-9;]*m( *\d+ )\x1b\[0m")
+DFT_NEW = re.compile(r"^( +)\x1b\[[0-9;]*m( *\d+ )\x1b\[0m")
+
+
+def difft():
+    place = f"{os.environ.get('GIT_DIFF_PATH_COUNTER', '?')}/{os.environ.get('GIT_DIFF_PATH_TOTAL', '?')}"
+    path = args[0]
+    status = "M"
+    if len(args) >= 9:
+        status, path = "R", f"{args[0]} -> {args[7]}"
+    elif len(args) >= 7 and args[1] == "/dev/null":
+        status = "A"
+    elif len(args) >= 7 and args[4] == "/dev/null":
+        status = "D"
+    cmd = ["difft", "--display=inline", f"--width={width}", "--color=always",
+           f"--background={scheme}"] + args
+    try:
+        res = subprocess.run(cmd, stdout=subprocess.PIPE)
+    except OSError:
+        out.write(bar(place, status, path, "") + "\n")
+        out.write(DEL + "difft is not installed: brew install difftastic" + RESET + "\n")
+        return
+    names = (args[0], args[7] if len(args) >= 9 else args[0])
+    head = re.compile(r"^(?:" + "|".join(re.escape(n) for n in names) + r").*? --- (?:(\d+)/(\d+) --- )?(.+)$")
+    first = True
+    for raw in res.stdout.decode("utf-8", "replace").splitlines():
+        text_ = plain(raw)
+        m = head.match(text_)
+        if m:
+            if first:
+                out.write(bar(place, status, path, m[3]) + "\n")
+                first = False
+            if m[1]:
+                out.write(hunk_line(args[7] if len(args) >= 9 else args[0], f"{m[1]}/{m[2]}", "") + "\n")
+            continue
+        g = DFT_OLD.match(raw) or DFT_NEW.match(raw)
+        if g:
+            numcol = len(g.groups()[-1])
+            gw = 2 * numcol
+            cs, fill = cells(raw)
+            gutter, content = render(cs[:gw], None), render(cs[gw:], fill)
+            write_wrapped(content, gutter, " " * gw, gw)
+            continue
+        if first and text_.strip():
+            out.write(bar(place, status, path, "") + "\n")
+            first = False
+        write_wrapped(raw)
+    if first:
+        out.write(bar(place, status, path, "") + "\n")
+
+
+try:
+    delta() if mode == "delta" else difft()
+    out.flush()
+except BrokenPipeError:
+    pass

@@ -110,8 +110,15 @@ check_tools() {
   tool jq 1.7 "brew install jq"
   tool tuicr 0.27.0 "brew install tuicr"
   # lazygit is the other review (WT_REVIEW=lazygit). 0.66 refreshes by itself on a new turn.
+  # Its patch: wt-hub-diff with delta, or difftastic (WT_REVIEW_DIFF=difft).
   if [[ "$(HOME="$HOME" /bin/bash -c 'source "$1" && printf "%s" "${WT_REVIEW:-}"' _ "$repo/lib/wt-lib.sh")" == lazygit ]]; then
     tool lazygit 0.66.0 "brew install lazygit (review: WT_REVIEW=lazygit)"
+    tool delta "" "brew install git-delta (the patch in lazygit review)"
+    if [[ "$(HOME="$HOME" /bin/bash -c 'source "$1" && printf "%s" "${WT_REVIEW_DIFF:-}"' _ "$repo/lib/wt-lib.sh")" == difft ]]; then
+      tool difft "" "brew install difftastic (WT_REVIEW_DIFF=difft)"
+    else
+      note "difftastic: optional, for WT_REVIEW_DIFF=difft in $SETTINGS_FILE (brew install difftastic)"
+    fi
   else
     note "lazygit: optional, for WT_REVIEW=lazygit in $SETTINGS_FILE (0.66 or newer)"
   fi
@@ -314,6 +321,11 @@ install_settings() {
 
 # The review pane: tuicr (default; review comments) or lazygit (0.66 or newer; git actions).
 # WT_REVIEW=tuicr
+
+# The patch in lazygit review: delta (default: one number column, file and hunk places, wrap
+# under the code), difft (difftastic: a diff of the syntax) or plain (delta, no wrap: H and L).
+# | in lazygit goes to the next one.
+# WT_REVIEW_DIFF=delta
 CONF
       did "$SETTINGS_FILE (settings, all at their defaults)"
     fi

@@ -75,6 +75,9 @@ while you type in a prompt.
 | `<` | newest turn |
 | `[`, `]` | the other tabs: Files (the worktree's changes, in commits mode), Local branches |
 | `+`, `_` | screen mode: the patch gets more or less of the pane |
+| `0`, `Esc` | focus the patch (then `n` / `N` next or previous file, `l` / `h` next or previous hunk); back |
+| `J`, `K` | scroll the patch from the list |
+| `\|` | the next diff renderer (see [The patch in lazygit](review.md#the-patch-in-lazygit)) |
 | `?` | lazygit's own key help |
 
 lazygit's own `t` (revert) and `e` (edit file) are not available in the hub; `o` opens a file.

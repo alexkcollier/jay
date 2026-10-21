@@ -1,7 +1,7 @@
 # lazygit settings for the hub's review pane (WT_REVIEW=lazygit), installed as
 # ~/.config/wt-hub/lazygit/hub.yml. wt-hub-lazygit loads your own config.yml first and this file
-# over it (LG_CONFIG_FILE), so your theme and diff renderer stay. Your own lazygit outside the
-# hub does not read this file.
+# over it (LG_CONFIG_FILE), so your theme stays; the diff renderers are the hub's (below). Your
+# own lazygit outside the hub does not read this file.
 gui:
   showRandomTip: false
   showCommandLog: false
@@ -22,6 +22,18 @@ promptToReturnFromSubprocess: false
 update:
   method: never
 git:
+  # The patch for a narrow column: wt-hub-diff gives a bar on each file (3/8, status, path), a
+  # line on each hunk (path:line 2/3), one column of line numbers, and wraps long lines under
+  # the code. | cycles the renderers; WT_REVIEW_DIFF in ~/.config/wt-hub/config puts another
+  # one first (diff-difft.yml, diff-plain.yml next to this file).
+  diffRenderers:
+    - name: delta (hub)
+      command: "$HOME/.local/bin/wt-hub-diff delta {{width}} {{colorScheme}}"
+    - name: difftastic (hub)
+      type: extDiff
+      command: "$HOME/.local/bin/wt-hub-diff difft {{width}} {{colorScheme}}"
+    - name: delta (plain)
+      command: "delta --no-gitconfig --{{colorScheme}} --paging=never --true-color=always --line-numbers --line-numbers-left-format= --line-numbers-right-format='{np:>4}│' --hunk-header-style='file line-number syntax' --hunk-header-decoration-style=none --file-decoration-style=ol"
   autoFetch: false
   log:
     # A turn chain has no merges; the graph takes two columns.

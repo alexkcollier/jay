@@ -19,7 +19,7 @@
 #          commit by itself.
 # Config:  CONFIG_DIR keeps lazygit's state (recent repos) out of yours; LG_CONFIG_FILE loads
 #          your config.yml, then the hub's (~/.config/wt-hub/lazygit/hub.yml, from
-#          config/lazygit) over it.
+#          config/lazygit) over it, then diff-$WT_REVIEW_DIFF.yml (the diff renderer) if set.
 # claude-turn-snapshot --prune removes the view with its chain.
 # --toggle (the hub's t in lazygit): switch turns ⇄ commits and stop lazygit; wt-hub-pane
 #          starts the other mode.
@@ -47,6 +47,10 @@ if [[ ! -f "$hub_config" ]]; then
 fi
 configs=$hub_config
 [[ -f "$user_config" ]] && configs="$user_config,$hub_config"
+# The diff renderer: hub.yml has delta (hub) first; WT_REVIEW_DIFF=difft|plain loads
+# diff-<name>.yml over it, which puts that one first.
+diff_config="$HOME/.config/wt-hub/lazygit/diff-${WT_REVIEW_DIFF:-delta}.yml"
+[[ -f "$diff_config" ]] && configs+=",$diff_config"
 export CONFIG_DIR="$root/state" LG_CONFIG_FILE="$configs" WT_HUB_LG_PID=$$
 mkdir -p "$CONFIG_DIR"
 

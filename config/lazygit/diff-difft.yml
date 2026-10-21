@@ -1,0 +1,11 @@
+# WT_REVIEW_DIFF=difft: the hub's lazygit (wt-hub-lazygit) loads this file over hub.yml.
+# difftastic first: a diff of the syntax, not of the lines (brew install difftastic). | cycles.
+git:
+  diffRenderers:
+    - name: difftastic (hub)
+      type: extDiff
+      command: "$HOME/.local/bin/wt-hub-diff difft {{width}} {{colorScheme}}"
+    - name: delta (hub)
+      command: "$HOME/.local/bin/wt-hub-diff delta {{width}} {{colorScheme}}"
+    - name: delta (plain)
+      command: "delta --no-gitconfig --{{colorScheme}} --paging=never --true-color=always --line-numbers --line-numbers-left-format= --line-numbers-right-format='{np:>4}│' --hunk-header-style='file line-number syntax' --hunk-header-decoration-style=none --file-decoration-style=ol"

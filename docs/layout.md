@@ -19,6 +19,7 @@ bin/
   wt-go                  wt go: bring an agent in front (hub, tab or pane)
   wt-hub                 wt hub: start, attach or go to the hub; writes its layout
   wt-hub-keys            pty wrapper around tuicr: t (toggle mode), e (files)
+  wt-hub-diff            the diff renderer of lazygit review: delta or difftastic, fit to the column
   wt-hub-lazygit         lazygit as review (WT_REVIEW=lazygit): a turn chain's view repo
   wt-hub-pane            a hub pane (agent | review | files) that follows its target
   wt-new                 wt new: worktree, task note, background agent
@@ -32,6 +33,7 @@ lib/
 config/
   claude-settings-hooks.json   hooks to merge into ~/.claude/settings.json
   lazygit/hub.yml              the hub's lazygit settings and keys (WT_REVIEW=lazygit)
+  lazygit/diff-*.yml           another diff renderer first (WT_REVIEW_DIFF=difft, plain)
   tuicr/config.toml            q_quits: q in review goes back
   worktrunk/config.toml        hub settings to copy into ~: worktree path <repo>.<branch>, Task column, task alias
   yazi/keymap.toml             hub-only yazi keys: e, O, W
@@ -50,7 +52,8 @@ tests/
   test-*.sh              the test files
 docs/                    the documentation (this file, install, working, orchestrators, ...)
 notes/
-  lazygit-review.md      the study behind review with lazygit
+  lazygit-review.md      the study behind review with lazygit (7: the diff renderers)
+  lazygit-diff/          screen dumps of the diff renderers at 60, 80 and 120 columns
 install.sh               installer: copies or links, configs, hooks, zjstatus; --check, --uninstall
 CLAUDE.md                rules for edits in this repo, and zellij 0.45 facts
 TODO.md                  open items, known faults and the hub's decisions

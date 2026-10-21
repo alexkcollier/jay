@@ -29,6 +29,8 @@ reads the front app with `lsappinfo`.
 | jq | 1.7.1 | `brew install jq` | all JSON |
 | tuicr | 0.27.0 | `brew install tuicr` | review |
 | lazygit | 0.66.2 (0.66+) | `brew install lazygit` (optional) | review with `WT_REVIEW=lazygit` |
+| delta | 0.19.2 | `brew install git-delta` (optional) | the patch in lazygit review (`wt-hub-diff`) |
+| difftastic (`difft`) | 0.71.0 | `brew install difftastic` (optional) | the patch in lazygit review with `WT_REVIEW_DIFF=difft` |
 | yazi | 26.9.1 (26.x) | `brew install yazi` | files |
 | terminal-notifier | 3.1.0 | `brew install terminal-notifier` (optional) | notices |
 | Nerd Font | | Ghostty's built-in font has the Nerd Font symbols; in another terminal, set a Nerd Font | the Octicons in the git signs |
@@ -48,7 +50,8 @@ What `./install.sh --check` checks:
   missing or old tool is a TODO line with its `brew install` command, and the result at the end
   gives one `brew install` command for all missing tools. A program that is on PATH but does
   not run (a broken shim, say) is a TODO too.
-- lazygit 0.66.0 or newer, only when `WT_REVIEW=lazygit`; else a note.
+- lazygit 0.66.0 or newer and delta, only when `WT_REVIEW=lazygit`; else a note. difftastic
+  only when `WT_REVIEW_DIFF=difft` too; else a note.
 - Claude Code 2.1.304 or newer, and the features of the hub in its help texts: `--bg`,
   `agents --json --all`, `attach`, `rm`, `logs`.
 - git, perl, curl and `/usr/bin/python3`. Without the Xcode Command Line Tools, `/usr/bin/git`
@@ -82,7 +85,8 @@ it off. Without tab control:
    # optional:
    brew install terminal-notifier     # macOS notices when an agent finishes or needs input
    brew install --cask ghostty        # tab control (wt hub, wt go, wt open, O in files)
-   brew install lazygit               # review with lazygit (WT_REVIEW=lazygit)
+   brew install lazygit git-delta     # review with lazygit (WT_REVIEW=lazygit)
+   brew install difftastic            # its patch with difftastic (WT_REVIEW_DIFF=difft)
    ```
 
    Without terminal-notifier there are no notices; the rest works. Without Ghostty the hub runs
@@ -147,6 +151,7 @@ not: the hooks in background agents and a notice click.
 | `WT_TASK_SHELL` | `$SHELL -i +m -c` (zsh, bash), else `$SHELL -l -c` | how a task runs its command line, which comes after these words |
 | `WT_LAUNCHER` | the built-in zsh launcher | a command for the launcher (Ctrl g `r`) in another shell; see [Tasks](tasks.md#other-shells) |
 | `WT_REVIEW` | `tuicr` | the review pane: `tuicr` (review comments) or `lazygit` (git actions); see [Review with lazygit](review.md#review-with-lazygit) |
+| `WT_REVIEW_DIFF` | `delta` | the patch in lazygit review: `delta`, `difft` (difftastic) or `plain` (delta, no wrap); see [The patch in lazygit](review.md#the-patch-in-lazygit) |
 
 `./install.sh --check` tells you when a `WT_ROOTS` folder does not exist.
 

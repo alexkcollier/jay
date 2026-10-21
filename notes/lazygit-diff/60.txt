@@ -1,0 +1,516 @@
+Review pane, 60 columns x 40 rows: lazygit 0.66.2 in zellij 0.45.1, test chain "shop", turn 2
+(8 files, 13 hunks). Made by a throwaway session; see notes/lazygit-review.md, "The diff".
+
+own    = your delta from config.yml (delta --dark --paging=never --24-bit-color=never, with
+         line-numbers and navigate from ~/.gitconfig): the hub before this change
+delta  = WT_REVIEW_DIFF=delta (default): wt-hub-diff with delta
+difft  = WT_REVIEW_DIFF=difft: wt-hub-diff with difftastic 0.71.0 (inline)
+plain  = WT_REVIEW_DIFF=plain: delta alone, compact options, no wrap (H and L scroll)
+
+Views: turn  = turn 2 selected, list on top, patch under it (screen mode half)
+       file  = Enter on the turn, then src/orders.py in the files panel
+       focus = Esc, 0 (patch focused), + (full), n four times (next file)
+
+==== own · turn · 60 columns
+╭─Commits - Files - Local branches─────────────────────────╮
+│* 4:10PM (HEAD -> turns) turn · turn 3: rename and log    │
+│* 4:10PM turn · turn 2: validation everywhere, long lines,│
+│* 4:10PM turn · turn 1: small fix                         │
+│* 4:10PM (turns-base) feature: readme line                │
+│* 4:10PM main: the shop                                   │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+╰───────────────────────────────────────────────────2 of 5─╯
+╭─Patch────────────────────────────────────────────────────╮
+│commit a5c2e2ab150c2f9de5ecae5470b674ae2fe763c5           ▐
+│Author: Tester <a@b.c>                                    ▐
+│Date:   Wed Oct 21 16:10:02 2026 -0400                    ▐
+│                                                          │
+│    turn · turn 2: validation everywhere, long lines, many│
+│files                                                     │
+│                                                          │
+│    done                                                  │
+│---                                                       │
+│ Makefile          |  3 +++                               │
+│ docs/CHANGELOG.md |  3 +++                               │
+│ docs/README.md    |  8 --------                          │
+│ scripts/deploy.sh |  3 ++-                               │
+│ src/orders.py     | 15 ++++++++++++---                   │
+│ src/price.rs      |  1 +                                 │
+│ web/cart.js       |  9 ++++++---                         │
+│ web/price.js      |  2 +-                                │
+│ 8 files changed, 28 insertions(+), 16 deletions(-)       │
+│                                                          │
+│                                                          │
+│Δ Makefile                                                │
+│──────────────────────────────────────────────────────────│
+│                                                          │
+│─────┐                                                    │
+╰──────────────────────────────────────────────────────────╯
+
+==== delta · turn · 60 columns
+╭─Commits - Files - Local branches─────────────────────────╮
+│* 4:10PM (HEAD -> turns) turn · turn 3: rename and log    │
+│* 4:10PM turn · turn 2: validation everywhere, long lines,│
+│* 4:10PM turn · turn 1: small fix                         │
+│* 4:10PM (turns-base) feature: readme line                │
+│* 4:10PM main: the shop                                   │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+╰───────────────────────────────────────────────────2 of 5─╯
+╭─Patch────────────────────────────────────────────────────╮
+│commit a5c2e2ab150c2f9de5ecae5470b674ae2fe763c5           ▐
+│Author: Tester <a@b.c>                                    ▐
+│Date:   Wed Oct 21 16:10:02 2026 -0400                    ▐
+│                                                          │
+│    turn · turn 2: validation everywhere, long lines,     │
+│many files                                                │
+│                                                          │
+│    done                                                  │
+│---                                                       │
+│ Makefile          |  3 +++                               │
+│ docs/CHANGELOG.md |  3 +++                               │
+│ docs/README.md    |  8 --------                          │
+│ scripts/deploy.sh |  3 ++-                               │
+│ src/orders.py     | 15 ++++++++++++---                   │
+│ src/price.rs      |  1 +                                 │
+│ web/cart.js       |  9 ++++++---                         │
+│ web/price.js      |  2 +-                                │
+│ 8 files changed, 28 insertions(+), 16 deletions(-)       │
+│                                                          │
+│ 1/8  M  Makefile                                   +3 -0 │
+│── Makefile:1                                             │
+│ 1│all:                                                   │
+│ 2│    cargo build                                        │
+│ 3│                                                       │
+╰──────────────────────────────────────────────────────────╯
+
+==== difft · turn · 60 columns
+╭─Commits - Files - Local branches─────────────────────────╮
+│* 4:10PM (HEAD -> turns) turn · turn 3: rename and log    │
+│* 4:10PM turn · turn 2: validation everywhere, long lines,│
+│* 4:10PM turn · turn 1: small fix                         │
+│* 4:10PM (turns-base) feature: readme line                │
+│* 4:10PM main: the shop                                   │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+╰───────────────────────────────────────────────────2 of 5─╯
+╭─Patch────────────────────────────────────────────────────╮
+│commit a5c2e2ab150c2f9de5ecae5470b674ae2fe763c5           ▐
+│Author: Tester <a@b.c>                                    ▐
+│Date:   Wed Oct 21 16:10:02 2026 -0400                    ▐
+│                                                          │
+│    turn · turn 2: validation everywhere, long lines, many│
+│files                                                     │
+│                                                          │
+│    done                                                  │
+│---                                                       │
+│ Makefile          |  3 +++                               │
+│ docs/CHANGELOG.md |  3 +++                               │
+│ docs/README.md    |  8 --------                          │
+│ scripts/deploy.sh |  3 ++-                               │
+│ src/orders.py     | 15 ++++++++++++---                   │
+│ src/price.rs      |  1 +                                 │
+│ web/cart.js       |  9 ++++++---                         │
+│ web/price.js      |  2 +-                                │
+│ 8 files changed, 28 insertions(+), 16 deletions(-)       │
+│                                                          │
+│ 1/8  M  Makefile                                    Make │
+│1    all:                                                 │
+│2        cargo build                                      │
+│   4 test:                                                │
+│   5     cargo test --all-features --workspace --         │
+╰──────────────────────────────────────────────────────────╯
+
+==== plain · turn · 60 columns
+╭─Commits - Files - Local branches─────────────────────────╮
+│* 4:10PM (HEAD -> turns) turn · turn 3: rename and log    │
+│* 4:10PM turn · turn 2: validation everywhere, long lines,│
+│* 4:10PM turn · turn 1: small fix                         │
+│* 4:10PM (turns-base) feature: readme line                │
+│* 4:10PM main: the shop                                   │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+╰───────────────────────────────────────────────────2 of 5─╯
+╭─Patch────────────────────────────────────────────────────╮
+│commit a5c2e2ab150c2f9de5ecae5470b674ae2fe763c5           ▐
+│Author: Tester <a@b.c>                                    ▐
+│Date:   Wed Oct 21 16:10:02 2026 -0400                    ▐
+│                                                          │
+│    turn · turn 2: validation everywhere, long lines, many│
+│                                                          │
+│    done                                                  │
+│---                                                       │
+│ Makefile          |  3 +++                               │
+│ docs/CHANGELOG.md |  3 +++                               │
+│ docs/README.md    |  8 --------                          │
+│ scripts/deploy.sh |  3 ++-                               │
+│ src/orders.py     | 15 ++++++++++++---                   │
+│ src/price.rs      |  1 +                                 │
+│ web/cart.js       |  9 ++++++---                         │
+│ web/price.js      |  2 +-                                │
+│ 8 files changed, 28 insertions(+), 16 deletions(-)       │
+│                                                          │
+│                                                          │
+│──────────────────────────────────────────────────────────│
+│Makefile                                                  │
+│                                                          │
+│Makefile:1:                                               │
+│   1│all:                                                 │
+╰──────────────────────────────────────────────────────────╯
+
+==== own · file · 60 columns
+╭─Diff files (a5c2e2a turn · turn 2: validation everywhere─╮
+│▼ /                                                       ▐
+│  M Makefile                                              ▐
+│  ▼ docs                                                  ▐
+│    A CHANGELOG.md                                        ▐
+│    D README.md                                           ▐
+│  ▼ scripts                                               ▐
+│    M deploy.sh                                           ▐
+│  ▼ src                                                   ▐
+│    M orders.py                                           ▐
+│    M price.rs                                            ▐
+│  ▼ web                                                   ▐
+│    M cart.js                                             │
+╰──────────────────────────────────────────────────9 of 13─╯
+╭─Patch────────────────────────────────────────────────────╮
+│                                                          ▐
+│Δ src/orders.py                                           ▐
+│──────────────────────────────────────────────────────────▐
+│                                                          ▐
+│─────┐                                                    ▐
+│• 1: │                                                    ▐
+│─────┘                                                    │
+│  1 ⋮  1 │"""Order handling for the shop."""              │
+│  2 ⋮  2 │import json                                     │
+│    ⋮  3 │import logging                                  │
+│    ⋮  4 │                                                │
+│    ⋮  5 │log = logging.getLogger(__name__)               │
+│  3 ⋮  6 │from dataclasses import dataclass               │
+│  4 ⋮  7 │                                                │
+│  5 ⋮  8 │def handler_1(order, customer, settings):       │
+│  6 ⋮  9 │    """Handle step 1 of an order."""            │
+│  7 ⋮    │    total = sum(line.price * line.quantity for  │
+│line in order.lines)                                      │
+│    ⋮ 10 │    if not order.lines or any(line.quantity <= 0│
+│for line in order.lines) or customer is None or not       │
+│settings.get("enabled", True):                            │
+│    ⋮ 11 │        raise ValueError(f"order {order.id} for │
+│customer {getattr(customer, 'id', None)} is not valid at  │
+│step 1: check the lines, the quantities and the settings")│
+╰──────────────────────────────────────────────────────────╯
+
+==== delta · file · 60 columns
+╭─Diff files (a5c2e2a turn · turn 2: validation everywhere─╮
+│▼ /                                                       ▐
+│  M Makefile                                              ▐
+│  ▼ docs                                                  ▐
+│    A CHANGELOG.md                                        ▐
+│    D README.md                                           ▐
+│  ▼ scripts                                               ▐
+│    M deploy.sh                                           ▐
+│  ▼ src                                                   ▐
+│    M orders.py                                           ▐
+│    M price.rs                                            ▐
+│  ▼ web                                                   ▐
+│    M cart.js                                             │
+╰──────────────────────────────────────────────────9 of 13─╯
+╭─Patch────────────────────────────────────────────────────╮
+│ M  src/orders.py                                  +12 -3 ▐
+│── src/orders.py:1 1/3                                    ▐
+│ 1│"""Order handling for the shop."""                     ▐
+│ 2│import json                                            ▐
+│ 3│import logging                                         ▐
+│ 4│                                                       ▐
+│ 5│log = logging.getLogger(__name__)                      ▐
+│ 6│from dataclasses import dataclass                      │
+│ 7│                                                       │
+│ 8│def handler_1(order, customer, settings):              │
+│ 9│    """Handle step 1 of an order."""                   │
+│ 7│    total = sum(line.price * line.quantity for line in │
+│  │    order.lines)                                       │
+│10│    if not order.lines or any(line.quantity <= 0 for   │
+│  │    line in order.lines) or customer is None or not    │
+│  │    settings.get("enabled", True):                     │
+│11│        raise ValueError(f"order {order.id} for        │
+│  │        customer {getattr(customer, 'id', None)} is    │
+│  │        not valid at step 1: check the lines, the      │
+│  │        quantities and the settings")                  │
+│12│    total = sum(line.price * line.quantity * (1 -      │
+│  │    settings.get("discount", 0.0)) for line in         │
+│  │    order.lines if line.quantity > 0)                  │
+│13│    return {"step": 1, "total": total, "customer":     │
+╰──────────────────────────────────────────────────────────╯
+
+==== difft · file · 60 columns
+╭─Diff files (a5c2e2a turn · turn 2: validation everywhere─╮
+│▼ /                                                       ▐
+│  M Makefile                                              ▐
+│  ▼ docs                                                  ▐
+│    A CHANGELOG.md                                        ▐
+│    D README.md                                           ▐
+│  ▼ scripts                                               ▐
+│    M deploy.sh                                           ▐
+│  ▼ src                                                   ▐
+│    M orders.py                                           ▐
+│    M price.rs                                            ▐
+│  ▼ web                                                   ▐
+│    M cart.js                                             │
+╰──────────────────────────────────────────────────9 of 13─╯
+╭─Patch────────────────────────────────────────────────────╮
+│ M  src/orders.py                                  Python ▐
+│── src/orders.py 1/3                                      ▐
+│ 1    """Order handling for the shop."""                  ▐
+│ 2    import json                                         ▐
+│    3 import logging                                      ▐
+│    5 log = logging.getLogger(__name__)                   ▐
+│   10     if not order.lines or any(line.quantity <= 0    ▐
+│          for line in order.lines) or customer is None or │
+│          not settings.get("enabled", True):              │
+│   11         raise ValueError(f"order {order.id} for     │
+│              customer {getattr(customer, 'id', None)} is │
+│              not valid at step 1: check the lines, the   │
+│              quantities and the settings")               │
+│   12     total = sum(line.price * line.quantity * (1 -   │
+│          settings.get("discount", 0.0)) for line in      │
+│          order.lines if line.quantity > 0)               │
+│   13     return {"step": 1, "total": total, "customer":  │
+│          customer.id}                                    │
+│   14                                                     │
+│   15 def handler_2(order, customer, settings):           │
+│   16     """Handle step 2 of an order."""                │
+│                                                          │
+│── src/orders.py 2/3                                      │
+│18        return {"step": 3, "total": total, "customer":  │
+╰──────────────────────────────────────────────────────────╯
+
+==== plain · file · 60 columns
+╭─Diff files (a5c2e2a turn · turn 2: validation everywhere─╮
+│▼ /                                                       ▐
+│  M Makefile                                              ▐
+│  ▼ docs                                                  ▐
+│    A CHANGELOG.md                                        ▐
+│    D README.md                                           ▐
+│  ▼ scripts                                               ▐
+│    M deploy.sh                                           ▐
+│  ▼ src                                                   ▐
+│    M orders.py                                           ▐
+│    M price.rs                                            ▐
+│  ▼ web                                                   ▐
+│    M cart.js                                             │
+╰──────────────────────────────────────────────────9 of 13─╯
+╭─Patch────────────────────────────────────────────────────╮
+│                                                          ▐
+│──────────────────────────────────────────────────────────▐
+│src/orders.py                                             ▐
+│                                                          ▐
+│src/orders.py:1:                                          ▐
+│   1│"""Order handling for the shop."""                   ▐
+│   2│import json                                          ▐
+│   3│import logging                                       ▐
+│   4│                                                     ▐
+│   5│log = logging.getLogger(__name__)                    │
+│   6│from dataclasses import dataclass                    │
+│   7│                                                     │
+│   8│def handler_1(order, customer, settings):            │
+│   9│    """Handle step 1 of an order."""                 │
+│    │    total = sum(line.price * line.quantity for line i│
+│  10│    if not order.lines or any(line.quantity <= 0 for │
+│  11│        raise ValueError(f"order {order.id} for custo│
+│  12│    total = sum(line.price * line.quantity * (1 - set│
+│  13│    return {"step": 1, "total": total, "customer": cu│
+│  14│                                                     │
+│  15│def handler_2(order, customer, settings):            │
+│                                                          │
+│src/orders.py:24: def handler_3(order, customer, settings)│
+│  24│                                                     │
+╰──────────────────────────────────────────────────────────╯
+
+==== own · focus · 60 columns
+╭─Patch────────────────────────────────────────────────────╮
+│diff --git a/src/orders.py b/src/orders.py                │
+│index f2a986f..946b7a1 100644                             │
+│--- a/src/orders.py                                       │
+│+++ b/src/orders.py                                       │
+│@@ -1,10 +1,15 @@                                         │
+│ """Order handling for the shop."""                       │
+│ import json                                              │
+│+import logging                                           │
+│+                                                         │
+│+log = logging.getLogger(__name__)                        │
+│ from dataclasses import dataclass                        │
+│                                                          │
+│ def handler_1(order, customer, settings):                ▐
+│     """Handle step 1 of an order."""                     ▐
+│-    total = sum(line.price * line.quantity for line in   ▐
+│order.lines)                                              ▐
+│+    if not order.lines or any(line.quantity <= 0 for line▐
+│in order.lines) or customer is None or not                ▐
+│settings.get("enabled", True):                            │
+│+        raise ValueError(f"order {order.id} for customer │
+│{getattr(customer, 'id', None)} is not valid at step 1:   │
+│check the lines, the quantities and the settings")        │
+│+    total = sum(line.price * line.quantity * (1 -        │
+│settings.get("discount", 0.0)) for line in order.lines if │
+│line.quantity > 0)                                        │
+│     return {"step": 1, "total": total, "customer":       │
+│customer.id}                                              │
+│                                                          │
+│ def handler_2(order, customer, settings):                │
+│@@ -19,7 +24,9 @@ def handler_3(order, customer,          │
+│settings):                                                │
+│                                                          │
+│ def handler_4(order, customer, settings):                │
+│     """Handle step 4 of an order."""                     │
+│-    total = sum(line.price * line.quantity for line in   │
+│order.lines)                                              │
+│+    if not order.lines or any(line.quantity <= 0 for line│
+│in order.lines) or customer is None or not                │
+╰──────────────────────────────────────────────────────────╯
+
+==== delta · focus · 60 columns
+╭─Patch────────────────────────────────────────────────────╮
+│ 5/8  M  src/orders.py                             +12 -3 │
+│── src/orders.py:1 1/3                                    │
+│ 1│"""Order handling for the shop."""                     │
+│ 2│import json                                            │
+│ 3│import logging                                         │
+│ 4│                                                       │
+│ 5│log = logging.getLogger(__name__)                      │
+│ 6│from dataclasses import dataclass                      │
+│ 7│                                                       │
+│ 8│def handler_1(order, customer, settings):              │
+│ 9│    """Handle step 1 of an order."""                   │
+│ 7│    total = sum(line.price * line.quantity for line in ▐
+│  │    order.lines)                                       ▐
+│10│    if not order.lines or any(line.quantity <= 0 for   ▐
+│  │    line in order.lines) or customer is None or not    ▐
+│  │    settings.get("enabled", True):                     ▐
+│11│        raise ValueError(f"order {order.id} for        ▐
+│  │        customer {getattr(customer, 'id', None)} is    │
+│  │        not valid at step 1: check the lines, the      │
+│  │        quantities and the settings")                  │
+│12│    total = sum(line.price * line.quantity * (1 -      │
+│  │    settings.get("discount", 0.0)) for line in         │
+│  │    order.lines if line.quantity > 0)                  │
+│13│    return {"step": 1, "total": total, "customer":     │
+│  │    customer.id}                                       │
+│14│                                                       │
+│15│def handler_2(order, customer, settings):              │
+│                                                          │
+│── src/orders.py:24 2/3 def handler_3(order, customer, set│
+│24│                                                       │
+│25│def handler_4(order, customer, settings):              │
+│26│    """Handle step 4 of an order."""                   │
+│22│    total = sum(line.price * line.quantity for line in │
+│  │    order.lines)                                       │
+│27│    if not order.lines or any(line.quantity <= 0 for   │
+│  │    line in order.lines) or customer is None or not    │
+│  │    settings.get("enabled", True):                     │
+│28│        raise ValueError(f"order {order.id} for        │
+╰──────────────────────────────────────────────────────────╯
+
+==== difft · focus · 60 columns
+╭─Patch────────────────────────────────────────────────────╮
+│diff --git a/src/orders.py b/src/orders.py                │
+│index f2a986f..946b7a1 100644                             │
+│--- a/src/orders.py                                       │
+│+++ b/src/orders.py                                       │
+│@@ -1,10 +1,15 @@                                         │
+│ """Order handling for the shop."""                       │
+│ import json                                              │
+│+import logging                                           │
+│+                                                         │
+│+log = logging.getLogger(__name__)                        │
+│ from dataclasses import dataclass                        │
+│                                                          │
+│ def handler_1(order, customer, settings):                ▐
+│     """Handle step 1 of an order."""                     ▐
+│-    total = sum(line.price * line.quantity for line in   ▐
+│order.lines)                                              ▐
+│+    if not order.lines or any(line.quantity <= 0 for line▐
+│in order.lines) or customer is None or not                ▐
+│settings.get("enabled", True):                            │
+│+        raise ValueError(f"order {order.id} for customer │
+│{getattr(customer, 'id', None)} is not valid at step 1:   │
+│check the lines, the quantities and the settings")        │
+│+    total = sum(line.price * line.quantity * (1 -        │
+│settings.get("discount", 0.0)) for line in order.lines if │
+│line.quantity > 0)                                        │
+│     return {"step": 1, "total": total, "customer":       │
+│customer.id}                                              │
+│                                                          │
+│ def handler_2(order, customer, settings):                │
+│@@ -19,7 +24,9 @@ def handler_3(order, customer,          │
+│settings):                                                │
+│                                                          │
+│ def handler_4(order, customer, settings):                │
+│     """Handle step 4 of an order."""                     │
+│-    total = sum(line.price * line.quantity for line in   │
+│order.lines)                                              │
+│+    if not order.lines or any(line.quantity <= 0 for line│
+│in order.lines) or customer is None or not                │
+╰──────────────────────────────────────────────────────────╯
+
+==== plain · focus · 60 columns
+╭─Patch────────────────────────────────────────────────────╮
+│diff --git a/src/orders.py b/src/orders.py                │
+│index f2a986f..946b7a1 100644                             │
+│--- a/src/orders.py                                       │
+│+++ b/src/orders.py                                       │
+│@@ -1,10 +1,15 @@                                         │
+│ """Order handling for the shop."""                       │
+│ import json                                              │
+│+import logging                                           │
+│+                                                         │
+│+log = logging.getLogger(__name__)                        │
+│ from dataclasses import dataclass                        │
+│                                                          │
+│ def handler_1(order, customer, settings):                │
+│     """Handle step 1 of an order."""                     │
+│-    total = sum(line.price * line.quantity for line in or▐
+│+    if not order.lines or any(line.quantity <= 0 for line▐
+│+        raise ValueError(f"order {order.id} for customer ▐
+│+    total = sum(line.price * line.quantity * (1 - setting▐
+│     return {"step": 1, "total": total, "customer": custom▐
+│                                                          ▐
+│ def handler_2(order, customer, settings):                ▐
+│@@ -19,7 +24,9 @@ def handler_3(order, customer, settings)│
+│                                                          │
+│ def handler_4(order, customer, settings):                │
+│     """Handle step 4 of an order."""                     │
+│-    total = sum(line.price * line.quantity for line in or│
+│+    if not order.lines or any(line.quantity <= 0 for line│
+│+        raise ValueError(f"order {order.id} for customer │
+│+    total = sum(line.price * line.quantity * (1 - setting│
+│     return {"step": 4, "total": total, "customer": custom│
+│                                                          │
+│ def handler_5(order, customer, settings):                │
+│@@ -34,7 +41,9 @@ def handler_6(order, customer, settings)│
+│                                                          │
+│ def handler_7(order, customer, settings):                │
+│     """Handle step 7 of an order."""                     │
+│-    total = sum(line.price * line.quantity for line in or│
+│+    if not order.lines or any(line.quantity <= 0 for line│
+╰──────────────────────────────────────────────────────────╯
