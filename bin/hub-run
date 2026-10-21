@@ -170,6 +170,9 @@ tasks_json() {
         | .out += [{pane: $p, proc: $m}])
     | .out[]
     | .pane as $p | .proc as $m
+    # A shell at its prompt: a default pane, or one that hub-run --follow opened ($SHELL -l).
+    | ($m != null and $m.fg == $m.root
+       and ($p.terminal_command == null or ($m.fgcmd | test("^-?(/[^ ]*/)?(zsh|bash|fish|sh)( -l| -i| --login)*$")))) as $prompt
     | (($p.terminal_command // "") | index($self)) as $at
     | ($at != null) as $owned
     | (if $owned then $p.terminal_command[($at + ($self | length)):] else null end) as $line
@@ -178,12 +181,10 @@ tasks_json() {
        state: (if $p.exited then "exited"
                elif $m == null then "unknown"
                elif $owned then (if ($m.pids | length) > 1 then "running" else "exited" end)
-               elif $p.terminal_command == null and $m.fg == $m.root then "idle"
+               elif $prompt then "idle"
                else "running" end),
        exit: $p.exit_status,
-       command: (if $owned then $line
-                 elif $m == null or ($p.terminal_command == null and $m.fg == $m.root) then null
-                 else $m.fgcmd end),
+       command: (if $owned then $line elif $m == null or $prompt then null else $m.fgcmd end),
        cwd: ($C[($m.fg // -1) | tostring] // $p.pane_cwd),
        ports: ([$m.pids[]? | $L[tostring][]?] | unique)}' <<<"$panes") || return 1
   # Exit codes of panes whose command ended (hub-run --exec writes them), names, worktrees and
@@ -433,8 +434,8 @@ cmd_port() {
 # The bar text: one item per task that runs or ended, with its first port. Names that two tasks
 # share get the branch.
 cmd_bar() {
-  local tasks
-  tasks=$(tasks_json 2>/dev/null) || return 0
+  local tasks=${1:-}
+  [[ -n "$tasks" ]] || tasks=$(tasks_json 2>/dev/null) || return 0
   jq -r '
     def c($x): "\u001b[" + $x + "m";
     [.[] | select(.state == "running" or .state == "exited")] as $t
@@ -447,6 +448,64 @@ cmd_bar() {
         + (.name | .[0:24])
         + (if .ports != [] then c("2") + ":" + (.ports[0] | tostring) + c("0") else "" end))
     | join("  ")' <<<"$tasks"
+}
+
+# Keep one free shell in the tasks tab: when a command takes the last shell at its prompt,
+# open a new one, in the worktree of the hub's review, without moving the focus. Not while a
+# pane's process is unknown (it may be that shell).
+spare_shell() {
+  local tasks=$1 tid dir client repo branch top strip=() var
+  jq -e 'length > 0 and all(.[]; .state != "idle" and .state != "unknown")' <<<"$tasks" >/dev/null || return 0
+  tid=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null | jq -r --arg t "$TAB" 'first(.[] | select(.name == $t) | .tab_id) // empty')
+  [[ -n "$tid" ]] || return 0
+  dir=$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)
+  [[ -n "$dir" && -d "$dir" ]] || dir=${WT_ROOTS%%:*}
+  IFS=$'\t' read -r client repo branch top < <(wtl_describe "$dir")
+  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
+  env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --tab-id "$tid" --close-on-exit \
+    --cwd "$top" --name "$repo/$branch" -- "${SHELL:-/bin/zsh}" -l >/dev/null 2>&1
+}
+
+# The list's tick (wt-sidebar, every 3 s): a free shell in the tasks tab, then the bar text.
+cmd_tick() {
+  local tasks
+  tasks=$(tasks_json 2>/dev/null) || return 0
+  spare_shell "$tasks"
+  cmd_bar "$tasks"
+}
+
+# The banner of the tasks tab (see wt-hub) shows worktree $1 as <repo>/<branch>; without $1,
+# the worktree of the hub's review.
+cmd_where() {
+  local dir=${1:-} client repo branch top
+  [[ -n "$dir" ]] || dir=$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)
+  [[ -n "$dir" && -d "$dir" ]] || return 0
+  IFS=$'\t' read -r client repo branch top < <(wtl_describe "$dir")
+  zellij -s "$WT_HUB_SESSION" pipe "zjstatus::pipe::pipe_where::$repo/$branch" >/dev/null 2>&1
+}
+
+# A pick in the hub moved to worktree $1 (wtl_hub_target): the banner shows it, and each empty
+# shell of the tasks tab starts again there, in the same place. Empty: a shell pane at its
+# first prompt with nothing typed (one line on screen, ending in a prompt sign), in another
+# folder. A shell with any output or typed text stays as it is.
+cmd_follow() {
+  local top real tasks pane screen client repo branch strip=() var
+  top=$(wtl_toplevel "${1:?}")
+  [[ -d "$top" ]] || return 0
+  cmd_where "$top"
+  IFS=$'\t' read -r client repo branch _ < <(wtl_describe "$top")
+  real=$(cd "$top" && pwd -P)
+  tasks=$(tasks_json) || return 0
+  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
+  for pane in $(jq -r --arg d "$real" '.[] | select(.state == "idle" and .cwd != $d) | .pane' <<<"$tasks"); do
+    screen=$(zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | grep '[^[:space:]]')
+    [[ -n "$screen" && "$screen" != *$'\n'* ]] || continue
+    [[ "$screen" =~ [%\$#\>❯➜][[:space:]]*$ ]] || continue
+    # In place without a command, zellij keeps the old folder: give the shell as the command.
+    env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --in-place --pane-id "$pane" \
+      --close-replaced-pane --close-on-exit --cwd "$top" --name "$repo/$branch" -- "${SHELL:-/bin/zsh}" -l >/dev/null 2>&1
+  done
+  return 0
 }
 
 # SessionStart hook: tells each Claude session about the tasks tab (stdout becomes context).
@@ -467,7 +526,10 @@ case ${1:-} in
   -h | --help) usage ;;
   --exec) shift; run_pane "$*" ;;
   --bar) cmd_bar ;;
+  --tick) cmd_tick ;;
   --hook) cmd_hook ;;
+  --follow) shift; cmd_follow "$@" ;;
+  --where) shift; cmd_where "$@" ;;
   --tab) hub_answers || die "the hub does not run"; ensure_tab >/dev/null || die "no $TAB tab" ;;
   ls) shift; cmd_ls "$@" ;;
   log) shift; cmd_log "$@" ;;

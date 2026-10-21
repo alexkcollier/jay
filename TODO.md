@@ -79,6 +79,15 @@ Alex's to-do list, in his words (2026-10-19):
   tasks tab. Facts: `ps -E` does not show the env of pane processes, so panes are matched to
   their processes by foreground command and folder; `new-pane --tab-id` works from outside,
   also on a hub without a client; bash 3.2 `read -t` returns 1 on a time-out.
+- Tasks tab, round 2 (Alex: "i need a clear indicator in the other tab that i'm still in the
+  hub. footer isn't cutting it"; "switching to the tab should dump me in the worktree dir if
+  it's an empty terminal"; "commands run in the task tab do not automatically pane"). A blue
+  zjstatus banner at the top of the tab (Alex picked it over a banner + coloured bar, or a
+  coloured bar only). zellij has no tab-switch event, so the shells follow the picks: each
+  pick replaces the tab's empty shells in place with a shell in the picked worktree, and the
+  list's tick opens a new free shell when a command takes the last one. Facts: `new-pane
+  --in-place` without a command ignores `--cwd` (with a command it works); `new-pane --tab-id`
+  into the tab a client looks at does not move that client's focus.
 
 ## Other open items
 

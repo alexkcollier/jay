@@ -560,6 +560,8 @@ wtl_hub_target() {
   if IFS=$'\t' read -r pane changed < <(wtl_hub_point files "$top"); then
     [[ "$changed" == 1 ]] && zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "$(wtl_hub_pane_title files "$title")" >/dev/null 2>&1
   fi
+  # The tasks tab follows: its banner, and its empty shells (hub-run --follow).
+  ("$HOME/.local/bin/hub-run" --follow "$top" >/dev/null 2>&1 &)
   return 0
 }
 

@@ -360,11 +360,18 @@ to `~/.local/state/claude-notify.log`.
 
 The hub's second tab, "tasks", is for long-running commands: `pnpm dev`, watchers,
 `docker compose up`. Ctrl g Tab goes there and back (or click the tab in the bar). Each pane in
-the tab is a task. You and the agents see the same panes.
+the tab is a task. You and the agents see the same panes. A blue banner at the top of the tab
+says `◆ HUB › tasks`, with the picked worktree and the key back.
 
-- **By hand**: the tab opens with a shell in the first `WT_ROOTS` folder. `cd` to a worktree and
-  type the command, as in any terminal. More panes: Ctrl g `p` `n` (zellij's pane mode; the new
-  pane starts in the folder of the focused pane). Close a pane: Ctrl g `p` `x`.
+- **By hand**: type the command in a shell of the tab, as in any terminal. The tab always has a
+  free shell in the worktree that you picked in the hub:
+  - At each pick (agent or worktree), each empty shell of the tab (its first prompt, nothing
+    typed, no output) starts again in the picked worktree, in the same place. Its title is
+    `<repo>/<branch>`. A shell with output or typed text stays where it is.
+  - When a command takes the last free shell, the hub opens a new one (within 3 s), in the
+    picked worktree, without moving your focus.
+  - More panes: Ctrl g `p` `n` (zellij's pane mode; the new pane starts in the folder of the
+    focused pane). Close a pane: Ctrl g `p` `x`.
 - **From elsewhere**: `hub-run <command>` in any folder (a Ghostty tab, `! hub-run pnpm dev` in a
   Claude prompt) opens a new pane in the tasks tab, in that folder, and leaves you where you are.
   `-n <name>` names it; `-w` waits until it listens and prints its URL. When the hub does not
@@ -604,7 +611,9 @@ All of these are in `~/.local/bin`. worktrunk runs `wt-<name>` for `wt <name>`, 
 
 Hooks and internal commands (not for hand use): `claude-notify` (Stop, Notification),
 `claude-turn-snapshot` (UserPromptSubmit, Stop), `hub-run --hook` (SessionStart), `hub-run --bar`
-(the bar's tasks), `hub-run --exec` (a pane that `hub-run` started), `hub-run --tab` (adds the
+(the bar's tasks), `hub-run --tick` (the list's tick: a free shell, then the bar's tasks),
+`hub-run --follow <dir>` (a pick: the banner and the empty shells), `hub-run --where` (the
+banner's worktree), `hub-run --exec` (a pane that `hub-run` started), `hub-run --tab` (adds the
 tasks tab, with its bar, to a hub that has none; `hub-run` does it too), `wt-sidebar` (the list),
 `wt-hub-pane agent|review|files` (the panes), `wt-hub-keys` (tuicr's `t` and `e`).
 

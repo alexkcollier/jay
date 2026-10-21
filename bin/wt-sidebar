@@ -607,11 +607,12 @@ send_sum() {
   (zellij pipe "zjstatus::pipe::pipe_agents::$sum" >/dev/null 2>&1 &)
 }
 
-# The same for the tasks of the tasks tab (hub-run --bar). An empty text clears the bar's part.
+# The same for the tasks of the tasks tab. hub-run --tick also keeps a free shell in that tab.
+# An empty text clears the bar's part.
 last_tasks="-"
 send_tasks() {
   local tasks
-  tasks=$(hub-run --bar 2>/dev/null)
+  tasks=$(hub-run --tick 2>/dev/null)
   [[ "$tasks" != "$last_tasks" || "${1:-}" == --again ]] || return 0
   last_tasks=$tasks
   (zellij pipe "zjstatus::pipe::pipe_tasks::$tasks" >/dev/null 2>&1 &)
@@ -645,6 +646,9 @@ remember_width() {
     if [[ "$before" != "$after" ]] || ((tick % 10 == 0)); then post 'clear-screen'; fi
     if wtl_in_hub; then
       if ((tick % 10 == 0)); then send_sum --again; send_tasks --again; else send_sum; send_tasks; fi
+      # The tasks tab's banner: the review's worktree, at the start and every 30 s (a pick sends
+      # it at once, see wtl_hub_target).
+      ((tick % 10 == 1)) && (hub-run --where >/dev/null 2>&1 &)
     fi
   done
 ) &
