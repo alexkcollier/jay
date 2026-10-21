@@ -484,12 +484,12 @@ cmd_where() {
   zellij -s "$WT_HUB_SESSION" pipe "zjstatus::pipe::pipe_where::$repo/$branch" >/dev/null 2>&1
 }
 
-# A pick in the hub moved to worktree $1 (wtl_hub_target): the banner shows it, and each free
-# shell of the tasks tab in another folder goes there. Free: no command runs, and its last line
-# is a prompt with nothing typed. A fresh shell (at most 3 lines on screen, as a prompt can have
-# two, and no prompt with a command after it) starts again in the worktree, in the same place;
-# a used one gets `cd <worktree>` typed, so its scrollback stays. Typed text: it stays as it is.
-PROMPT_END='(%|\$|#|>|❯|➜)[[:space:]]*$'
+# A pick in the hub moved to worktree $1 (wtl_hub_target): the banner shows it, and each shell
+# of the tasks tab in another folder goes there, unless a command or program runs in it (Alex:
+# only that blocks the move). A fresh shell (at most 3 lines on screen, as a prompt can have
+# two, and no prompt with a command after it) starts again in the worktree, in the same place.
+# A used one gets Ctrl-C (it drops typed text; at the prompt nothing else gets it), then
+# `cd <worktree>` typed, so its scrollback stays.
 PROMPT_CMD='(%|\$|#|>|❯|➜)[[:space:]]+[^[:space:]]'
 cmd_follow() {
   local top real tasks pane screen client repo branch strip=() var
@@ -502,14 +502,14 @@ cmd_follow() {
   for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
   for pane in $(jq -r --arg d "$real" '.[] | select(.state == "idle" and .cwd != $d) | .pane' <<<"$tasks"); do
     screen=$(zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | grep '[^[:space:]]')
-    [[ -n "$screen" ]] || continue
-    tail -1 <<<"$screen" | grep -qE "$PROMPT_END" || continue
-    if (($(wc -l <<<"$screen") <= 3)) && ! grep -qE "$PROMPT_CMD" <<<"$screen"; then
+    if [[ -n "$screen" ]] && (($(wc -l <<<"$screen") <= 3)) && ! grep -qE "$PROMPT_CMD" <<<"$screen"; then
       # In place without a command, zellij keeps the old folder: give the shell as the command.
       env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --in-place --pane-id "$pane" \
         --close-replaced-pane --close-on-exit --cwd "$top" --name "$repo/$branch" -- "${SHELL:-/bin/zsh}" -l >/dev/null 2>&1
     else
       # A leading space keeps the line out of the history (HIST_IGNORE_SPACE).
+      zellij -s "$WT_HUB_SESSION" action write-chars --pane-id "$pane" $'\x03' >/dev/null 2>&1
+      sleep 0.2
       zellij -s "$WT_HUB_SESSION" action write-chars --pane-id "$pane" " cd -- $(printf '%q' "$top")"$'\r' >/dev/null 2>&1
       zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "$repo/$branch" >/dev/null 2>&1
     fi

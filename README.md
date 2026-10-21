@@ -368,9 +368,10 @@ and the key to the other tab.
 
 - **By hand**: type the command in a shell of the tab, as in any terminal. The tab always has a
   free shell in the worktree that you picked in the hub:
-  - At each pick (agent or worktree), each empty shell of the tab (its first prompt, nothing
-    typed, no output) starts again in the picked worktree, in the same place. Its title is
-    `<repo>/<branch>`. A shell with output or typed text stays where it is.
+  - At each pick (agent or worktree), each shell of the tab goes to the picked worktree, with
+    `<repo>/<branch>` as its title. Only a command or program that runs in it keeps it where it
+    is. A fresh shell starts again there, in the same place. A used one gets Ctrl-C (typed text
+    is dropped) and ` cd -- <worktree>`, so its output stays.
   - When a command takes the last free shell, the hub opens a new one (within 3 s), in the
     picked worktree, without moving your focus.
   - More panes: Ctrl g `p` `n` (zellij's pane mode; the new pane starts in the folder of the
