@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# wt-hub-diff is now jay-diff (jay was wt-hub): a silent shim for the lazygit settings of an
+# older install. ./install.sh --no-compat removes it.
+exec "$HOME/.local/bin/jay-diff" "$@"

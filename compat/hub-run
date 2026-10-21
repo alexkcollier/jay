@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# hub-run is now jay run (jay was wt-hub): a shim for old habits and agent prompts. Silent for
+# the internal options (the SessionStart hook, the pane keys, the panes of an older hub): a
+# hook's output can reach Claude. ./install.sh --no-compat removes it.
+case ${1:-} in
+  --hook | --exec | --bar | --tick | --where | --switch | --launcher | --launch | --worktree-tab | --close-tab) ;;
+  *) echo "hub-run is now: jay run" >&2 ;;
+esac
+exec "$HOME/.local/bin/jay-run" "$@"

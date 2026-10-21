@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# wt open is now jay open (jay was wt-hub): a shim for old habits.
+# ./install.sh --no-compat removes it.
+echo "wt open is now: jay open" >&2
+exec "$HOME/.local/bin/jay-open" "$@"

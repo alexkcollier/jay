@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# wt-sidebar is now jay-sidebar (jay was wt-hub): a silent shim for the binds of a list that an
+# older hub started, and for old pane keys. ./install.sh --no-compat removes it.
+exec "$HOME/.local/bin/jay-sidebar" "$@"

@@ -1,21 +1,21 @@
 #!/bin/bash
-# wtl_jobs, wtl_orch_ranks and wtl_orchestrators (lib/wt-lib.sh), and the signs that the list
-# (wt-sidebar --rows) draws from them: a cyan ◇ for the orchestrator of a repo, a yellow ◇ for an
+# jay_jobs, jay_orch_ranks and jay_orchestrators (lib/jay-lib.sh), and the signs that the list
+# (jay-sidebar --rows) draws from them: a cyan ◇ for the orchestrator of a repo, a yellow ◇ for an
 # extra one, no ◇ for an agent without the orchestrator prompt or an interactive session, and
 # "→ <branch>" for an orchestrator in a worktree it entered.
 source "$(dirname "$0")/lib.sh"
 link_install
-source "$HOME/.local/lib/wt-lib.sh"
+source "$HOME/.local/lib/jay-lib.sh"
 
 root="$HOME/Documents/projects/acme"
 shop="$root/shop" web="$root/web"
 repo "$shop" && git -C "$shop" worktree add -q "$root/shop.feat" -b feat
 repo "$web" && git -C "$web" worktree add -q "$root/web.fix" -b fix
 
-prompt=$(wtl_orchestrator_prompt shop "$shop")
-eq "the prompt starts with the mark" "$WT_ORCH_MARK" "${prompt:0:${#WT_ORCH_MARK}}"
+prompt=$(jay_orchestrator_prompt shop "$shop")
+eq "the prompt starts with the mark" "$JAY_ORCH_MARK" "${prompt:0:${#JAY_ORCH_MARK}}"
 # respawnFlags: the options a background agent started with (claude keeps them in state.json).
-orch_flags() { jq -nc --arg p "$(wtl_orchestrator_prompt "$1" "$2")" --arg n "$1/main" '["--name", $n, "--append-system-prompt", $p]'; }
+orch_flags() { jq -nc --arg p "$(jay_orchestrator_prompt "$1" "$2")" --arg n "$1/main" '["--name", $n, "--append-system-prompt", $p]'; }
 job 0000000a "{\"cwd\": \"$shop\", \"respawnFlags\": $(orch_flags shop "$shop")}"
 job 0000000b "{\"cwd\": \"$shop\", \"respawnFlags\": $(orch_flags shop "$shop")}"
 job 0000000c "{\"cwd\": \"$shop\", \"respawnFlags\": [\"--name\", \"shop/main\"]}"
@@ -41,16 +41,16 @@ EOF
 )
 stub_agents "$agents"
 
-jobs=$(wtl_jobs "$agents")
-eq "wtl_jobs: an agent with the prompt" true "$(jq '.["0000000a"].orch' <<<"$jobs")"
-eq "wtl_jobs: an agent without the prompt" false "$(jq '.["0000000c"].orch' <<<"$jobs")"
-eq "wtl_jobs: home of an agent in its own folder" null "$(jq '.["0000000a"].home' <<<"$jobs")"
-eq "wtl_jobs: home of an agent in a worktree it entered" "$web" "$(jq -r '.["0000000e"].home' <<<"$jobs")"
-eq "wtl_jobs: its worktree" "$root/web.fix" "$(jq -r '.["0000000e"].tree' <<<"$jobs")"
-eq "wtl_jobs: no entry for an interactive session" 6 "$(jq 'length' <<<"$jobs")"
-eq "wtl_jobs: no background agents" '{}' "$(wtl_jobs '[{"kind": "interactive", "sessionId": "x"}]')"
+jobs=$(jay_jobs "$agents")
+eq "jay_jobs: an agent with the prompt" true "$(jq '.["0000000a"].orch' <<<"$jobs")"
+eq "jay_jobs: an agent without the prompt" false "$(jq '.["0000000c"].orch' <<<"$jobs")"
+eq "jay_jobs: home of an agent in its own folder" null "$(jq '.["0000000a"].home' <<<"$jobs")"
+eq "jay_jobs: home of an agent in a worktree it entered" "$web" "$(jq -r '.["0000000e"].home' <<<"$jobs")"
+eq "jay_jobs: its worktree" "$root/web.fix" "$(jq -r '.["0000000e"].tree' <<<"$jobs")"
+eq "jay_jobs: no entry for an interactive session" 6 "$(jq 'length' <<<"$jobs")"
+eq "jay_jobs: no background agents" '{}' "$(jay_jobs '[{"kind": "interactive", "sessionId": "x"}]')"
 
-ranks=$(wtl_orch_ranks "$agents" "$jobs")
+ranks=$(jay_orch_ranks "$agents" "$jobs")
 eq "the oldest with the prompt: rank 0 (cyan)" 0 "$(jq '.["sid-0000000a"].rank' <<<"$ranks")"
 eq "a second one in the same main checkout: rank 1 (yellow)" 1 "$(jq '.["sid-0000000b"].rank' <<<"$ranks")"
 eq "no prompt: no rank" null "$(jq '.["sid-0000000c"]' <<<"$ranks")"
@@ -59,22 +59,25 @@ eq "interactive: no rank" null "$(jq '.["sid-inter"]' <<<"$ranks")"
 eq "in a worktree it entered: ranked in its home" "$web 0" "$(jq -r '.["sid-0000000e"] | "\(.home) \(.rank)"' <<<"$ranks")"
 
 expected=$(printf '%s\t%s\t%s\n' "$shop" 0000000a shop/orch "$web" 0000000e web/orch | sort)
-eq "wtl_orchestrators: one per main checkout, not one in a worktree" "$expected" "$(wtl_orchestrators | sort)"
-eq "wtl_orchestrators <main checkout>" "$(printf '%s\t0000000a\tshop/orch' "$shop")" "$(wtl_orchestrators "$shop")"
-eq "wt agents --orchestrators <worktree of the repo>: nothing" "" "$(wt-agents --orchestrators "$root/shop.feat")"
-eq "wt agents --orchestrators <main checkout>" "$(printf '%s\t0000000a\tshop/orch' "$shop")" "$(wt-agents --orchestrators "$shop")"
+eq "jay_orchestrators: one per main checkout, not one in a worktree" "$expected" "$(jay_orchestrators | sort)"
+eq "jay_orchestrators <main checkout>" "$(printf '%s\t0000000a\tshop/orch' "$shop")" "$(jay_orchestrators "$shop")"
+eq "jay agents --orchestrators <worktree of the repo>: nothing" "" "$(jay agents --orchestrators "$root/shop.feat")"
+eq "jay agents --orchestrators <main checkout>" "$(printf '%s\t0000000a\tshop/orch' "$shop")" "$(jay agents --orchestrators "$shop")"
+eq "the old name: wt agents through its shim" "$(printf '%s\t0000000a\tshop/orch' "$shop")" "$(wt-agents --orchestrators "$shop" 2>/dev/null)"
+has "the shim says the new name" "wt agents is now: jay agents" "$(wt-agents --orchestrators "$shop" 2>&1 >/dev/null)"
 
-# The list's rows, from a cache of `wt all --json` (fresh, so the list does not refresh it).
+# The list's rows, from a cache of `jay all --json` (fresh, so the list does not refresh it).
 rec() { # rec PATH MAIN BRANCH REPO
   jq -nc --arg p "$1" --argjson m "$2" --arg b "$3" --arg r "$4" '{path: $p, main: $m, branch: $b,
     client: "acme", repo: $r, task: "", symbols: "", git: {added: 0, deleted: 0, staged: false,
     modified: false, untracked: false, conflicted: false, operation: null,
     state: (if $m then "is_main" else "ahead" end), ahead: 1, behind: 0, remote: false, push: 0, pull: 0}}'
 }
+mkdir -p "$JAY_STATE"
 { rec "$shop" true main shop; rec "$root/shop.feat" false feat shop
-  rec "$web" true main web; rec "$root/web.fix" false fix web; } >"$HOME/.local/state/wt-worktrees.ndjson"
-touch "$HOME/.local/state/wt-hub-prune.stamp"
-rows=$(FZF_COLUMNS=80 wt-sidebar --rows)
+  rec "$web" true main web; rec "$root/web.fix" false fix web; } >"$JAY_STATE/worktrees.ndjson"
+touch "$JAY_STATE/prune.stamp"
+rows=$(FZF_COLUMNS=80 jay-sidebar --rows)
 row() { awk -F'\t' -v s="$1" '$2 == s { print $3 }' <<<"$rows"; }
 CYAN=$'\e[36m◇ ' YELLOW=$'\e[33m◇ '
 has "the orchestrator: cyan ◇" "${CYAN}"$'\e[0m'"shop/orch" "$(row sid-0000000a)"

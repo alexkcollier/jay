@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# claude-clear is now jay clear (jay was wt-hub): a silent shim for a list that an older hub
+# started. ./install.sh --no-compat removes it.
+exec "$HOME/.local/bin/jay-clear" "$@"

@@ -1,5 +1,5 @@
 #!/bin/bash
-# claude-turn-snapshot on a real git repo: the base, a turn commit at each Stop, the live ref of a
+# jay-snapshot on a real git repo: the base, a turn commit at each Stop, the live ref of a
 # running turn (at most once in 5 s; Stop removes it), edits between turns, a turn stopped
 # without Stop, a move into another worktree, the name of a background agent's chain, --list
 # and --prune.
@@ -10,13 +10,13 @@ main="$TMP/shop" feat="$TMP/shop.feat"
 repo "$main"
 SID=1234abcd-0000-0000-0000-000000000000
 C=refs/wt-turns/1234abcd
-state="$HOME/.local/state/wt-turns"
+state="$HOME/.local/state/jay/turns"
 
 # hook EVENT CWD [TOOL] [PROMPT]: the hook input that Claude sends, for session $SID.
 hook() {
   jq -nc --arg e "$1" --arg c "$2" --arg s "$SID" --arg t "${3:-}" --arg p "${4:-}" \
     '{hook_event_name: $e, cwd: $c, session_id: $s, tool_name: $t, prompt: $p,
-      last_assistant_message: "Some words.\nresult: done"}' | claude-turn-snapshot
+      last_assistant_message: "Some words.\nresult: done"}' | jay-snapshot
 }
 g() { git -C "$main" "$@"; }
 rev() { g rev-parse -q --verify "$1" 2>/dev/null; }
@@ -78,13 +78,13 @@ printf 'f\n' >"$feat/f.txt"
 hook Stop "$feat"
 eq "the next turn in the new worktree" "turn · third" "$(subject $C/head)"
 eq "the next turn shows only its own changes" "f.txt" "$(g diff --name-only $C/head^ $C/head)"
-has "--list: the chain and its last turn" "1234abcd" "$(claude-turn-snapshot --list "$feat")"
+has "--list: the chain and its last turn" "1234abcd" "$(jay-snapshot --list "$feat")"
 
 # A background agent's chain has its job id: it stays when the session id changes.
 job feedf00d '{"sessionId": "5678ef00-0000-0000-0000-000000000000"}'
 jq -nc --arg c "$main" '{hook_event_name: "UserPromptSubmit", cwd: $c, prompt: "hi",
   session_id: "5678ef00-0000-0000-0000-000000000000"}' \
-  | CLAUDE_JOB_DIR="$HOME/.claude/jobs/feedf00d" claude-turn-snapshot
+  | CLAUDE_JOB_DIR="$HOME/.claude/jobs/feedf00d" jay-snapshot
 ok "a background agent's chain is named after its job" rev refs/wt-turns/feedf00d/base
 eq "not after its session id" "" "$(rev refs/wt-turns/5678ef00/base)"
 
@@ -95,18 +95,18 @@ printf '%s\n' "$TMP/gone" >"$state/dead0001.worktree"
 old=$(printf 'old\n' | GIT_COMMITTER_DATE="2020-01-01T00:00:00" g commit-tree "$(rev 'HEAD^{tree}')")
 g update-ref refs/wt-turns/old00002/head "$old"
 printf '%s\n' "$main" >"$state/old00002.worktree"
-jq -nc --arg p "$main" '{path: $p, main: true}' >"$HOME/.local/state/wt-worktrees.ndjson"
+jq -nc --arg p "$main" '{path: $p, main: true}' >"$HOME/.local/state/jay/worktrees.ndjson"
 stub_agents '[{"kind": "background", "id": "feedf00d", "sessionId": "5678ef00-0000-0000-0000-000000000000"},
   {"kind": "interactive", "sessionId": "1234abcd-0000-0000-0000-000000000000"}]'
 : >"$STUB/agents.fail"
-claude-turn-snapshot --prune >/dev/null
+jay-snapshot --prune >/dev/null
 ok "--prune without an agent list: nothing goes" rev refs/wt-turns/dead0001/base
 rm -f "$STUB/agents.fail"
-out=$(claude-turn-snapshot --prune --dry-run)
+out=$(jay-snapshot --prune --dry-run)
 has "--prune --dry-run: a gone worktree" "would remove dead0001 (worktree gone" "$out"
 has "--prune --dry-run: an old last turn" "would remove old00002 (last turn over 7 days ago)" "$out"
 ok "--dry-run removes nothing" rev refs/wt-turns/dead0001/base
-claude-turn-snapshot --prune >/dev/null
+jay-snapshot --prune >/dev/null
 eq "--prune: the chain of a gone worktree goes" "" "$(rev refs/wt-turns/dead0001/base)"
 eq "--prune: a chain with an old last turn goes" "" "$(rev refs/wt-turns/old00002/head)"
 no "--prune: their state files go" test -e "$state/dead0001.worktree"

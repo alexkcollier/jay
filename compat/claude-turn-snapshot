@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# claude-turn-snapshot is now jay-snapshot (jay was wt-hub): a silent shim for the hooks of an
+# older install (a hook's output can reach Claude). ./install.sh --no-compat removes it.
+exec "$HOME/.local/bin/jay-snapshot" "$@"

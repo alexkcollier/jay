@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# wt pick is now jay pick (jay was wt-hub): a shim for old habits.
+# ./install.sh --no-compat removes it.
+echo "wt pick is now: jay pick" >&2
+exec "$HOME/.local/bin/jay-pick" "$@"

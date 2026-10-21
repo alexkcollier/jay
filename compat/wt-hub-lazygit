@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# wt-hub-lazygit is now jay-lazygit (jay was wt-hub): a silent shim for an older hub's review
+# pane and lazygit settings. ./install.sh --no-compat removes it.
+exec "$HOME/.local/bin/jay-lazygit" "$@"

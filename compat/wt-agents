@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# wt agents is now jay agents (jay was wt-hub): a shim for old habits and agent prompts.
+# ./install.sh --no-compat removes it.
+echo "wt agents is now: jay agents" >&2
+exec "$HOME/.local/bin/jay-agents" "$@"

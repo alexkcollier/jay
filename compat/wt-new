@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# wt new is now jay new (jay was wt-hub): a shim for old habits and agent prompts.
+# ./install.sh --no-compat removes it.
+echo "wt new is now: jay new" >&2
+exec "$HOME/.local/bin/jay-new" "$@"

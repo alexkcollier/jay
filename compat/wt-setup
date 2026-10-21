@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# wt-setup is now jay setup (jay was wt-hub): a silent shim for a worktrunk pre-start hook of an
+# older install. ./install.sh --no-compat removes it.
+exec "$HOME/.local/bin/jay-setup" "$@"

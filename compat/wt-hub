@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# wt hub is now jay (jay was wt-hub): a shim for old habits, agent prompts and Ghostty tabs of
+# an older install. ./install.sh --no-compat removes it.
+[[ "${1:-}" == --print-* ]] || echo "wt hub is now: jay" >&2
+exec "$HOME/.local/bin/jay" "$@"

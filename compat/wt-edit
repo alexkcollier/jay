@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# wt-edit is now jay edit (jay was wt-hub): a shim for old habits and the yazi keys of an older
+# install. ./install.sh --no-compat removes it.
+echo "wt-edit is now: jay edit" >&2
+exec "$HOME/.local/bin/jay-edit" "$@"

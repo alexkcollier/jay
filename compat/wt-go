@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# wt go is now jay go (jay was wt-hub): a shim for old habits, agent prompts and notices of an
+# older install. ./install.sh --no-compat removes it.
+echo "wt go is now: jay go" >&2
+exec "$HOME/.local/bin/jay-go" "$@"

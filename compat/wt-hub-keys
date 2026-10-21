@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# wt-hub-keys is now jay-keys (jay was wt-hub): a silent shim for an older hub's review pane.
+# ./install.sh --no-compat removes it.
+exec "$HOME/.local/bin/jay-keys" "$@"

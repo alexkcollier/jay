@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# claude-notify is now jay-notify (jay was wt-hub): a silent shim for the hooks of an older
+# install (a hook's output can reach Claude). ./install.sh --no-compat removes it.
+exec "$HOME/.local/bin/jay-notify" "$@"

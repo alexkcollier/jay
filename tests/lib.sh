@@ -8,17 +8,18 @@ set -uo pipefail
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 TEST_NAME=$(basename "$0" .sh)
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/wt-hub-test.XXXXXX") || exit 1
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/jay-test.XXXXXX") || exit 1
 TMP=$(cd "$TMP" && pwd -P)
 trap 'rm -rf "$TMP"' EXIT
 
 # The user's Claude, zellij and hub variables must not reach the scripts: an agent's
 # CLAUDE_JOB_DIR changes the turn chain's name, and ZELLIJ* would point at a live session.
-for _var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC|ZELLIJ|WT_|GIT_)'); do unset "$_var"; done
+# WT_ are the old names of the JAY_ variables (jay was wt-hub).
+for _var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC|ZELLIJ|JAY_|WT_|GIT_)'); do unset "$_var"; done
 unset _var
 export HOME="$TMP/home" STUB="$TMP/stub"
 export PATH="$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-export WT_TERMINAL=none WT_HUB_SESSION=wt-hub-test-none LC_ALL=en_US.UTF-8
+export JAY_TERMINAL=none JAY_SESSION=jay-test-none LC_ALL=en_US.UTF-8
 export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.com
 export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.com GIT_CONFIG_NOSYSTEM=1
 mkdir -p "$HOME/.local/bin" "$HOME/.local/lib" "$HOME/.local/state" "$HOME/.claude/jobs" "$STUB"
@@ -27,7 +28,8 @@ printf '[init]\n\tdefaultBranch = main\n[advice]\n\tdetachedHead = false\n' >"$H
 # The scripts as a --link install has them.
 link_install() {
   local f
-  for f in "$REPO"/bin/*; do ln -sfn "$f" "$HOME/.local/bin/${f##*/}"; done
+  for f in "$REPO"/bin/* "$REPO"/compat/*; do ln -sfn "$f" "$HOME/.local/bin/${f##*/}"; done
+  ln -sfn "$REPO/lib/jay-lib.sh" "$HOME/.local/lib/jay-lib.sh"
   ln -sfn "$REPO/lib/wt-lib.sh" "$HOME/.local/lib/wt-lib.sh"
 }
 
@@ -45,6 +47,10 @@ case "${1:-} ${2:-}" in
   "--help "*) echo "  --bg, --background   Start the session in the background" ;;
   "attach --help" | "rm --help" | "logs --help") echo "Usage: claude $1 <id>" ;;
   "rm "*) exit 0 ;;
+  # The mod: `plugin marketplace list` prints $STUB/marketplaces.txt; the other plugin commands
+  # only leave their call in $STUB/claude.calls.
+  "plugin marketplace") [[ "${3:-}" != list ]] || cat "$STUB/marketplaces.txt" 2>/dev/null ;;
+  "plugin install" | "plugin uninstall") exit 0 ;;
   *) exit 1 ;;
 esac'
 stub zellij '[[ "${1:-}" == --version ]] && echo "zellij 0.45.1"; [[ "${1:-}" == --version ]]'

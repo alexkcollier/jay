@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# wt-hub-pane is now jay-pane (jay was wt-hub): a silent shim for an older hub's layout.
+# ./install.sh --no-compat removes it.
+exec "$HOME/.local/bin/jay-pane" "$@"
