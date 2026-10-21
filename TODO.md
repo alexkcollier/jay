@@ -1,0 +1,191 @@
+# Hub to-do
+
+Open items, known faults, and the decisions behind the hub, with the dates they were made. Read
+CLAUDE.md and README.md first. The hub is the zellij session "hub" (layout written by
+bin/wt-hub): worktree list (fzf, bin/wt-sidebar) | agent viewer (bin/wt-hub-pane agent; opens
+on the hub Claude, a background agent, since 2026-10-21) | review (tuicr via bin/wt-hub-pane) ⇄
+files (yazi).
+
+## Open items
+
+- A key that marks a task pane as private, so that `hub-run log` refuses to read it (the bar
+  would still show its state and ports). Not built; the README notes it.
+- Tab control for terminals other than Ghostty.
+- On record, not accepted yet (do not build unless the user asks): a tuicr config for the narrow
+  review column (gruvbox-dark, unified, wrap gutter, compact folders), and a revdiff trial with
+  a turn picker that sends review notes to the agent (a switch to revdiff is fine if tuicr gets
+  in the way).
+
+Dropped 2026-10-20: `wt step prune` (bulk removal; the list's dim ✓ and `d` do it one worktree
+at a time). Be careful with `wt step prune` in your own repos: in one repo it would have deleted
+`main`.
+
+## Known faults
+
+- The agent viewer sometimes stops taking the mouse (item 5 below; closed, not seen since the
+  clean restart). If it comes back: quit the hub (Ctrl g, Ctrl q) and run `wt hub` in a terminal
+  that no agent started. Notes: "Item 5 (closed): what we know".
+- Tab control is Ghostty only; other terminals get the hub without tab control.
+- macOS only: AppleScript, `lsappinfo`, BSD `stat`, `cp -c`.
+
+## The first to-do list (2026-10-19)
+
+1. Clean up the tops of the panes: the zellij stacked-pane title bars in the middle and right
+   columns were cumbersome. Done 2026-10-19: one pane per column, panes in place.
+2. A nicer zellij UI: the tab bar and status bar plugins in the hub layout. Done 2026-10-19: one
+   zjstatus bar.
+3. Faster pane switching and navigation. Done 2026-10-19: Ctrl g h/l/1/2/3/;, Enter in the list
+   moves the focus, an agent pick focuses the middle column.
+4. Keyboard hints in the worktree list, and the removal of agents and worktrees from it. Done
+   2026-10-19: footer, ? for all keys, d removes after a confirm.
+5. The agent panel sometimes stops responding to the mouse (added 2026-10-19). Closed
+   2026-10-20: not seen since the clean restart; notes below in case it comes back.
+
+## Item 5 (closed): what we know
+
+- Symptom: in the agent viewer the wheel moves the cursor (zellij sends arrow keys), a drag makes
+  zellij's green selection, and the other panes still take the mouse. Closing the viewer and a
+  new pick do not fix it.
+- Not a Claude problem: `claude attach` turns the mouse modes on at start and sends them again
+  every few seconds. Writing `?1000/1002/1003/1006h` straight to the viewer's tty did not help,
+  so zellij ignores mouse mode for that pane.
+- Not reproduced in throwaway hubs (fake HOME, real claude through a shim): the wheel works after
+  the first pick, after a retarget, after a list click, and with a real Claude in the suspended
+  hub pane.
+- Possible cause, fixed: Ghostty passed an agent's CLAUDE_* env into every tab, and the hub
+  server inherited it (f040335: `wt hub --here` removes CLAUDE*/ANTHROPIC* before zellij
+  starts). After a clean restart all worked.
+- Next step: wait. If the fault comes back in the clean hub, look at the suspended `zellij:link`
+  plugin pane over the middle column, or at how zellij handles the pane under the suspended hub
+  pane. Record DEC mode changes with a pty recorder.
+
+## Done after the list (2026-10-19)
+
+- Review pane opens a turn chain on its last turn; `q` in tuicr goes back (the pane starts tuicr
+  again).
+- `t` toggles review between turns (the agent's turn chain) and commits (merge-base..HEAD), in
+  tuicr (bin/wt-hub-keys; it left the list on 2026-10-20); the title shows the mode.
+- List: `n` new idle agent in the row's worktree, `N` new worktree + idle agent; ▸ marks the
+  shown agent.
+- Turn chains are per agent (a bg agent keeps its chain after resume or /clear).
+- Turn snapshots: committing agents now get turns (the base stays until the first turn commit).
+- Key hints: keys in orange, labels in plain text; short hints grouped, `?` one key per line,
+  all under 30 columns. `v`/`e` left the list: `e` in tuicr shows files, `e` in yazi goes back.
+
+## Done 2026-10-20
+
+- Lost viewer pane: a pick opened a viewer in place over the already suspended hub Claude; zellij
+  lost that pane, and every later pick went to it. Fixed in wtl_hub_role / wtl_hub_show (a334f58).
+- Interactive picks show a note in the middle column; a failed attach keeps its error; the list
+  prunes dead agents every 10 minutes (a334f58).
+- Background-first: `c` starts every new session as a background agent and attaches the
+  terminal; `b` in the list moves an idle interactive session to the background; ← in the hub
+  viewer leaves the agent (it went back to the hub Claude until that was removed).
+- List keys act in the list only (no list key may change review's mode or files): `t` left the
+  list. The `?` help has Keys, Panes (Ctrl g moves) and Signs (git signs, ▸) under their own
+  headings; signs are not drawn as keys. `r` reloads the agent list (and starts it again as the
+  newest version); no `q`.
+- No hub Claude (it had no clear use then): the middle column is a layout pane running
+  `wt-hub-pane agent` that never closes (placeholder; "you left this agent, Enter: open it
+  again"); the "◆ hub" row is gone. Nothing opens in place over a suspended pane any more except
+  files over review.
+- Notices: a click works now (wt-go lacked claude/zellij on launchd's PATH). No notice while
+  Ghostty is in front with the agent's own tab or the hub tab selected (the hub counts for every
+  agent); the zellij pane does not matter. macOS stacks them (grouping Automatic). Turn chains of
+  gone agents are pruned (claude-turn-snapshot --prune).
+- Review: new turns come in by themselves, without manual steps. A watcher restarts tuicr when
+  the chain head (commits mode: HEAD) moves, only while tuicr is in NORMAL/SELECT. tuicr kept:
+  revdiff has only a manual reload, no per-commit pick, and keys that cannot run commands; its
+  plus is annotations back to Claude.
+- Removed: a scratch worktree turns-selftest, test chains 11112222 and 60e27a52,
+  bin/wt-hub-edit, the wtl_nvim_* helpers, ~/.config/wt/lazygit-hub.yml.
+- Kept as is: idle background agents stay until removed; the Octicons for uncommitted,
+  conflict, safe and rebase.
+
+## Done 2026-10-21
+
+- The hub Claude is back, now with a use: a background agent named `hub` (picked over the old
+  pane under the viewer, a floating pane or a pane under the list). Its use: orchestrate agents
+  and answer questions across repos; its system prompt says how (`wtl_hub_claude_prompt`). A
+  fresh hub opens on it with the focus in the middle column; the "◆ hub" row (top of the list,
+  with its state sign) and `wt go hub` show it again; review does not change on that pick.
+  `wtl_hub_claude` starts it when `~/.local/state/wt-hub-claude` names no agent. No in-place
+  panes: it uses the agent viewer.
+- Tasks tab for dev servers (dev servers were easy to lose sight of; a team can run a backend
+  and several frontends, with ports that overlap across projects). The choices: no repo config,
+  no `wt` subcommands (worktrunk is third-party), an embedded terminal that agents can see, an
+  overview in the bar, a tiled "tasks" tab (picked over floating panes and a mix), no log files
+  (secrets would end up in them), panes readable by default and no private-pane key for now
+  (only a README note). Built: `bin/hub-run` (start in a new pane of the tab, ls, log via
+  `dump-screen`, wait, stop, restart, port), the tab in the layout, the bar's `pipe_tasks` (sent
+  by the list), the SessionStart hook for agents, Ctrl g Tab (`GoToNextTab`: `ToggleTab` does
+  nothing in a fresh session, which has no previous tab), a pick from the tasks tab goes back to
+  the hub tab, and notices come while the hub shows the tasks tab. Facts: `ps -E` does not show
+  the env of pane processes, so panes are matched to their processes by foreground command and
+  folder; `new-pane --tab-id` works from outside, also on a hub without a client; bash 3.2
+  `read -t` returns 1 on a time-out.
+- Tasks tab, round 2 (the footer was not a clear enough sign of being in the hub on the other
+  tab; a switch to the tab should land in the worktree folder when the terminal is empty;
+  commands run in the task tab did not get a pane of their own). A blue zjstatus banner at the
+  top of the tab (picked over a banner + coloured bar, or a coloured bar only). zellij has no
+  tab-switch event, so the shells follow the picks: each pick replaces the tab's empty shells in
+  place with a shell in the picked worktree, and the list's tick opens a new free shell when a
+  command takes the last one. Facts: `new-pane --in-place` without a command ignores `--cwd`
+  (with a command it works); `new-pane --tab-id` into the tab a client looks at does not move
+  that client's focus. Then the hub tab got the banner too (`◆ HUB › worktrees`). Then (only
+  programs and running commands may block a move): every shell at its prompt follows the pick; a
+  used one gets Ctrl-C and ` cd -- <worktree>` typed.
+- Tasks tabs, round 3 (instead of following, tie the terminal to the worktree): a tasks tab per
+  worktree (not per agent: a server runs in a folder), made on first need with `new-tab
+  --no-focus`; the follow logic is gone. Ctrl g Tab is a zellij `Run` binding (`hub-run
+  --switch` in a 1-cell floating pane that closes at once), because zellij 0.45 has no key
+  action for a tab by name; picked over moving the pick's tab to position 2 at each pick (a CLI
+  tab switch at each pick). The bar has no tab list; the banners say where you are. `d` on a
+  worktree closes its tab. Cost measured: the hub server used 68 MB with 5 plugin panes; a tab
+  adds a shell and two zjstatus instances.
+- Launcher (a command typed in a tasks shell uses that shell; it must have the completion of
+  your shell; no slash command): Ctrl g r runs `hub-run --launcher` in a floating pane: your zsh
+  through our ZDOTDIR (it loads your startup files), Enter hands the line to hub-run. Then (keep
+  it small and narrow, for simplicity; portable, with a user config if needed, zsh as the
+  default): the launcher is 4 rows by 60 %, its title says where; tasks run with `$SHELL -i +m
+  -c` (aliases: 2 with -lc, 237 with -i; +m keeps Ctrl-C on the whole command); `WT_TASK_SHELL`
+  and `WT_LAUNCHER` settings, with a tested bash 3.2 launcher in the README. Then (commands that
+  end at once, like `ls` or `docker:up`, should not make panes): zellij cannot move a process to
+  another pane, so `hub-run --launch` starts the task, waits up to 2 s for `pane-<id>.exit`, and
+  when it ends, closes its pane and shows its output in the launcher (grown to fit) until a key.
+- Consoles (no task panel full of one-line panes; a console per tab was picked over a stack for
+  one-liners and an inverted Enter / `&`): the launcher types its line into the tab's console; a
+  command that runs on makes the console its task (named from the typed line) and the tick opens
+  a new console; a tab keeps its newest console, extras close after 10 minutes at the prompt. A
+  quick command's output shows in the launcher (end: the shell has the terminal again, or a new
+  prompt on screen; 0.7 s for `ls`). Fault found on the way: macOS `pgrep` leaves out its
+  ancestors without `-a`, so inside a hub pane (the list's tick) it did not find the zellij
+  server, and every task was "unknown" (no tasks in the bar from the list, no free shells);
+  `wtl_hub_role` had the same lookup.
+- Hide review (hide and show the review panel easily; "tuck away" was picked over
+  close-and-reopen and an overlay peek, with the key Ctrl g v): Ctrl g v hides review (the agent
+  viewer gets its width) and shows it again at its old width; Ctrl g 3 and Enter on a worktree
+  row show it with the focus. tuicr runs on while hidden; files closes and opens again. Facts
+  (zellij 0.45): an embedded floating pane splits the biggest pane (under the agent, not right
+  of it); `stack-panes -- <tiled> <floating>` puts the floating pane in the tiled pane's place
+  and suspends that one; a floating pane over a suspended one loses it on close; any new floating
+  pane shows the hidden ones, and the last one keeps the focus after it closes, so hub-run
+  --switch/--launcher and the list's tick hide them again; `hide-floating-panes` from outside
+  needs `-t <tab id>`; tuicr survives a 0x0 pane.
+
+## How to work
+
+- Taste items: first show the user 2–3 concrete options (short ASCII previews, what each costs),
+  let them pick, then build. Key items: propose the keys in one message, then build. Keys must
+  be idiomatic ("q means quit").
+- Removing a worktree is destructive: confirm in the UI first, use `wt remove`, never remove a
+  main checkout, never run `wt step prune` (see "Open items"). Removing an agent: `claude rm
+  <id>` after a confirm. The agent viewer never closes; the hub Claude is a background agent
+  shown in it (since 2026-10-21), never a pane under it.
+- Test zellij behaviour in a throwaway session as CLAUDE.md says, never on the live hub. Apply to
+  the live hub only when an item is done, and restart a live pane in place (focus it, `zellij -s
+  hub run --in-place --close-replaced-pane ... -- env -u CLAUDE_JOB_DIR <cmd>`, refocus) — never
+  quit the hub session.
+- Edit running scripts write-then-mv. Commit each finished item (no Claude-Session trailer, no
+  ticket ids).
+- End each item with what changed and how the user uses it.

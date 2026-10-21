@@ -6,9 +6,9 @@ scripts, the yazi keys, the lazygit settings and the tuicr config are symlinks i
 edit is live at once. `~/.config/worktrunk/config.toml` and `~/.claude/settings.json` are never
 links.
 
-Facts about your own machine (where the live install is, how your mod loads, your open items)
-go in `CLAUDE.local.md` and `TODO.local.md` in the repo root. Git ignores `*.local.md`, and
-Claude Code loads `CLAUDE.local.md` with this file.
+Facts about your own machine (where the live install is, how your mod loads) go in
+`CLAUDE.local.md` in the repo root. Git ignores `*.local.md`, and Claude Code loads
+`CLAUDE.local.md` with this file. Open items, known faults and past decisions: `TODO.md`.
 
 ## Tests
 

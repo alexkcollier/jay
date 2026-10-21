@@ -6,7 +6,7 @@ agent's work (tuicr on its turns, or yazi on its files). Built on
 [worktrunk](https://github.com/max-sixty/worktrunk) and Claude Code background agents.
 
 Install with `./install.sh` ([Install](#install)). Open items and known faults:
-[docs/open-items.md](docs/open-items.md). Rules for edits: [CLAUDE.md](CLAUDE.md).
+[TODO.md](TODO.md). Rules for edits: [CLAUDE.md](CLAUDE.md).
 
 - [What the hub is](#what-the-hub-is)
 - [Requirements](#requirements)
@@ -960,5 +960,5 @@ mod/
   tsconfig.json
 install.sh               installer: copies or links, configs, hooks, zjstatus; --check, --uninstall
 CLAUDE.md                rules for edits in this repo
-docs/open-items.md       open items and known faults
+TODO.md                  open items, known faults and the hub's decisions
 ```
