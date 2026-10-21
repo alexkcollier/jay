@@ -397,18 +397,22 @@ hub tab, `◆ HUB › tasks <its worktree>` on a tasks tab, with where Ctrl g Ta
   worktree row; a new tab when it has none); from a tasks tab back to the hub. zellij has no key
   action for a tab by name, so the key runs `hub-run --switch` in a floating pane of 1 cell that
   closes at once. A pick does not change the tab you are on.
-- **Launcher** (Ctrl g `r`, from any tab): a small floating prompt in the picked worktree (from
-  the hub tab) or in the worktree of the tasks tab you are on; its title says which. It is your
-  own zsh, with your `.zshrc`: completion, history, autosuggestions and the prompt work as in a
-  terminal. Enter starts the line with `hub-run` in that worktree's tasks tab (its own pane, a
-  name in the bar, run again and restart), puts it in your history, and closes the launcher;
-  you stay where you are. A command that ends within 2 s (`ls`, `docker compose up -d`) needs
-  no pane: its pane closes, and the launcher grows to show its output and exit code until a
-  key. An empty line or Ctrl-C closes the launcher. Other shells: see below.
-- **By hand**: type the command in a shell of the tab, as in any terminal. A tab always has a
-  free shell in its worktree: when a command takes the last one, the hub opens a new one (within
-  3 s), without moving your focus. More panes: Ctrl g `p` `n` (zellij's pane mode; the new pane
-  starts in the folder of the focused pane). Close a pane: Ctrl g `p` `x`.
+- **Console**: each tasks tab has one, a shell in its worktree at its prompt (pane title
+  `console`). Type a command there, as in any terminal. A command that ends leaves no pane
+  behind: its output stays in the console. One that runs on (a dev server) makes the console its
+  task pane, named after the command, and the hub opens a new console within 3 s, without moving
+  your focus. When a task in a console ends, that pane is a console again; a tab keeps one (its
+  newest), and an extra one closes after 10 minutes at its prompt, so a crashed server's last
+  lines stay for a while. More panes: Ctrl g `p` `n`; close one: Ctrl g `p` `x`.
+- **Launcher** (Ctrl g `r`, from any tab): a one-line floating prompt for the console of the
+  picked worktree (from the hub tab) or of the tab you are on; its title says which. It is your
+  own zsh, with your `.zshrc`: completion, history and autosuggestions work as in a terminal.
+  Enter types the line into that console (with a `cd` when the console is elsewhere), puts it in
+  your history, and you stay where you are. A command that ends within 2 s (`ls`, `pnpm
+  docker:up`): the launcher grows to show the console's new lines until a key. One that runs on:
+  the launcher closes, and the command is now that tab's task. An empty line or Ctrl-C closes the
+  launcher. `hub-run restart` works on a command that the launcher typed (Ctrl-C, then the same
+  line again). Other shells: see below.
 - **From elsewhere**: `hub-run <command>` in any folder (a Ghostty tab, `! hub-run pnpm dev` in a
   Claude prompt) opens a new pane in that worktree's tasks tab, in that folder, and leaves you
   where you are. `-n <name>` names it; `-w` waits until it listens and prints its URL. When the
@@ -430,8 +434,8 @@ aliases and `mise activate` apply; `+m`: no job control, so Ctrl-C reaches all o
 
 **Other shells**: the launcher is built in for zsh; another shell gets a plain prompt (line
 editing and its own history). For your own shell, set `WT_LAUNCHER` to a command that runs in
-the launcher pane (in the worktree) and starts what you type with `hub-run --launch -- "<line>"`
-(`--launch`: a command that ends within 2 s shows its output in the launcher, no pane). For
+the launcher pane (in the worktree) and hands what you type to `hub-run --launch -- "<line>"`
+(it types the line into the console and shows a quick command's output). For
 example bash (also macOS `/bin/bash` 3.2), in `~/.config/wt-hub/config`:
 `WT_LAUNCHER=BASH_SILENCE_DEPRECATION_WARNING=1 /bin/bash --rcfile ~/.config/wt-hub/launcher.bash -i`,
 with this `~/.config/wt-hub/launcher.bash`:
@@ -675,8 +679,8 @@ All of these are in `~/.local/bin`. worktrunk runs `wt-<name>` for `wt <name>`, 
 
 Hooks and internal commands (not for hand use): `claude-notify` (Stop, Notification),
 `claude-turn-snapshot` (UserPromptSubmit, Stop), `hub-run --hook` (SessionStart), `hub-run --bar`
-(the bar's tasks), `hub-run --tick` (the list's tick: a free shell in each tasks tab, then the
-bar's tasks), `hub-run --where` (the hub banner's worktree, at each pick), `hub-run --switch`
+(the bar's tasks), `hub-run --tick` (the list's tick: a console in each tasks tab, the pane
+names, the extra consoles, then the bar's tasks), `hub-run --where` (the hub banner's worktree, at each pick), `hub-run --switch`
 (Ctrl g Tab), `hub-run --launcher` (Ctrl g r), `hub-run --worktree-tab <dir> --name|--tasks` and `hub-run --close-tab <name>`
 (`d` on a worktree), `hub-run --exec` (a pane that `hub-run` started), `wt-sidebar` (the list),
 `wt-sidebar --review toggle|show` (Ctrl g `v`, Ctrl g `3`), `wt-sidebar --files` (`e` in tuicr),
@@ -723,6 +727,8 @@ In `~/.local/state/`:
 | `claude-notify.log` | one line per notify hook call, and the output of notice clicks |
 | `hub-tasks/<pid>.exit`, `<pid>.again` | the exit code of a `hub-run` pane whose command ended; a restart request (no output is stored) |
 | `hub-tasks/zdotdir/` | the launcher's zsh startup files: they load yours, then add its Enter |
+| `hub-tasks/console-<pane>.line` | the line the launcher typed into a console, while it runs (its name in the bar, `restart`) |
+| `hub-tasks/idle-<pane>` | when an extra console came to its prompt (it closes after 10 minutes) |
 | `hub-tasks/launcher.history` | the launcher's history, for a shell other than zsh |
 
 Elsewhere:

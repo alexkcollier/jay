@@ -112,6 +112,15 @@ Alex's to-do list, in his words (2026-10-19):
   for them?"): zellij cannot move a process to another pane, so `hub-run --launch` starts the
   task, waits up to 2 s for `pane-<id>.exit`, and when it ends, closes its pane and shows its
   output in the launcher (grown to fit) until a key.
+- Consoles (Alex: "i just don't want to fill up task panel with a bunch of one-liner panels";
+  picked a console per tab over a stack for one-liners and an inverted Enter / `&`): the
+  launcher types its line into the tab's console; a command that runs on makes the console its
+  task (named from the typed line) and the tick opens a new console; a tab keeps its newest
+  console, extras close after 10 minutes at the prompt. A quick command's output shows in the
+  launcher (end: the shell has the terminal again, or a new prompt on screen; 0.7 s for `ls`).
+  Fault found on the way: macOS `pgrep` leaves out its ancestors without `-a`, so inside a hub
+  pane (the list's tick) it did not find the zellij server, and every task was "unknown" (no
+  tasks in the bar from the list, no free shells); `wtl_hub_role` had the same lookup.
 
 - Hide review (Alex: "i want to be able to hide and show review panel easily"; he picked "tuck
   away" over close-and-reopen and an overlay peek, and the key Ctrl g v): Ctrl g v hides review

@@ -110,12 +110,12 @@ fresh_start() {
 }
 
 # The tasks tab of worktree $1, named $2 (hub-run makes it, see ensure_tab there): the banner,
-# a shell in the worktree, the bar.
+# the console (a shell in the worktree, see hub-run), the bar.
 tasks_tab_layout() {
   cat <<KDL
 layout {
     $(banner tasks "back to the hub" "$2")
-    pane cwd="$1"
+    pane cwd="$1" name="console"
     pane size=1 borderless=true {
         $(bar)
     }

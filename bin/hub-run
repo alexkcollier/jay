@@ -72,16 +72,13 @@ run_pane() {
   fi
   mkdir -p "$STATE_DIR"
   trap ':' INT
-  # pane-<id>.exit too: the launcher (quick_end) looks for it by pane.
-  local byp="$STATE_DIR/pane-${ZELLIJ_PANE_ID:-none}.exit"
   while :; do
-    rm -f "$STATE_DIR/$$.exit" "$STATE_DIR/$$.again" "$byp"
+    rm -f "$STATE_DIR/$$.exit" "$STATE_DIR/$$.again"
     printf '\e[2m$ %s\e[0m\n' "$cmd"
     "${sh[@]}" "$cmd"
     rc=$?
     [[ -f "$STATE_DIR/$$.again" ]] && { printf '\n'; continue; }
     printf '%s\n' "$rc" >"$STATE_DIR/$$.exit"
-    printf '%s\n' "$rc" >"$byp"
     printf '\n\e[2mexited (%s) · Enter: run again · q: close\e[0m\n' "$rc"
     # bash 3.2's read -t returns 1 on a time-out, as on end of input: read single keys, and
     # look for a restart each second.
@@ -89,7 +86,7 @@ run_pane() {
       line=""
       read -r -s -n 1 -t 1 line; r=$?
       ((r == 0)) && [[ -z "$line" ]] && break
-      [[ "$line" == q ]] && { rm -f "$STATE_DIR/$$.exit" "$byp"; exit "$rc"; }
+      [[ "$line" == q ]] && { rm -f "$STATE_DIR/$$.exit"; exit "$rc"; }
       [[ -f "$STATE_DIR/$$.again" ]] && break
     done
   done
@@ -117,9 +114,11 @@ stop_group() {
 # One line per pane of the hub: root pid<TAB>tty<TAB>foreground pid<TAB>pids (,)<TAB>foreground command
 pane_procs() {
   local srv
-  srv=$(pgrep -f "zellij --server .*/$WT_HUB_SESSION\$" | head -1)
+  # -a: inside a hub pane (the list's tick, the launcher) the server is an ancestor, which
+  # pgrep leaves out without it.
+  srv=$(pgrep -a -f "zellij --server .*/$WT_HUB_SESSION\$" | head -1)
   [[ -n "$srv" ]] || return 0
-  ps -x -o pid=,ppid=,tpgid=,tty=,command= | awk -v srv="$srv" '
+  ps -ax -o pid=,ppid=,tpgid=,tty=,command= | awk -v srv="$srv" '
     { cmd = $0; sub(/^ *[0-9]+ +[0-9]+ +-?[0-9]+ +[^ ]+ +/, "", cmd)
       pid[NR] = $1; tty[$1] = $4; tp[$1] = $3; c[$1] = cmd
       if ($4 != "??") on[$4] = on[$4] (on[$4] == "" ? "" : ",") $1
@@ -152,17 +151,18 @@ docker_ports() {
 }
 
 # The tasks as one JSON array.
-tasks_json() {
-  local panes procs fgs listen cwds
+# The panes of the tasks tabs with their processes, one JSON object per line. --light: without
+# the ports (no lsof for them), for the launcher.
+panes_raw() {
+  local panes procs fgs listen="" cwds
   hub_answers || return 1
   panes=$(zellij -s "$WT_HUB_SESSION" action list-panes -a -j -c 2>/dev/null) || return 1
   jq -e 'type == "array"' <<<"$panes" >/dev/null 2>&1 || return 1
   procs=$(pane_procs)
   fgs=$(cut -f3 <<<"$procs" | paste -sd, -)
-  listen=$(listen_ports)
+  [[ "${1:-}" == --light ]] || listen=$(listen_ports)
   cwds=$(proc_cwds "$fgs")
-  local raw
-  raw=$(jq -c --arg hub "$HUB_TAB" --arg procs "$procs" --arg listen "$listen" --arg cwds "$cwds" --arg self "hub-run --exec " '
+  jq -c --arg hub "$HUB_TAB" --arg procs "$procs" --arg listen "$listen" --arg cwds "$cwds" --arg self "hub-run --exec " '
     def lines: split("\n") | map(select(length > 0) | split("\t"));
     ($procs | lines | map({root: (.[0] | tonumber), tty: .[1], fg: (.[2] | tonumber),
                            pids: (.[3] | split(",") | map(tonumber)), fgcmd: .[4]}) | sort_by(.root)) as $R
@@ -202,7 +202,12 @@ tasks_json() {
        exit: $p.exit_status,
        command: (if $owned then $line elif $m == null or $prompt then null else $m.fgcmd end),
        cwd: ($C[($m.fg // -1) | tostring] // $p.pane_cwd),
-       ports: ([$m.pids[]? | $L[tostring][]?] | unique)}' <<<"$panes") || return 1
+       ports: ([$m.pids[]? | $L[tostring][]?] | unique)}' <<<"$panes"
+}
+
+tasks_json() {
+  local raw
+  raw=$(panes_raw) || return 1
   # Exit codes of panes whose command ended (hub-run --exec writes them), names, worktrees and
   # docker ports.
   local line root rc name cwd cmd wt dport top branch repo
@@ -212,6 +217,11 @@ tasks_json() {
     IFS=$'\x1f' read -r root name cwd cmd < <(fields '[(.root // ""), (if .owned then .title else "" end), .cwd, (.command // "")]' <<<"$line")
     rc=""
     [[ -n "$root" && -f "$STATE_DIR/$root.exit" ]] && rc=$(cat "$STATE_DIR/$root.exit")
+    # A console's command that the launcher typed: its name comes from that line (ps shows the
+    # program behind it, as node for pnpm).
+    local lf
+    lf="$STATE_DIR/console-$(jq -r .id <<<"$line").line"
+    if [[ -z "$name" && -n "$cmd" && -f "$lf" ]]; then name=$(short_name "$(cat "$lf")"); fi
     if [[ -z "$name" ]]; then
       if [[ -n "$cmd" ]]; then name=$(short_name "$cmd"); else name=shell; fi
     fi
@@ -427,6 +437,7 @@ cmd_start() {
     fi
     die "the hub does not run, so nobody would see this task. Ask the user to start it (wt hub)"
   fi
+  ((launch)) && { console_run "$line"; return; }
   # The same command, running in the same folder: show that one, do not start a second one.
   local same
   same=$(tasks_json | jq -c --arg l "$line" --arg d "$(pwd -P)" \
@@ -440,7 +451,6 @@ cmd_start() {
   tid=$(ensure_tab "$PWD") || die "the hub did not open a tab for $(tab_name "$PWD")"
   pane=$(env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --tab-id "$tid" \
     --cwd "$PWD" --name "$name" --close-on-exit -- "$SELF" --exec "$line") || die "zellij did not open the pane"
-  ((launch)) && { quick_end "$pane"; return; }
   printf '%s: started in the hub, tab %s (%s)\n' "$name" "$(tab_name "$PWD")" "$pane"
   if ((wait)); then
     sleep 1
@@ -450,38 +460,86 @@ cmd_start() {
   fi
 }
 
-# The launcher's start (hub-run --launch): a command that ends within 2 s (ls, docker compose up
-# -d) needs no pane. Then its pane closes and its output shows in the launcher, which grows to
-# fit it, until a key; a command that still runs keeps its pane, and the launcher closes.
-quick_end() {
-  local pane=$1 file out rc i h
-  file="$STATE_DIR/pane-${pane#terminal_}.exit"
-  for i in $(seq 20); do
-    sleep 0.1
-    [[ -f "$file" ]] || continue
-    rc=$(cat "$file")
-    rm -f "$file"
-    # The pane's text without hub-run's "$ <command>" line at the top and its "exited" lines.
-    out=$(zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" --full 2>/dev/null \
-      | awk 'NR == 1 && /^\$ / { next } { a[++n] = $0 } END {
-          while (n > 0 && (a[n] ~ /^[[:space:]]*$/ || a[n] ~ /^exited \(/)) n--
-          for (i = 1; i <= n; i++) print a[i] }')
-    zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "$pane" >/dev/null 2>&1
-    if [[ -t 1 && -n "${ZELLIJ_PANE_ID:-}" ]]; then
-      h=$(($(printf '%s\n' "$out" | wc -l) + 3))
-      ((h > 30)) && h=30
-      zellij action change-floating-pane-coordinates -p "terminal_$ZELLIJ_PANE_ID" --height "$h" >/dev/null 2>&1
-      sleep 0.1
-      clear
-      [[ -n "$out" ]] && printf '%s\n' "$out"
-      printf '\e[2mexit %s · any key: close\e[0m' "$rc"
-      read -r -s -n 1 _ </dev/tty
-    else
-      [[ -n "$out" ]] && printf '%s\n' "$out"
-      printf 'exit %s\n' "$rc"
+# --- Consoles: the free shell of each tasks tab ---
+# The launcher types its line into the console of the worktree's tab. A command that ends
+# leaves no pane behind (its output stays in the console); one that runs on makes the console
+# its task pane, and the tick opens a new console.
+
+# A line that ends in a prompt sign: the shell waits for input.
+PROMPT_END='(%|\$|#|>|❯|➜)[[:space:]]*$'
+
+# The pane lines of $1 (a dump), without the blank rows under the last line.
+trim_dump() { awk '{ a[NR] = $0 } NF { last = NR } END { for (i = 1; i <= last; i++) print a[i] }'; }
+
+# The console of tab id $1: "terminal_<id><TAB>root pid<TAB>cwd" of its newest shell at its
+# prompt; fails when it has none.
+console_of() {
+  panes_raw --light 2>/dev/null | jq -rs --argjson t "$1" \
+    '[.[] | select(.tab_id == $t and .state == "idle" and (.owned | not))] | max_by(.id) // empty
+     | "\(.pane)\t\(.root)\t\(.cwd)"' | grep .
+}
+
+# hub-run --launch <line> (the launcher's Enter), in folder $PWD. The line goes into the console
+# (Ctrl-E Ctrl-U first, to drop any typed text; a leading space keeps it out of the console's
+# history, as the launcher saved it already; a cd when the console is elsewhere). For up to 2 s
+# the launcher watches it: a command that ends shows the console's new lines in the launcher,
+# which grows to fit them, until a key. One that runs on: the launcher closes.
+console_run() {
+  local line=$1 dir tid pane p root cwd strip=() var before i started=0 ended=0 tp out h cd=""
+  dir=$(pwd -P)
+  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
+  tid=$(ensure_tab "$dir") || die "the hub did not open a tab for $(tab_name "$dir")"
+  if ! IFS=$'\t' read -r pane root cwd < <(console_of "$tid"); then
+    # A new tab's console, or the one the tick opens, may still start: take the newest shell
+    # pane of the tab that has no command, else open one; then wait up to 3 s for its prompt.
+    pane=$(zellij -s "$WT_HUB_SESSION" action list-panes -a -j -c 2>/dev/null | jq -r --argjson t "$tid" \
+      '[.[] | select(.tab_id == $t and (.is_plugin | not) and (.exited | not) and .title == "console")] | max_by(.id) // empty | "terminal_\(.id)"')
+    if [[ -z "$pane" ]]; then
+      pane=$(env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --tab-id "$tid" --close-on-exit \
+        --cwd "$dir" --name console -- "${SHELL:-/bin/zsh}" -l 2>/dev/null)
     fi
-    return 0
+    [[ "$pane" == terminal_* ]] || die "no console in $(tab_name "$dir")"
+    root="" cwd=""
+    for i in $(seq 15); do
+      sleep 0.2
+      IFS=$'\t' read -r p root cwd < <(console_of "$tid") && [[ "$p" == "$pane" ]] && break
+      root="" cwd=""
+    done
+  fi
+  [[ "$cwd" == "$dir" ]] || cd="cd -- $(printf '%q' "$dir") && "
+  before=$(zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | trim_dump | wc -l)
+  zellij -s "$WT_HUB_SESSION" action write-chars --pane-id "$pane" $'\x05\x15'" $cd$line"$'\r' >/dev/null 2>&1
+  printf '%s\n' "$line" >"$STATE_DIR/console-${pane#terminal_}.line"
+  # A console that did not reach its prompt in time gets the line too (its shell reads it when
+  # it is ready), but the launcher does not wait for the output.
+  [[ -n "$root" ]] || return 0
+  # Ended: the shell has the terminal again, after the command took it; or, for a command too
+  # short to see (or a builtin), a new prompt under the typed line. After 1 s at the latest.
+  local now
+  for i in $(seq 40); do
+    sleep 0.05
+    tp=$(ps -o tpgid= -p "$root" 2>/dev/null | tr -d ' ')
+    [[ -n "$tp" ]] || break
+    if [[ "$tp" != "$root" ]]; then started=1; continue; fi
+    ((started || i >= 20)) && { ended=1; break; }
+    now=$(zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | trim_dump)
+    if (($(wc -l <<<"$now") > before + 1)) && tail -1 <<<"$now" | grep -qE "$PROMPT_END"; then ended=1; break; fi
   done
+  ((ended)) || return 0
+  sleep 0.1
+  out=$(zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | trim_dump \
+    | awk -v from="$((before > 0 ? before : 1))" 'NR >= from')
+  if [[ -t 1 && -n "${ZELLIJ_PANE_ID:-}" ]]; then
+    h=$(($(printf '%s\n' "$out" | wc -l) + 3))
+    ((h > 30)) && h=30
+    zellij action change-floating-pane-coordinates -p "terminal_$ZELLIJ_PANE_ID" --height "$h" >/dev/null 2>&1
+    sleep 0.1
+    clear
+    printf '%s\n\e[2many key: close\e[0m' "$out"
+    read -r -s -n 1 _ </dev/tty
+  else
+    printf '%s\n' "$out"
+  fi
   return 0
 }
 
@@ -575,7 +633,20 @@ cmd_restart() {
   [[ -n "${1:-}" ]] || die "which task? (hub-run ls)"
   task=$(find_task "$1") || exit 1
   IFS=$'\x1f' read -r owned root name pane < <(fields '[.owned, (.root // ""), .name, .pane]' <<<"$task")
-  [[ "$owned" == true ]] || die "$name: a shell pane; stop it (hub-run stop $pane) and type the command again there"
+  if [[ "$owned" != true ]]; then
+    # A console's command that the launcher typed: stop it, then type that line again.
+    local lf fg i again
+    lf="$STATE_DIR/console-${pane#terminal_}.line"
+    [[ -f "$lf" ]] || die "$name: a shell pane; stop it (hub-run stop $pane) and type the command again there"
+    again=$(cat "$lf")
+    fg=$(jq -r '.fg // empty' <<<"$task")
+    [[ -n "$fg" ]] && { stop_group "$fg" || die "$name: still runs after Ctrl-C, TERM and KILL"; }
+    for i in $(seq 20); do [[ "$(ps -o tpgid= -p "$root" | tr -d ' ')" == "$root" ]] && break; sleep 0.1; done
+    printf '%s\n' "$again" >"$lf"
+    zellij -s "$WT_HUB_SESSION" action write-chars --pane-id "$pane" $'\x05\x15'" $again"$'\r' >/dev/null 2>&1
+    printf '%s: restarted in %s\n' "$name" "$pane"
+    return 0
+  fi
   [[ -n "$root" ]] || die "$name: its pane does not run"
   mkdir -p "$STATE_DIR"
   : >"$STATE_DIR/$root.again"
@@ -635,16 +706,52 @@ spare_shell() {
     [[ -n "$tid" ]] || continue
     top=$(wtl_toplevel "$cwd")
     env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --tab-id "$tid" --close-on-exit \
-      --cwd "$top" -- "${SHELL:-/bin/zsh}" -l >/dev/null 2>&1
+      --cwd "$top" --name console -- "${SHELL:-/bin/zsh}" -l >/dev/null 2>&1
   done < <(jq -r 'group_by(.tab_id)[] | select(all(.[]; .state != "idle" and .state != "unknown"))
     | "\(.[0].tab_id)\t\(.[0].cwd)"' <<<"$tasks")
 }
 
-# The list's tick (wt-sidebar, every 3 s): a free shell in each tasks tab, then the bar text.
+# Shell panes are named for what they are: "console" at the prompt, else the command's name. A
+# tab keeps one console (its newest): another one closes after 10 minutes at its prompt (a
+# server that ended leaves its last lines there for that long). The idle times are in
+# idle-<pane id> files.
+tidy_shells() {
+  local tasks=$1 pane title want id now since
+  now=$(date +%s)
+  while IFS=$'\t' read -r pane title want; do
+    [[ -n "$pane" && "$title" != "$want" ]] || continue
+    zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "$want" >/dev/null 2>&1
+  done < <(jq -r '.[] | select((.owned | not) and (.state == "idle" or .state == "running"))
+    | [.pane, .title, (if .state == "idle" then "console" else .name end)] | @tsv' <<<"$tasks")
+  # A console back at its prompt: the line the launcher typed is done.
+  for id in $(jq -r '.[] | select(.state == "idle" and (.owned | not)) | .id' <<<"$tasks"); do
+    rm -f "$STATE_DIR/console-$id.line"
+  done
+  for id in $(jq -r 'group_by(.tab_id)[] | map(select(.state == "idle" and (.owned | not))) | sort_by(.id) | .[:-1][] | .id' <<<"$tasks"); do
+    since=$(cat "$STATE_DIR/idle-$id" 2>/dev/null)
+    if [[ -z "$since" ]]; then
+      printf '%s\n' "$now" >"$STATE_DIR/idle-$id"
+    elif ((now - since >= 600)); then
+      zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "terminal_$id" >/dev/null 2>&1
+      rm -f "$STATE_DIR/idle-$id" "$STATE_DIR/console-$id.line"
+    fi
+  done
+  # Idle times of panes that are no longer an extra console.
+  local keep f
+  keep=" $(jq -r 'group_by(.tab_id)[] | map(select(.state == "idle" and (.owned | not))) | sort_by(.id) | .[:-1][] | .id' <<<"$tasks" | tr '\n' ' ') "
+  for f in "$STATE_DIR"/idle-*; do
+    [[ -f "$f" ]] || continue
+    [[ "$keep" == *" ${f##*/idle-} "* ]] || rm -f "$f"
+  done
+}
+
+# The list's tick (wt-sidebar, every 3 s): a console in each tasks tab, names, then the bar text.
 cmd_tick() {
   local tasks
   tasks=$(tasks_json 2>/dev/null) || return 0
+  mkdir -p "$STATE_DIR"
   spare_shell "$tasks"
+  tidy_shells "$tasks"
   cmd_bar "$tasks"
 }
 

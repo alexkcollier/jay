@@ -386,7 +386,8 @@ wtl_hub_role() {
   pane=$(jq -r --arg role "$1" \
     'select((.exited | not) and ((.terminal_command // "") | test("wt-hub-pane " + $role + "$"))) | .id' <<<"$panes")
   [[ -n "$pane" && "$pane" != *$'\n'* ]] || return 1
-  pids=$(pgrep -P "$(pgrep -f "zellij --server .*/$WT_HUB_SESSION\$" | head -1)" -f "wt-hub-pane $1\$" | grep -vxF "${lost:-none}")
+  # pgrep -a: from inside a hub pane the server is an ancestor, which pgrep leaves out without it.
+  pids=$(pgrep -P "$(pgrep -a -f "zellij --server .*/$WT_HUB_SESSION\$" | head -1)" -f "wt-hub-pane $1\$" | grep -vxF "${lost:-none}")
   [[ -n "$pids" && "$pids" != *$'\n'* ]] || return 1
   printf '%s\t%s\n' "$pane" "$pids" >"$file.$$" && mv "$file.$$" "$file"
   printf 'terminal_%s\t%s\n' "$pane" "$pids"
