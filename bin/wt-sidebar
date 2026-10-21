@@ -16,6 +16,7 @@
 # h/l: narrower/wider
 # ?: keys. No quit key: the list belongs to the hub.
 # wt-sidebar --files: show files over review (e in the review pane, through wt-hub-keys).
+# wt-sidebar --review toggle|show: hide or show review (Ctrl g v), show it (Ctrl g 3).
 set -uo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
 
@@ -196,6 +197,21 @@ agent_json() {
   claude agents --json --all 2>/dev/null | jq -c --arg s "$1" 'first(.[] | select(.sessionId == $s)) // empty'
 }
 
+# Ctrl g v (toggle: hide or show review) and Ctrl g 3 (show: a hidden review comes back with
+# the focus): zellij Run bindings, in a floating pane of one cell that closes when this ends.
+# The work waits in the background until that pane is gone, so the focus moves act on the hub's
+# own panes.
+review_key() {
+  (
+    trap '' HUP
+    wtl_hub_wait_gone "${ZELLIJ_PANE_ID:-}"
+    case ${1:-toggle} in
+      toggle) wtl_hub_locked wtl_hub_toggle_review ;;
+      show) [[ -f "$WT_HUB_HIDDEN" ]] && wtl_hub_locked wtl_hub_unhide_review --focus ;;
+    esac
+  ) </dev/null >/dev/null 2>&1 &
+}
+
 # Pick row kind $1 with id $2. An agent always moves the focus to the middle
 # column (wtl_hub_show); a worktree with --focus (Enter) moves it to review. A repo row acts as
 # its main checkout. An interactive agent runs in its own terminal, so in the hub the middle
@@ -216,7 +232,14 @@ act() {
         fi ;;
     wt|repo) if wtl_in_hub; then
           wtl_hub_locked wtl_hub_target "$2"
-          [[ "${3:-}" == --focus ]] && focus_column 2
+          # Enter goes to review, also when it is hidden (Ctrl g v).
+          if [[ "${3:-}" == --focus ]]; then
+            if [[ -f "$WT_HUB_HIDDEN" ]] && wtl_hub_review_hidden >/dev/null; then
+              wtl_hub_locked wtl_hub_unhide_review --focus
+            else
+              focus_column 2
+            fi
+          fi
         else
           wt-open "$2" >/dev/null 2>&1
         fi ;;
@@ -376,6 +399,7 @@ ${HEAD}Panes${OFF} (${KEY}Ctrl g${OFF}, then)
 ${KEY}1 2 3${OFF}  list / middle / right
 ${KEY}h l${OFF}    pane left / right
 ${KEY};${OFF}      last pane
+${KEY}v${OFF}      hide/show review
 
 ${HEAD}Signs${OFF}
 ${ROW}▸${OFF} agent in the middle pane
@@ -591,6 +615,7 @@ case ${1:-} in
   --new) shift; new_agent "$@"; exit 0 ;;
   --bg) [[ "${2:-}" == ag ]] && to_background "$3"; exit 0 ;;
   --files) wtl_hub_locked wtl_hub_show_files; exit 0 ;;
+  --review) review_key "${2:-}"; exit 0 ;;
   --idle) if [[ -f "$HIDE_IDLE" ]]; then rm -f "$HIDE_IDLE"; else : >"$HIDE_IDLE"; fi; exit 0 ;;
   --footer) shift; footer "$@"; exit 0 ;;
   -h|--help) sed -n '2,16s/^# \{0,1\}//p' "$0"; exit 0 ;;
@@ -665,6 +690,8 @@ remember_width() {
       # The tasks tab's banner: the review's worktree, at the start and every 30 s (a pick sends
       # it at once, see wtl_hub_target).
       ((tick % 10 == 1)) && (hub-run --where >/dev/null 2>&1 &)
+      # A hidden review that came back with the floating panes (say Ctrl g p w) goes again.
+      [[ -f "$WT_HUB_HIDDEN" ]] && wtl_hub_rehide
     fi
   done
 ) &

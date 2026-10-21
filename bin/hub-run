@@ -297,9 +297,10 @@ ensure_tab() {
 
 # Ctrl g Tab (a zellij Run binding, in a pane that closes at once): from the hub tab to the
 # tasks tab of the worktree picked in the hub (made when it has none); from any other tab back
-# to the hub tab.
+# to the hub tab. Its pane shows a hidden review too (see wtl_hub_keep_hidden).
 cmd_switch() {
   local active dir tid
+  wtl_hub_keep_hidden "${ZELLIJ_PANE_ID:-}"
   active=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null | jq -r 'first(.[] | select(.active) | .name) // empty')
   if [[ "$active" != "$HUB_TAB" ]]; then
     zellij -s "$WT_HUB_SESSION" action go-to-tab-name "$HUB_TAB" >/dev/null 2>&1
@@ -319,6 +320,7 @@ cmd_switch() {
 # (the binding's size): its title says where the command runs.
 cmd_launcher() {
   local tabs active tid dir name zd line
+  wtl_hub_keep_hidden "${ZELLIJ_PANE_ID:-}"
   tabs=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null)
   active=$(jq -r 'first(.[] | select(.active) | .name) // empty' <<<"$tabs")
   if [[ "$active" == "$HUB_TAB" || -z "$active" ]]; then

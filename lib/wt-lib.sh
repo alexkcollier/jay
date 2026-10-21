@@ -349,6 +349,7 @@ wtl_hub_pane_file() { printf '%s/.local/state/wt-hub-%s.pane\n' "$HOME" "$1"; }
 wtl_hub_reset() {
   local role
   for role in agent review files; do rm -f "$(wtl_hub_target_file $role)" "$(wtl_hub_pane_file $role)"; done
+  rm -f "$WT_HUB_HIDDEN"
 }
 
 # wt-hub-pane $1 (pid $2) ends.
@@ -636,9 +637,11 @@ wtl_hub_retitle() {
   zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "$(wtl_hub_pane_title "$1" "$(wtl_hub_title "$top")")" >/dev/null 2>&1
 }
 
-# Show files (yazi) in place over review, in the review's worktree.
+# Show files (yazi) in place over review, in the review's worktree. Not while review is hidden
+# (Ctrl g v).
 wtl_hub_show_files() {
   local review top pane
+  [[ -f "$WT_HUB_HIDDEN" ]] && return 0
   wtl_hub_role files >/dev/null && return 0
   IFS=$'\t' read -r review _ < <(wtl_hub_role review) || return 0
   top=$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)
@@ -657,4 +660,118 @@ wtl_hub_show_review() {
   IFS=$'\t' read -r pane _ < <(wtl_hub_role files) || return 0
   zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "$pane" >/dev/null 2>&1
   wtl_hub_retitle review
+}
+
+# --- Review hidden (Ctrl g v): the middle column takes review's width ---
+# zellij 0.45 cannot hide a tiled pane. Review becomes a floating pane of no size in the bottom
+# right corner, and the tab's floating panes hide; tuicr runs on, so your place and draft
+# comments stay. A new floating pane (Ctrl g Tab, Ctrl g r) shows the floating panes again, and
+# when it closes the hidden review gets the keys: wtl_hub_keep_hidden hides them again.
+# An embedded floating pane goes under the biggest pane, so show opens a placeholder right of
+# the middle column and stacks review with it: a floating pane takes the place of the pane it is
+# stacked with. The placeholder then closes. Files closes before review hides (a floating files
+# pane loses the review under it) and opens again after show.
+# The file holds review's share of the tab's width and 1 when files was open.
+WT_HUB_HIDDEN="$HOME/.local/state/wt-hub-review.hidden"
+
+# Review is hidden (its pane floats): print the id of its tab.
+wtl_hub_review_hidden() {
+  local pane
+  IFS=$'\t' read -r pane _ < <(wtl_hub_role review) || return 1
+  wtl_hub_panes | jq -er --argjson id "${pane#terminal_}" 'select(.id == $id and .is_floating) | .tab_id'
+}
+
+# Wait while pane $1 (a terminal id, as in ZELLIJ_PANE_ID) is open, up to $2 seconds (default 5).
+wtl_hub_wait_gone() {
+  local end=$((SECONDS + ${2:-5}))
+  [[ -n "${1:-}" ]] || return 0
+  while ((SECONDS < end)); do
+    wtl_hub_panes | jq -e --argjson id "$1" 'select(.id == $id)' >/dev/null || return 0
+    sleep 0.2
+  done
+  return 1
+}
+
+wtl_hub_hide_review() {
+  local review tab cols total files=0
+  IFS=$'\t' read -r review _ < <(wtl_hub_role review) || return 0
+  if wtl_hub_role files >/dev/null; then
+    files=1
+    wtl_hub_show_review
+    wtl_hub_wait_shown "${review#terminal_}" || return 0
+  fi
+  read -r tab cols total < <(wtl_hub_panes | jq -rs --argjson id "${review#terminal_}" '
+    (map(select(.id == $id)) | first) as $r | select($r != null and ($r.is_floating | not))
+    | [$r.tab_id, $r.pane_columns, ([.[] | select(.tab_id == $r.tab_id and (.is_floating | not)) | .pane_x + .pane_columns] | max)]
+    | @tsv')
+  [[ -n "${total:-}" ]] || return 0
+  printf '%s %s\n' "$((cols * 100 / total))" "$files" >"$WT_HUB_HIDDEN"
+  zellij -s "$WT_HUB_SESSION" action toggle-pane-embed-or-floating -p "$review" >/dev/null 2>&1
+  zellij -s "$WT_HUB_SESSION" action change-floating-pane-coordinates -p "$review" -x 100% -y 100% --width 1 --height 1 >/dev/null 2>&1
+  zellij -s "$WT_HUB_SESSION" action hide-floating-panes -t "$tab" >/dev/null 2>&1
+}
+
+# Show the hidden review in the right column again, at its old width. --focus: the focus goes to
+# review; else it goes back to the column that had it.
+wtl_hub_unhide_review() {
+  local review tab share files list place i cols total
+  IFS=$'\t' read -r review _ < <(wtl_hub_role review) || return 0
+  tab=$(wtl_hub_review_hidden) || { rm -f "$WT_HUB_HIDDEN"; return 0; }
+  read -r share files <"$WT_HUB_HIDDEN" 2>/dev/null
+  [[ "${share:-}" =~ ^[0-9]+$ ]] || share=35
+  # The focus moves below act on the tiled panes only while the floating ones are hidden.
+  zellij -s "$WT_HUB_SESSION" action hide-floating-panes -t "$tab" >/dev/null 2>&1
+  list=$(wtl_hub_panes | jq -rs --argjson t "$tab" \
+    'any(.[]; .tab_id == $t and (.is_floating | not) and .is_focused and .pane_x == 0)')
+  wtl_hub_focus_middle
+  place=$(zellij -s "$WT_HUB_SESSION" action new-pane --direction right --close-on-exit -- sleep 10)
+  [[ "$place" == terminal_* ]] || return 0
+  zellij -s "$WT_HUB_SESSION" action stack-panes -- "$place" "$review" >/dev/null 2>&1
+  zellij -s "$WT_HUB_SESSION" action close-pane -p "$place" >/dev/null 2>&1
+  rm -f "$WT_HUB_HIDDEN"
+  # zellij resizes in steps of 5 % of the tab.
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    read -r cols total < <(wtl_hub_panes | jq -rs --argjson id "${review#terminal_}" '
+      (map(select(.id == $id)) | first) as $r | select($r != null)
+      | [$r.pane_columns, ([.[] | select(.tab_id == $r.tab_id and (.is_floating | not)) | .pane_x + .pane_columns] | max)]
+      | @tsv')
+    [[ -n "${total:-}" ]] || break
+    if ((cols * 100 / total > share + 2)); then
+      zellij -s "$WT_HUB_SESSION" action resize -p "$review" decrease left >/dev/null 2>&1
+    elif ((cols * 100 / total < share - 2)); then
+      zellij -s "$WT_HUB_SESSION" action resize -p "$review" increase left >/dev/null 2>&1
+    else
+      break
+    fi
+  done
+  [[ "${files:-0}" == 1 ]] && wtl_hub_show_files
+  # Review (or files over it) has the focus now.
+  if [[ "${1:-}" != --focus ]]; then
+    zellij -s "$WT_HUB_SESSION" action move-focus left >/dev/null 2>&1
+    [[ "$list" == true ]] && zellij -s "$WT_HUB_SESSION" action move-focus left >/dev/null 2>&1
+  fi
+  return 0
+}
+
+wtl_hub_toggle_review() {
+  if wtl_hub_review_hidden >/dev/null; then wtl_hub_unhide_review; else wtl_hub_hide_review; fi
+}
+
+# Hide the floating panes of the hub tab again when review is hidden and is the only one left.
+wtl_hub_rehide() {
+  local tab
+  [[ -f "$WT_HUB_HIDDEN" ]] || return 0
+  tab=$(wtl_hub_review_hidden) || return 0
+  zellij -s "$WT_HUB_SESSION" action list-panes -a -j -c 2>/dev/null \
+    | jq -e --argjson t "$tab" '[.[] | select(.tab_id == $t and .is_floating)] | length == 1' >/dev/null || return 0
+  [[ "$(zellij -s "$WT_HUB_SESSION" action are-floating-panes-visible -t "$tab" 2>/dev/null)" == true ]] || return 0
+  zellij -s "$WT_HUB_SESSION" action hide-floating-panes -t "$tab" >/dev/null 2>&1
+}
+
+# For a Run binding's floating pane $1 (the caller's ZELLIJ_PANE_ID): when it closes, hide the
+# floating panes again (review hidden). In the background, up to an hour: the pane closes when
+# its caller ends.
+wtl_hub_keep_hidden() {
+  [[ -f "$WT_HUB_HIDDEN" && -n "${1:-}" ]] || return 0
+  (trap '' HUP; wtl_hub_wait_gone "$1" 3600 && wtl_hub_rehide) </dev/null >/dev/null 2>&1 &
 }

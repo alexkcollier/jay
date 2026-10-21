@@ -113,6 +113,17 @@ Alex's to-do list, in his words (2026-10-19):
   task, waits up to 2 s for `pane-<id>.exit`, and when it ends, closes its pane and shows its
   output in the launcher (grown to fit) until a key.
 
+- Hide review (Alex: "i want to be able to hide and show review panel easily"; he picked "tuck
+  away" over close-and-reopen and an overlay peek, and the key Ctrl g v): Ctrl g v hides review
+  (the agent viewer gets its width) and shows it again at its old width; Ctrl g 3 and Enter on a
+  worktree row show it with the focus. tuicr runs on while hidden; files closes and opens again.
+  Facts (zellij 0.45): an embedded floating pane splits the biggest pane (under the agent, not
+  right of it); `stack-panes -- <tiled> <floating>` puts the floating pane in the tiled pane's
+  place and suspends that one; a floating pane over a suspended one loses it on close; any new
+  floating pane shows the hidden ones, and the last one keeps the focus after it closes, so
+  hub-run --switch/--launcher and the list's tick hide them again; `hide-floating-panes` from
+  outside needs `-t <tab id>`; tuicr survives a 0x0 pane.
+
 ## Other open items
 
 None. Dropped 2026-10-20 (Alex): `wt step prune` (bulk removal; the list's dim ✓ and `d` do it

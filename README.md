@@ -47,6 +47,7 @@ Install with `./install.sh` ([Install](#install)). Open items and known faults:
   [The hub Claude](#the-hub-claude)); the "◆ hub" row in the list brings it back.
 - **Review** (right). tuicr on the picked agent's turns (one commit per turn), or on the branch's
   commits. **Files** (yazi in the same worktree) opens over review and closes back to it.
+  Ctrl g `v` hides review (the agent viewer gets its width) and shows it again.
 - **Banner** (top, zjstatus, blue). `◆ HUB › worktrees` and the picked worktree (on a tasks tab:
   `◆ HUB › tasks` and its worktree), and where `Ctrl g Tab` goes.
 - **Bar** (bottom, zjstatus). `◆ hub`, the agent counts from the list, the tasks of all worktrees
@@ -161,8 +162,9 @@ it off. Without tab control:
        bind "l" { MoveFocus "right"; SwitchToMode "locked"; }
        bind "1" { MoveFocus "left"; MoveFocus "left"; SwitchToMode "locked"; }
        bind "2" { MoveFocus "left"; MoveFocus "left"; MoveFocus "right"; SwitchToMode "locked"; }
-       bind "3" { MoveFocus "right"; MoveFocus "right"; SwitchToMode "locked"; }
+       bind "3" { MoveFocus "right"; MoveFocus "right"; Run "/Users/<you>/.local/bin/wt-sidebar" "--review" "show" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }
        bind ";" { FocusLastPane; SwitchToMode "locked"; }
+       bind "v" { Run "/Users/<you>/.local/bin/wt-sidebar" "--review" "toggle" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }
        bind "Tab" { Run "/Users/<you>/.local/bin/hub-run" "--switch" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }
        bind "r" { Run "/Users/<you>/.local/bin/hub-run" "--launcher" { floating true; close_on_exit true; x "20%"; y "35%"; width "60%"; height "3"; }; SwitchToMode "locked"; }
    }
@@ -251,7 +253,7 @@ Click a row or press Enter on it.
 |---|---|---|
 | background agent | the agent in the middle column; review on its turns, in its worktree | middle column |
 | interactive agent | a note in the middle column (`o` goes to its tab); review on its turns | middle column |
-| worktree | review (and files, when open) on that worktree | Enter: review. Click: stays in the list |
+| worktree | review (and files, when open) on that worktree | Enter: review (also a hidden one). Click: stays in the list |
 | repo | the same as its main checkout | the same as a worktree |
 | ◆ hub | the hub Claude in the middle column; review does not change | middle column |
 
@@ -331,6 +333,22 @@ In files:
 - `o` opens the hovered file in this pane (yazi's own open).
 - `O` opens the hovered file or folder in your editor, in its project, in a new tab (`wt-edit`).
 - `W` is yazi's "open with" menu (yazi's own `O`).
+
+### Hide review
+
+Ctrl g `v` hides review, and the agent viewer gets its width. Ctrl g `v` again shows review on
+the right, at the width it had. The focus stays in the column that has it. Ctrl g `3` and Enter
+on a worktree row also show a hidden review, and move the focus to it.
+
+- tuicr runs on while review is hidden: your place and draft comments stay. New turns come in
+  when review shows again.
+- Files closes when review hides, and opens again when review shows.
+- A fresh hub (`wt hub` after a quit) starts with review shown.
+
+zellij cannot hide a tiled pane, so a hidden review is a floating pane of no size in the bottom
+right corner, and the hub tab's floating panes are hidden. A new floating pane (Ctrl g Tab,
+Ctrl g `r`) shows them again; the hub hides them again when that pane closes. Ctrl g `p` `w`
+(zellij's floating panes key) shows them too: the list hides them again within 3 s.
 
 ### Open your editor
 
@@ -573,9 +591,10 @@ to locked mode.
 
 | Keys | Action |
 |---|---|
-| Ctrl g, `1` / `2` / `3` | list / middle / right column |
+| Ctrl g, `1` / `2` / `3` | list / middle / right column (`3` also shows a hidden review) |
 | Ctrl g, `h` / `l` | pane to the left / right |
 | Ctrl g, `;` | last pane |
+| Ctrl g, `v` | hide or show review (see [Hide review](#hide-review)) |
 | Ctrl g, Tab | hub tab ⇄ the picked worktree's tasks tab |
 | Ctrl g, `r` | the launcher: start a task in the picked worktree (or this tab's worktree) |
 | Ctrl g, Ctrl q | quit the hub (the agents keep running) |
@@ -692,6 +711,7 @@ In `~/.local/state/`:
 | `wt-hub-agent.pane`, `wt-hub-review.pane`, `wt-hub-files.pane` | the zellij pane id and pid of each pane's `wt-hub-pane` |
 | `wt-hub.lock/` | held while a pick moves the hub's panes (taken over after 5 s) |
 | `wt-hub-review.mode` | `turns` or `commits` |
+| `wt-hub-review.hidden` | there while review is hidden (Ctrl g `v`): its share of the width, and 1 when files was open |
 | `wt-hub-sidebar.pct` | the list's share of the width |
 | `wt-hub-sidebar.hide-idle` | there while `a` hides idle rows |
 | `wt-worktrees.ndjson` | cache of `wt all --json` (refreshed after 30 s) |
