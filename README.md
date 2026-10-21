@@ -60,7 +60,8 @@ The hub supports:
 - Background agents first: `c` starts Claude as a background agent and attaches the terminal, so
   the hub can show the same agent. Plain `claude` (interactive) shows in the list too, but only
   in its own terminal; `b` moves it to the background.
-- New agents from the list, in a worktree (`n`) or in a new worktree (`N`).
+- New agents from the list, in a worktree (`n`) or in a new worktree (`N`). An agent on a main
+  checkout is an orchestrator: it gives each change to a worker in a new worktree.
 - Review by turn: hooks save the worktree after each agent turn as hidden commits. Review opens
   on the newest turn, and new turns come in by themselves.
 - Git state of each worktree at a glance: changes, commits to push or pull, merge conflicts,
@@ -231,7 +232,8 @@ chain stays. Its tab goes back to the shell.
 
 From the list:
 
-- `n` on a worktree or agent row: a new idle background agent in that worktree.
+- `n` on a worktree or agent row: a new idle background agent in that worktree. On a main
+  checkout, the agent is an orchestrator (see [Orchestrators](#orchestrators)).
 - `N` on a repo, worktree or agent row: the list asks for a branch, makes a new worktree of that
   repo (`wt new <branch> --agent`) and starts an idle agent in it.
 
@@ -289,6 +291,24 @@ folders), with a short system prompt about the hub's commands (`wtl_hub_claude_p
   It is like any background agent: it keeps running when you leave it, and a stopped one opens
   again on a pick. To start a new one, `/clear` in it, or `claude rm <id>` (the next pick starts
   a new hub Claude).
+
+### Orchestrators
+
+An agent in a repo's main checkout is the orchestrator of that repo, as the hub Claude is for
+all repos. It plans, reads, reviews and answers questions, and it gives each change to a worker:
+a background agent in a new worktree (`wt new <branch> -t <task> -- <prompt>`). So no work
+piles up on main, and agents do not move between worktrees. The list marks an orchestrator with
+a cyan `◇` before its name.
+
+- `n` on a main checkout row starts one, with a short system prompt about this
+  (`wtl_orchestrator_prompt` in `lib/wt-lib.sh`). The prompt only steers the agent: Claude's own
+  rule still stops a background agent from editing in the main checkout, and the agent can go
+  into a worktree (`EnterWorktree`) when you tell it to make a change itself.
+- An agent from another folder that went into a worktree with `EnterWorktree` (Claude keeps that
+  in the job's `state.json`) does not belong to the worktree: `d` on the worktree stops until it
+  leaves (`ExitWorktree`), and the prune does not remove it. One from a main checkout keeps its
+  `◇` in the worktree.
+- Agents started in another way (`c`, `claude --bg`) get no prompt, but on main they get the `◇`.
 
 ### Review by turn
 
@@ -496,15 +516,15 @@ worktree. When several match, `hub-run` lists them; use the pane id.
 - **Interactive agent**: not removed. Close it in its tab, or `b` first.
 - **Worktree**: `wt remove`, then `claude rm` for each idle background agent in it, then its tasks
   tab closes (the confirm names the agents and the tasks that run). The list never removes a
-  main checkout. An agent that works, or an interactive session in the worktree, stops the
-  removal (the list names it). The branch is deleted only when it is merged. Uncommitted changes
+  main checkout. An agent that works, an interactive session, or an agent that came into the
+  worktree with `EnterWorktree` (an orchestrator, say) stops the removal (the list names it). The branch is deleted only when it is merged. Uncommitted changes
   stop the removal, and then the agents and the tasks tab stay. A dim check sign and a dim name
   mark a worktree that is safe to remove.
 - **Removed worktree** (a dim `(gone)` row): `claude rm` for each of its agents, with the same
   rules.
 
 Dead agents are background agents whose folder is gone (a removed worktree) and that do not run
-now. The list removes them by itself every 10 minutes, with plain `claude rm`, and logs each one
+now. An agent that came into the worktree with `EnterWorktree` is not dead. The list removes them by itself every 10 minutes, with plain `claude rm`, and logs each one
 in `~/.local/state/wt-hub-prune.log`. `claude rm` keeps an agent when its recorded worktree is
 still on disk (no WorktreeRemove hook here) or has unpushed work. After that, the list prunes the
 turn chains of gone agents (`claude-turn-snapshot --prune`). `p` prunes the dead agents now,
@@ -535,7 +555,7 @@ no quit key.
 |---|---|
 | Enter | open the row; the focus moves (agent: middle column; worktree: review) |
 | click, double-click | open the row; an agent moves the focus, a worktree keeps it in the list |
-| `n` | new idle background agent in this row's worktree |
+| `n` | new idle background agent in this row's worktree (an orchestrator on a main checkout) |
 | `N` | new worktree of this row's repo (asks the branch) + idle agent |
 | `o` | the row's own Ghostty tab: an interactive agent's tab, else the worktree's zellij session (`wt open`) |
 | `d` | remove the agent, or the worktree with its idle agents (asks first) |
@@ -638,6 +658,7 @@ point.
 |---|---|
 | `▸` (bold cyan, agent name cyan) | the agent in the middle column |
 | `◆ hub` row (cyan) | the hub Claude, with its state sign |
+| `◇` cyan, before the name | an orchestrator: an agent in a main checkout, or one from there in a worktree it entered |
 | `!` yellow | agent needs input |
 | `✗` red | agent failed |
 | `●` green | agent works |

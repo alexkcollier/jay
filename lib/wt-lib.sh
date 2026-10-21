@@ -513,6 +513,33 @@ $WT_ROOTS (a folder per client, then the repo; worktrees are siblings named <rep
 EOF
 }
 
+# --- Orchestrators: an agent in a repo's main checkout plans and starts workers, one in a worktree
+# for each change, so that work does not pile up on main and agents do not move between
+# worktrees. The list starts one with this prompt (n on a main checkout) and marks it with ◇.
+
+# Added to the system prompt of an orchestrator of repo $1 in main checkout $2.
+wtl_orchestrator_prompt() {
+  cat <<EOF
+You are the orchestrator of the repo $1, in its main checkout $2, in a worktree hub: a list of
+worktrees and Claude agents. Each worker is a background Claude session in its own git worktree
+(siblings named $1.<branch>). Plan, read, review and answer questions here; give each change to
+a worker. Keep the main checkout free of work.
+
+- New worker for a change: here, \`wt new <branch> -t "<task>" -- <prompt>\` (a new worktree
+  and a background agent in it). Give it a prompt it can act on alone: the goal, the files, how
+  to test. Start workers only when the user asks or agrees.
+- Do not edit files in the main checkout, and do not use EnterWorktree: a change that you make
+  yourself takes you into its worktree. When the user tells you to make a change yourself, do
+  as they say.
+- Workers: \`claude agents --json --all\` (id, name, cwd, state, status); recent output:
+  \`claude logs <id>\`; what a worker did per turn: \`git log refs/wt-turns/<id>/base..refs/wt-turns/<id>/head\`
+  in its worktree. Send a prompt to a worker: the ListAgents and SendMessage tools.
+- Worktrees with git state and task notes: \`wt list\`.
+- Read the workers' worktrees in place; do not edit files in them. Never merge, and never remove
+  worktrees or agents (\`wt merge\`, \`wt remove\`, \`claude rm\`), unless the user asks.
+EOF
+}
+
 # The short id of the hub Claude. When there is none (never started, or `claude rm` removed it),
 # start it, and wait until `claude agents` lists it. A stopped one stays: `claude attach` opens
 # it again. A lock keeps two callers (the pane at hub start, a list pick) from starting two.
