@@ -15,7 +15,8 @@
 #         turn; `(` shows all turns.
 #         commits: the branch's own commits (since it left main), else tuicr's picker.
 #         q in tuicr starts it again (back to the picker or the last turn). e shows files.
-#         A new turn (or commit) starts tuicr again by itself, on the newest turn.
+#         A new turn (or commit) starts tuicr again by itself, on the newest turn; also over
+#         the picker, when the first turn comes.
 #         WT_REVIEW=lazygit: lazygit in the same two modes instead (wt-hub-lazygit). It follows
 #         new turns without a restart; its t and e are its own custom commands.
 # files:  yazi in the worktree. It covers review; e or q quits yazi and review comes back
@@ -85,14 +86,24 @@ select_last_turn() {
   done
 }
 
-# New turns come in by themselves: when ref $1 moves (a turn's snapshot, or in commits mode a
-# new commit), stop tuicr so the loop starts it again on the newest turn. Only while tuicr's
-# status line shows NORMAL or SELECT: never over a comment being typed (it waits until then).
-follow_ref() {
-  local ref=$1 was pane="terminal_${ZELLIJ_PANE_ID:-}" p
-  was=$(git rev-parse -q --verify "$ref")
+# What review follows in turns mode: the agent's chain head ($1, an agent id or session id), or
+# for a worktree pick the newest chain of the worktree and its head. It changes also when the
+# chain comes after review opened (an agent's first turn).
+turns_state() {
+  local id=${1:0:8}
+  [[ -n "$id" ]] || id=$(chain "")
+  printf '%s %s\n' "$id" "$(git rev-parse -q --verify "refs/wt-turns/$id/head")"
+}
+
+# New turns come in by themselves: when the output of "$@" changes (turns_state: a turn's
+# snapshot or a new chain; in commits mode HEAD: a new commit), stop tuicr so the loop starts it
+# again on the newest turn. Only while tuicr's status line shows NORMAL or SELECT (also on its
+# picker): never over a comment being typed (it waits until then).
+follow() {
+  local was pane="terminal_${ZELLIJ_PANE_ID:-}" p
+  was=$("$@")
   while sleep 2; do
-    [[ "$(git rev-parse -q --verify "$ref")" == "$was" ]] && continue
+    [[ "$("$@")" == "$was" ]] && continue
     zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -1 \
       | grep -qE '^[[:space:]]*(NORMAL|SELECT)' || continue
     for p in $(pgrep -P $$ -f wt-hub-keys); do
@@ -103,13 +114,14 @@ follow_ref() {
   done
 }
 
-# tuicr on range $2 that starts again when ref $1 moves (follow_ref). Returns tuicr's status
-# (99: wt-hub-keys' `t`).
+# tuicr on range $1 (empty: tuicr's picker) that starts again when the output of the rest
+# changes (follow). Returns tuicr's status (99: wt-hub-keys' `t`).
 review_range() {
-  local watcher rc
-  follow_ref "$1" &
+  local range=$1 watcher rc
+  shift
+  follow "$@" &
   watcher=$!
-  "$HOME/.local/bin/wt-hub-keys" tuicr --no-update-check -r "$2"
+  "$HOME/.local/bin/wt-hub-keys" tuicr --no-update-check ${range:+-r "$range"}
   rc=$?
   kill "$watcher" 2>/dev/null
   wait "$watcher" 2>/dev/null # no "Terminated" line on the screen
@@ -171,24 +183,18 @@ run() {
         return
       fi
       # wt-hub-keys exits 99 for `t` (toggle turns ⇄ commits).
+      # With nothing to review yet, tuicr's picker opens, and review follows on as well: a
+      # branch's first commit, an agent's first turn.
       if [[ "$(wtl_hub_mode)" == commits ]]; then
         base=$(branch_base)
-        if [[ -n "$base" ]]; then
-          review_range HEAD "$base..HEAD"
-        else
-          "$HOME/.local/bin/wt-hub-keys" tuicr --no-update-check
-        fi
+        review_range "${base:+$base..HEAD}" git rev-parse -q --verify HEAD
         return
       fi
-      session=$(chain "$session")
-      if [[ -n "$session" ]]; then
-        if (($(git rev-list --count "refs/wt-turns/$session/base..refs/wt-turns/$session/head") > 1)); then
-          select_last_turn "$1" &
-        fi
-        review_range "refs/wt-turns/$session/head" "refs/wt-turns/$session/base..refs/wt-turns/$session/head"
-      else
-        "$HOME/.local/bin/wt-hub-keys" tuicr --no-update-check
-      fi ;;
+      id=$(chain "$session")
+      if [[ -n "$id" ]] && (($(git rev-list --count "refs/wt-turns/$id/base..refs/wt-turns/$id/head") > 1)); then
+        select_last_turn "$1" &
+      fi
+      review_range "${id:+refs/wt-turns/$id/base..refs/wt-turns/$id/head}" turns_state "$session" ;;
     files)
       cd "$1" || return
       YAZI_CONFIG_HOME="$HOME/.config/wt-hub/yazi" yazi "$1" ;;

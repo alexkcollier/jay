@@ -146,7 +146,7 @@ it off. Without tab control:
    | the hub's lazygit settings (for `WT_REVIEW=lazygit`) | `~/.config/wt-hub/lazygit` |
    | tuicr's `q_quits = true` | `~/.config/tuicr/config.toml`, made when missing; else checked |
    | the hub's worktrunk settings | `~/.config/worktrunk/config.toml`, copied when missing; else the missing keys are listed |
-   | the hooks (SessionStart, Stop, UserPromptSubmit, Notification) | added to `~/.claude/settings.json`, only the missing ones, after a backup |
+   | the hooks (SessionStart, Stop, UserPromptSubmit, PostToolUse, Notification) | added to `~/.claude/settings.json`, only the missing ones, after a backup |
    | zjstatus v0.25.0 (the bar) | `~/.local/share/wt-hub/`, sha256 checked |
    | the mod (`/wt`), with `--with-mod` | `~/.local/share/wt-hub/mod`, marketplace `alex-wt-hub` |
    | `wt-setup` as worktrunk's `pre-start` hook, with `--with-setup` | `~/.config/worktrunk/config.toml` (see `wt setup` in [Commands](#commands)) |
@@ -358,15 +358,20 @@ in its transcript.
 
 ### Review by turn
 
-The hooks of `claude-turn-snapshot` (UserPromptSubmit, Stop) save the worktree at each turn as a
-hidden commit chain per agent: `refs/wt-turns/<id>/base` and `refs/wt-turns/<id>/head`. They never
-touch the branch, the index or the files.
+The hooks of `claude-turn-snapshot` (UserPromptSubmit, Stop, PostToolUse) save the worktree at
+each turn as a hidden commit chain per agent: `refs/wt-turns/<id>/base` and
+`refs/wt-turns/<id>/head`. They never touch the branch, the index or the files.
 
 - The base is `HEAD` at the agent's first snapshot.
 - Each Stop adds a commit `turn · <prompt>`, with the agent's result line as its body.
 - Each UserPromptSubmit adds a commit `between turns · edits made outside the agent` when you
   changed files between two turns.
 - A turn with no change adds no commit.
+- An agent that goes into another worktree of the repo (`EnterWorktree`, `ExitWorktree`) keeps
+  its chain. After the tool (PostToolUse), the turn's changes so far get a commit
+  `turn, in <old folder> · <prompt>`, then a commit `worktree · <new folder>` takes the files of
+  the new worktree. Thus the next turn shows only its own changes. `wt-turns/<id>.worktree`
+  follows the agent.
 - `<id>` is the background agent's short id, else the first 8 characters of the session id. A
   background agent keeps its chain after a resume or `/clear`.
 
@@ -381,7 +386,8 @@ stays for the next picks (`~/.local/state/wt-hub-review.mode`).
 
 New turns come in by themselves. The pane looks at the chain head every 2 s (commits mode: at
 `HEAD`). When it moves, tuicr starts again on the newest turn. It does not do this while you type
-a comment or a `:` or `/` prompt; it waits until tuicr is back in NORMAL or SELECT mode.
+a comment or a `:` or `/` prompt; it waits until tuicr is back in NORMAL or SELECT mode. This
+also works over tuicr's picker: when an agent's first turn comes, its chain opens.
 
 `q` in tuicr means "back": tuicr starts again at its start (the picker, or the newest turn).
 When tuicr quits less than 2 s after its start, the pane says so and waits for Enter.
@@ -804,7 +810,7 @@ All of these are in `~/.local/bin`. worktrunk runs `wt-<name>` for `wt <name>`, 
 | `claude-turn-snapshot --prune [--dry-run]` | Remove the chains of agents that `claude agents --all` no longer lists, when their worktree is gone or their last turn is older than 7 days. It does nothing without an agent list or the worktree cache. |
 
 Hooks and internal commands (not for hand use): `claude-notify` (Stop, Notification),
-`claude-turn-snapshot` (UserPromptSubmit, Stop), `hub-run --hook` (SessionStart), `hub-run --bar`
+`claude-turn-snapshot` (UserPromptSubmit, Stop, PostToolUse), `hub-run --hook` (SessionStart), `hub-run --bar`
 (the bar's tasks), `hub-run --tick` (the list's tick: a console in each tasks tab, the pane
 names, the extra consoles, then the bar's tasks), `hub-run --where` (the hub banner's worktree, at each pick), `hub-run --switch`
 (Ctrl g Tab), `hub-run --launcher` (Ctrl g r), `hub-run --worktree-tab <dir> --name|--tasks` and `hub-run --close-tab <name>`
@@ -888,7 +894,8 @@ Settings: `~/.config/wt-hub/config` ([Settings](#settings)). Environment variabl
 - **`o`, `wt open` or `O` in files does nothing**: tab control is off (not Ghostty). Run the
   command in a terminal to see the hint, or set `WT_TERMINAL=ghostty`.
 - **Review shows tuicr's picker**: the agent has no turn chain yet (no finished turn with a
-  change), or the branch has no commits of its own (commits mode).
+  change), or the branch has no commits of its own (commits mode). The chain opens by itself
+  at the end of the agent's first turn.
 - **The middle column shows an old agent or an error**: pick the agent again, or press Enter in
   the middle column.
 
@@ -900,7 +907,7 @@ bin/
   claude-clear           /clear into an idle background agent (c in the list)
   claude-notify          hook (Stop, Notification): macOS notice; a click runs wt go; turn ends
                          for the unread sign
-  claude-turn-snapshot   hook (UserPromptSubmit, Stop): turn chains; --list, --prune
+  claude-turn-snapshot   hook (UserPromptSubmit, Stop, PostToolUse): turn chains; --list, --prune
   hub-run                tasks in a tasks tab per worktree: start, ls, log, wait, stop, restart,
                          port; --switch (Ctrl g Tab), --tick, --bar, --hook, --exec (its panes)
   wt-agents              wt agents: Claude sessions in fzf; --json with each agent's phase

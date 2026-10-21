@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# claude-turn-snapshot — Claude Code hook (UserPromptSubmit, Stop) that records the worktree
-# as a hidden commit chain per agent, one commit per agent turn. <id> is a background agent's
-# short id (it stays after a resume or /clear), else the first 8 characters of the session id:
+# claude-turn-snapshot — Claude Code hook (UserPromptSubmit, Stop, PostToolUse on EnterWorktree
+# and ExitWorktree) that records the worktree as a hidden commit chain per agent, one commit per
+# agent turn. <id> is a background agent's short id (it stays after a resume or /clear), else
+# the first 8 characters of the session id:
 #   refs/wt-turns/<id>/base   HEAD when the agent's first snapshot was taken
 #   refs/wt-turns/<id>/head   the latest snapshot; each snapshot's parent is the one before
 # Review one turn with `tuicr -r <turn>~1..<turn>`, all of them with `tuicr -r base..head`.
@@ -93,16 +94,23 @@ fi
 state="$HOME/.local/state/wt-turns"
 mkdir -p "$state"
 prompt_file="$state/$short.prompt"
+worktree_file="$state/$short.worktree"
 head_ref="refs/wt-turns/$short/head"
 base_ref="refs/wt-turns/$short/base"
 
-snapshot() {
-  local subject=$1 body=${2:-} index tree parent parent_tree commit
+# The tree of worktree $1's files, hashed through a copy of its index.
+tree_of() {
+  local index
   index=$(mktemp "$state/index.XXXXXX")
-  cp "$(git -C "$top" rev-parse --path-format=absolute --git-path index)" "$index" 2>/dev/null || true
-  GIT_INDEX_FILE="$index" git -C "$top" add -A >/dev/null 2>&1
-  tree=$(GIT_INDEX_FILE="$index" git -C "$top" write-tree 2>/dev/null)
+  cp "$(git -C "$1" rev-parse --path-format=absolute --git-path index)" "$index" 2>/dev/null || true
+  GIT_INDEX_FILE="$index" git -C "$1" add -A >/dev/null 2>&1
+  GIT_INDEX_FILE="$index" git -C "$1" write-tree 2>/dev/null
   rm -f "$index"
+}
+
+# Add a commit with tree $1, subject $2 and body $3 to the chain; none when the tree is the same.
+add() {
+  local tree=$1 subject=$2 body=${3:-} parent commit
   [[ -n "$tree" ]] || return 0
   # The chain starts at the base, set once. Before the first turn commit there is no head, and
   # an agent that commits its work leaves a clean tree, so the turn shows only against the base.
@@ -110,18 +118,38 @@ snapshot() {
     && ! parent=$(git -C "$top" rev-parse -q --verify "$base_ref"); then
     parent=$(git -C "$top" rev-parse -q --verify HEAD) || return 0
     git -C "$top" update-ref "$base_ref" "$parent"
-    printf '%s\n' "$top" >"$state/$short.worktree"
+    printf '%s\n' "$top" >"$worktree_file"
   fi
-  parent_tree=$(git -C "$top" rev-parse "$parent^{tree}")
-  [[ "$tree" == "$parent_tree" ]] && return 0
+  [[ "$tree" == "$(git -C "$top" rev-parse "$parent^{tree}")" ]] && return 0
   commit=$(printf '%s\n%s' "$subject" "${body:+$'\n'$body}" | git -C "$top" commit-tree "$tree" -p "$parent") || return 0
   git -C "$top" update-ref "$head_ref" "$commit"
 }
 
+# An agent that goes into another worktree of the repo (EnterWorktree, ExitWorktree) keeps its
+# chain. A commit `worktree · <folder>` gives the chain the files of the new worktree, so that the
+# next turn shows only its own changes, not the difference between the two worktrees. Right after
+# the tool (PostToolUse), the changes of the turn in the old worktree get a commit first. A move
+# found later (no PostToolUse hook) takes the new worktree's files at the prompt, its HEAD at Stop.
+was=$(cat "$worktree_file" 2>/dev/null)
+if [[ -n "$was" && ! "$was" -ef "$top" ]] && git -C "$top" rev-parse -q --verify "$base_ref" >/dev/null; then
+  prompt=$(cat "$prompt_file" 2>/dev/null)
+  if [[ "$event" == PostToolUse && -d "$was" ]] \
+    && [[ "$(git -C "$was" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" == "$(git -C "$top" rev-parse --path-format=absolute --git-common-dir)" ]]; then
+    add "$(tree_of "$was")" "turn, in ${was##*/} · ${prompt:-(no prompt)}"
+  fi
+  if [[ "$event" == Stop ]]; then
+    tree=$(git -C "$top" rev-parse -q --verify 'HEAD^{tree}')
+  else
+    tree=$(tree_of "$top")
+  fi
+  add "$tree" "worktree · ${top##*/}" "The agent went from $was to $top."
+  printf '%s\n' "$top" >"$worktree_file"
+fi
+
 case $event in
   UserPromptSubmit)
     jq -r '.prompt // ""' <<<"$input" | tr '\n' ' ' | cut -c1-100 >"$prompt_file"
-    snapshot "between turns · edits made outside the agent"
+    add "$(tree_of "$top")" "between turns · edits made outside the agent"
     ;;
   Stop)
     prompt=$(cat "$prompt_file" 2>/dev/null)
@@ -129,7 +157,7 @@ case $event in
       /^(result|needs input|failed):/ { flagged = $0 }
       NF && !first { first = $0 }
       END { print (flagged != "" ? flagged : first) }' | cut -c1-200)
-    snapshot "turn · ${prompt:-(no prompt)}" "$result"
+    add "$(tree_of "$top")" "turn · ${prompt:-(no prompt)}" "$result"
     ;;
 esac
 exit 0

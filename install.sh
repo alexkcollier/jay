@@ -303,12 +303,13 @@ CONF
 }
 
 # The hub's hooks from config/claude-settings-hooks.json that settings.json does not have yet
-# (by command). Prints the merged settings.
+# (by event and command: one command can be the hook of several events). Prints the merged
+# settings.
 merged_settings() {
   jq --slurpfile ours "$repo/config/claude-settings-hooks.json" '
-    ([.hooks // {} | .[] | .[]? | .hooks[]? | .command]) as $have
-    | reduce ($ours[0].hooks | to_entries[]) as $e (.;
-        .hooks[$e.key] = ((.hooks[$e.key] // []) + [ $e.value[]
+    reduce ($ours[0].hooks | to_entries[]) as $e (.;
+        ([.hooks[$e.key] // [] | .[]? | .hooks[]? | .command]) as $have
+        | .hooks[$e.key] = ((.hooks[$e.key] // []) + [ $e.value[]
           | .hooks |= map(select(.command as $c | $have | index([$c]) | not))
           | select(.hooks | length > 0) ]))' "$1"
 }
@@ -320,7 +321,7 @@ install_hooks() {
   else current='{}'; fi
   merged=$(merged_settings <(printf '%s\n' "$current") | jq -S .)
   if [[ "$merged" == "$current" ]]; then
-    ok "$SETTINGS has the hub's hooks (SessionStart, Stop, UserPromptSubmit, Notification)"
+    ok "$SETTINGS has the hub's hooks (SessionStart, Stop, UserPromptSubmit, PostToolUse, Notification)"
     return 0
   fi
   if [[ $mode == check ]]; then
