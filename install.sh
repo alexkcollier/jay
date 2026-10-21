@@ -265,6 +265,14 @@ install_settings() {
 
 # Tab control: ghostty (on) or none (off). Default: on when Ghostty runs.
 # WT_TERMINAL=ghostty
+
+# How a task (hub-run) runs its command line, which comes after these words. Default for zsh
+# and bash: $SHELL -i +m -c (your rc file and aliases, no job control); else $SHELL -l -c.
+# WT_TASK_SHELL=/bin/zsh -i +m -c
+
+# The launcher (Ctrl g r) for a shell other than zsh: a command that runs in the launcher pane,
+# in the worktree, and starts what you type with: hub-run -- "<line>". See the README.
+# WT_LAUNCHER=bash --rcfile ~/.config/wt-hub/launcher.bash -i
 CONF
       did "$SETTINGS_FILE (settings, all at their defaults)"
     fi
@@ -377,7 +385,7 @@ check_zellij() {
               bind "3" { MoveFocus "right"; MoveFocus "right"; SwitchToMode "locked"; }
               bind ";" { FocusLastPane; SwitchToMode "locked"; }
               bind "Tab" { Run "$BIN/hub-run" "--switch" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }
-              bind "r" { Run "$BIN/hub-run" "--launcher" { floating true; close_on_exit true; x "10%"; y "15%"; width "80%"; height "12"; }; SwitchToMode "locked"; }
+              bind "r" { Run "$BIN/hub-run" "--launcher" { floating true; close_on_exit true; x "20%"; y "35%"; width "60%"; height "4"; }; SwitchToMode "locked"; }
           }
 KDL
   note "the hub expects default_mode \"locked\", with Ctrl g to normal mode and Ctrl q to quit"

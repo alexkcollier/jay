@@ -164,7 +164,7 @@ it off. Without tab control:
        bind "3" { MoveFocus "right"; MoveFocus "right"; SwitchToMode "locked"; }
        bind ";" { FocusLastPane; SwitchToMode "locked"; }
        bind "Tab" { Run "/Users/<you>/.local/bin/hub-run" "--switch" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }
-       bind "r" { Run "/Users/<you>/.local/bin/hub-run" "--launcher" { floating true; close_on_exit true; x "10%"; y "15%"; width "80%"; height "12"; }; SwitchToMode "locked"; }
+       bind "r" { Run "/Users/<you>/.local/bin/hub-run" "--launcher" { floating true; close_on_exit true; x "20%"; y "35%"; width "60%"; height "4"; }; SwitchToMode "locked"; }
    }
    ```
 4. Start the hub: `wt hub`. At the first start, zellij asks for the bar's permissions: click
@@ -185,6 +185,8 @@ not: the hooks in background agents and a notice click.
 | `WT_EDITOR` | `$VISUAL`, else `$EDITOR`, else `nvim` | the editor for `O` in files and `wt-edit` |
 | `WT_EDITOR_GUI` | a guess from the editor's name | `1`: a GUI editor, `0`: a terminal editor |
 | `WT_TERMINAL` | on when Ghostty runs | `ghostty`: tab control on; another value: off |
+| `WT_TASK_SHELL` | `$SHELL -i +m -c` (zsh, bash), else `$SHELL -l -c` | how a task runs its command line, which comes after these words |
+| `WT_LAUNCHER` | the built-in zsh launcher | a command for the launcher (Ctrl g `r`) in another shell; see [Tasks](#tasks-dev-servers) |
 
 `./install.sh --check` tells you when a `WT_ROOTS` folder does not exist.
 
@@ -377,12 +379,12 @@ hub tab, `◆ HUB › tasks <its worktree>` on a tasks tab, with where Ctrl g Ta
   worktree row; a new tab when it has none); from a tasks tab back to the hub. zellij has no key
   action for a tab by name, so the key runs `hub-run --switch` in a floating pane of 1 cell that
   closes at once. A pick does not change the tab you are on.
-- **Launcher** (Ctrl g `r`, from any tab): a floating prompt in the picked worktree (from the
-  hub tab) or in the worktree of the tasks tab you are on. It is your own zsh, with your
-  `.zshrc`: completion, history, autosuggestions and the prompt work as in a terminal. Enter
-  starts the line with `hub-run` in that worktree's tasks tab (it gets its own pane, a name in
-  the bar, run again and restart), puts it in your history, and closes the launcher; you stay
-  where you are. An empty line or Ctrl-C closes it. With another shell it is a plain prompt.
+- **Launcher** (Ctrl g `r`, from any tab): a small floating prompt in the picked worktree (from
+  the hub tab) or in the worktree of the tasks tab you are on; its title says which. It is your
+  own zsh, with your `.zshrc`: completion, history, autosuggestions and the prompt work as in a
+  terminal. Enter starts the line with `hub-run` in that worktree's tasks tab (its own pane, a
+  name in the bar, run again and restart), puts it in your history, and closes the launcher;
+  you stay where you are. An empty line or Ctrl-C closes it. Other shells: see below.
 - **By hand**: type the command in a shell of the tab, as in any terminal. A tab always has a
   free shell in its worktree: when a command takes the last one, the hub opens a new one (within
   3 s), without moving your focus. More panes: Ctrl g `p` `n` (zellij's pane mode; the new pane
@@ -401,7 +403,28 @@ The bar shows each task that runs or ended, with its first port: `● web:5174` 
 name get their branch. The list sends the bar text every 3 s.
 
 A pane that `hub-run` started shows `$ <command>` at the top. When the command ends, the pane says
-`exited (<code>) · Enter: run again · q: close`. Ctrl-C stops the command, not the pane.
+`exited (<code>) · Enter: run again · q: close`. Ctrl-C stops the command, not the pane. The
+command runs as you would type it: `$SHELL -i +m -c <line>` for zsh and bash (your rc file, so
+aliases and `mise activate` apply; `+m`: no job control, so Ctrl-C reaches all of it), else
+`$SHELL -l -c`. `WT_TASK_SHELL` ([Settings](#settings)) changes it.
+
+**Other shells**: the launcher is built in for zsh; another shell gets a plain prompt (line
+editing and its own history). For your own shell, set `WT_LAUNCHER` to a command that runs in
+the launcher pane (in the worktree) and starts what you type with `hub-run -- "<line>"`. For
+example bash (also macOS `/bin/bash` 3.2), in `~/.config/wt-hub/config`:
+`WT_LAUNCHER=BASH_SILENCE_DEPRECATION_WARNING=1 /bin/bash --rcfile ~/.config/wt-hub/launcher.bash -i`,
+with this `~/.config/wt-hub/launcher.bash`:
+
+```bash
+[[ -f ~/.bashrc ]] && source ~/.bashrc
+_wt_hub_run() {   # Enter puts its name before the line; the line comes back from the history
+  local line
+  line=$(HISTTIMEFORMAT= history 1 | sed -E 's/^ *[0-9]+ +_wt_hub_run //')
+  hub-run -- "$line" >/dev/null || read -rsn1 -p 'Press a key.'
+  exit
+}
+bind '"\C-m": "\C-a_wt_hub_run \C-j"'
+```
 
 **Ports**: there is no port config. Vite and Next take the next free port by themselves; the hub
 finds the ports that each task's processes listen on (`lsof`), and for `docker compose` the ports

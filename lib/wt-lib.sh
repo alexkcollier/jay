@@ -5,7 +5,7 @@
 # background agents, and a notice click. ~ at the start of a WT_ROOTS folder is $HOME.
 WT_HUB_CONFIG="$HOME/.config/wt-hub/config"
 if [[ -f "$WT_HUB_CONFIG" ]]; then
-  _re='^[[:space:]]*(WT_ROOTS|WT_TERMINAL|WT_EDITOR|WT_EDITOR_GUI)[[:space:]]*=[[:space:]]*(.*)$'
+  _re='^[[:space:]]*(WT_ROOTS|WT_TERMINAL|WT_EDITOR|WT_EDITOR_GUI|WT_TASK_SHELL|WT_LAUNCHER)[[:space:]]*=[[:space:]]*(.*)$'
   while IFS= read -r _line || [[ -n "$_line" ]]; do
     [[ "$_line" =~ $_re ]] || continue
     _key=${BASH_REMATCH[1]} _val=${BASH_REMATCH[2]}

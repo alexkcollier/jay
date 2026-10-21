@@ -103,8 +103,11 @@ Alex's to-do list, in his words (2026-10-19):
 - Launcher (Alex: a command typed in a tasks shell uses that shell; "will 1 have autocomplete and
   stuff from my shell?"; "skip 3", the slash command): Ctrl g r runs `hub-run --launcher` in a
   floating pane: your zsh through our ZDOTDIR (it loads your startup files), Enter hands the
-  line to hub-run. Open (Alex: "not yet"): tasks run with `$SHELL -lc`, so `.zshrc` aliases and
-  `mise activate` do not apply in them; `-ic` would fix it, after a test of Ctrl-C and run again.
+  line to hub-run. Then (Alex: "keep this small/narrow to encourage simplicity"; "we can get the
+  ic in there"; "portable in some way, even if its user provided config, assuming zsh as the
+  default"): the launcher is 4 rows by 60 %, its title says where; tasks run with `$SHELL -i +m
+  -c` (aliases: 2 with -lc, 237 with -i; +m keeps Ctrl-C on the whole command);
+  `WT_TASK_SHELL` and `WT_LAUNCHER` settings, with a tested bash 3.2 launcher in the README.
 
 ## Other open items
 

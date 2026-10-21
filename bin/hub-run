@@ -57,15 +57,25 @@ short_name() {
 # The command runs in the foreground, in the pane's process group (no job control here), so
 # Ctrl-C reaches it and all its children; this loop ignores it and goes on. `hub-run restart`
 # writes <pid>.again and stops the command from outside; the loop then starts it again.
+# The command runs as you would type it: zsh and bash read your rc file (aliases, mise), with
+# job control off (+m), so the command stays in this group. WT_TASK_SHELL overrides it.
 run_pane() {
-  local cmd=$1 rc r var line
+  local cmd=$1 rc r var line sh=()
   for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do unset "$var"; done
+  if [[ -n "${WT_TASK_SHELL:-}" ]]; then
+    read -ra sh <<<"$WT_TASK_SHELL"
+  else
+    case $(basename "${SHELL:-zsh}") in
+      zsh | bash) sh=("${SHELL:-/bin/zsh}" -i +m -c) ;;
+      *) sh=("$SHELL" -l -c) ;;
+    esac
+  fi
   mkdir -p "$STATE_DIR"
   trap ':' INT
   while :; do
     rm -f "$STATE_DIR/$$.exit" "$STATE_DIR/$$.again"
     printf '\e[2m$ %s\e[0m\n' "$cmd"
-    "${SHELL:-/bin/zsh}" -lc "$cmd"
+    "${sh[@]}" "$cmd"
     rc=$?
     [[ -f "$STATE_DIR/$$.again" ]] && { printf '\n'; continue; }
     printf '%s\n' "$rc" >"$STATE_DIR/$$.exit"
@@ -301,7 +311,9 @@ cmd_switch() {
 # Ctrl g r (a zellij Run binding, in a floating pane): a prompt that starts a command with
 # hub-run, in the picked worktree (from the hub tab) or in the worktree of the tasks tab you are
 # on. With zsh it is your own zsh (your .zshrc: completion, aliases, history, prompt) whose Enter
-# hands the line to hub-run and closes the pane; another shell gets a plain prompt.
+# hands the line to hub-run and closes the pane. WT_LAUNCHER (a command) replaces it, for other
+# shells; else another shell gets a plain prompt. The pane is small (the binding's size): its
+# title says where the command runs.
 cmd_launcher() {
   local tabs active tid dir name zd line
   tabs=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null)
@@ -316,8 +328,11 @@ cmd_launcher() {
   dir=$(wtl_toplevel "$dir")
   name=$(tab_name "$dir")
   cd "$dir" || exit 1
+  zellij action rename-pane "run in $name · Enter: run · Ctrl-C: cancel" >/dev/null 2>&1
+  if [[ -n "${WT_LAUNCHER:-}" ]]; then
+    WT_HUB_LAUNCH_IN=$name exec /bin/sh -c "$WT_LAUNCHER"
+  fi
   if [[ "$(basename "${SHELL:-}")" != zsh ]]; then
-    printf '\e[1;34mrun in %s\e[0m · Enter: run in its tasks tab · Ctrl-C: cancel\n' "$name"
     HISTFILE="$STATE_DIR/launcher.history"
     set -o history
     history -r "$HISTFILE" 2>/dev/null
@@ -356,9 +371,8 @@ zle -N _wt_hub_launch
 bindkey '^M' _wt_hub_launch
 bindkey '^J' _wt_hub_launch
 TRAPINT() { exit 0; }
-print -P "%B%F{blue}run in $WT_HUB_LAUNCH_IN%f%b · Enter: run in its tasks tab · Ctrl-C: cancel"
 ZSH
-  WT_HUB_LAUNCH_IN=$name ZDOTDIR=$zd exec "$SHELL" -i -l
+  ZDOTDIR=$zd exec "$SHELL" -i -l
 }
 
 # The tasks tab of worktree $1, for the list's remove (wt-sidebar): --name prints its name (read
