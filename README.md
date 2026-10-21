@@ -24,7 +24,7 @@ Install with `./install.sh` ([Install](#install)). Open items and known faults:
 ```
 ┌ worktrees ─────────────┬ shop/fix-login ────────────┬ turns · shop   e files · t commits ────┐
 │ ● 1 working  ○ 2 idle  │                            │                                        │
-│                        │  the picked agent:         │  review of the agent's turns (tuicr)   │
+│ ◆ hub ○                │  the picked agent:         │  review of the agent's turns (tuicr)   │
 │ acme                   │  claude attach <id>        │                                        │
 │  shop                  │                            │            e ⇅ e / q                   │
 │   main                 │  type to the agent here    │                                        │
@@ -43,7 +43,8 @@ Install with `./install.sh` ([Install](#install)). Open items and known faults:
   Agent rows update every few seconds, git signs every 30 s. A pick here drives the other two
   columns.
 - **Agent viewer** (middle). `claude attach` on the picked background agent. You talk to the agent
-  here. The pane title is the agent's name. There is no "hub Claude": this pane only shows agents.
+  here. The pane title is the agent's name. A fresh hub opens on the hub Claude (see
+  [The hub Claude](#the-hub-claude)); the "◆ hub" row in the list brings it back.
 - **Review** (right). tuicr on the picked agent's turns (one commit per turn), or on the branch's
   commits. **Files** (yazi in the same worktree) opens over review and closes back to it.
 - **Bar** (bottom, zjstatus). `◆ hub`, the agent counts from the list, the zellij mode when it is
@@ -234,6 +235,7 @@ Click a row or press Enter on it.
 | interactive agent | a note in the middle column (`o` goes to its tab); review on its turns | middle column |
 | worktree | review (and files, when open) on that worktree | Enter: review. Click: stays in the list |
 | repo | the same as its main checkout | the same as a worktree |
+| ◆ hub | the hub Claude in the middle column; review does not change | middle column |
 
 ▸ beside an agent marks the agent in the middle column. A pick made elsewhere (a notice click,
 `wt go`, a new agent) moves the list's cursor to that agent.
@@ -252,6 +254,21 @@ You type to the agent here, as in any `claude attach`.
 - When `claude attach` fails at once (for example, the agent's worktree is gone), its error stays
   on screen. Enter tries again.
 - The pane never closes.
+
+### The hub Claude
+
+A background agent named `hub`, for work across agents and repos: ask it to start agents (`wt
+new`), to send a prompt to an agent, to tell you what the agents did, or to answer a question
+that needs several repos. It starts in the first `WT_ROOTS` folder (the other roots are added
+folders), with a short system prompt about the hub's commands (`wtl_hub_claude_prompt` in
+`lib/wt-lib.sh`). It works in no worktree, so a pick of it does not change review.
+
+- A fresh hub opens on it, with the focus in the middle column. The "◆ hub" row at the top of
+  the list, or `wt go hub` from anywhere, shows it again.
+- It is started the first time the hub needs it. Its id is in `~/.local/state/wt-hub-claude`.
+  It is like any background agent: it keeps running when you leave it, and a stopped one opens
+  again on a pick. To start a new one, `/clear` in it, or `claude rm <id>` (the next pick starts
+  a new hub Claude).
 
 ### Review by turn
 
@@ -476,6 +493,7 @@ point.
 | Sign | Meaning |
 |---|---|
 | `▸` (bold cyan, agent name cyan) | the agent in the middle column |
+| `◆ hub` row (cyan) | the hub Claude, with its state sign |
 | `!` yellow | agent needs input |
 | `✗` red | agent failed |
 | `●` green | agent works |
@@ -501,7 +519,7 @@ All of these are in `~/.local/bin`. worktrunk runs `wt-<name>` for `wt <name>`, 
 |---|---|
 | `wt hub [--here \| --tab \| --print-layout]` | Go to the hub's Ghostty tab, else open the hub in this terminal (attach, or a fresh start). A new tab without a terminal or inside another zellij session. `--here`: this terminal. `--tab`: a new tab. `--print-layout`: print the zellij layout. |
 | `c [claude --bg options] [prompt]` | Claude in this folder as a background agent, attached here. Use it in place of `claude`. |
-| `wt go <agent>` | Bring an agent in front: id, session id (or its start), name, or a part of a name (any case). Several name matches: the live ones win; still several is an error that lists them. A background agent opens in the hub when the hub runs (from anywhere, also from an agent), else in a `claude attach` tab. An interactive one: its own tab (or zellij pane). |
+| `wt go <agent>` | Bring an agent in front: id, session id (or its start), name, or a part of a name (any case); `hub` is the hub Claude. Several name matches: the live ones win; still several is an error that lists them. A background agent opens in the hub when the hub runs (from anywhere, also from an agent), else in a `claude attach` tab. An interactive one: its own tab (or zellij pane). |
 | `wt new <branch\|pr:N> [-b base] [-t "task"] [-a] [-- prompt...]` | Make (or reuse) the worktree and store the task note. With a prompt, or `-a` for an idle one, start a background agent there. Without `-t`, the first line of the prompt (60 characters) is the task note. |
 | `wt-edit <file or folder>` | Open it in your editor, in its project. See [Open your editor](#open-your-editor). |
 | `wt open [branch\|path]` | Select the Ghostty tab of the worktree's zellij session (named `<repo>.<branch>`), or open a tab that attaches to it (made with your default layout when new). |

@@ -2,7 +2,8 @@
 # wt-hub-pane agent|review|files — a pane of the hub that follows its target.
 # The target is a line in ~/.local/state/wt-hub-<role>.target (wtl_hub_point writes it and stops
 # the running program, so the pane starts it again for the new target).
-# agent:  `claude attach` on the picked agent, in the middle column; the pane never closes.
+# agent:  `claude attach` on the picked agent, in the middle column; the pane never closes. A
+#         fresh hub opens on the hub Claude (a background agent, see wtl_hub_claude).
 #         When you leave the agent (Ctrl+Z, or ←: the list is the agent view here), it keeps
 #         running and Enter opens it again. An interactive agent runs in its own terminal tab:
 #         the pane says so. When attach fails at once (say the agent's worktree is gone), its
@@ -179,11 +180,21 @@ run() {
   esac
 }
 
+# A fresh hub opens on the hub Claude (wtl_hub_claude starts it when it has none). Review stays
+# empty: the hub Claude works in no worktree.
+if [[ "$role" == agent && -z "$(target)" ]]; then
+  printf '\n  Opening the hub Claude...\n'
+  if hubid=$(wtl_hub_claude 2>/dev/null); then
+    [[ -z "$(target)" ]] && wtl_hub_write_target agent "$(printf '%s\t%s' "$hubid" "${WT_ROOTS%%:*}")"
+  fi
+  clear
+fi
+
 while :; do
   now=$(target)
   if [[ -z "$now" ]]; then
     if [[ "$role" == agent ]]; then
-      printf '\n  Agent\n\n  Pick an agent in the list.\n  n in the list: a new agent.\n'
+      printf '\n  Agent\n\n  Pick an agent in the list.\n  ◆ hub: the hub Claude.\n  n in the list: a new agent.\n'
     else
       printf '\n  Review\n\n  Pick a worktree or an agent in the list.\n  tuicr opens here for its turns.\n  e in tuicr: files (yazi); e in files: review.\n'
     fi

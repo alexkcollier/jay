@@ -1,6 +1,6 @@
 # Hub to-do
 
-Continue Alex's hub to-do list. The main checkout (~/Documents/projects/wt-hub) is the live install of his worktree hub (`./install.sh --link`): ~/.local/bin, ~/.local/lib/wt-lib.sh, the yazi keys and the tuicr config are symlinks into it, and ~/mods/wt-hub links to mod/. Read CLAUDE.md and README.md first, and your memory note "worktree-tooling-worktrunk" (decisions, zellij 0.45 facts, incidents). The hub is the zellij session "hub" (layout written by bin/wt-hub): worktree list (fzf, bin/wt-sidebar) | agent viewer (bin/wt-hub-pane agent; no hub Claude since 2026-10-20) | review (tuicr via bin/wt-hub-pane) ⇄ files (yazi).
+Continue Alex's hub to-do list. The main checkout (~/Documents/projects/wt-hub) is the live install of his worktree hub (`./install.sh --link`): ~/.local/bin, ~/.local/lib/wt-lib.sh, the yazi keys and the tuicr config are symlinks into it, and ~/mods/wt-hub links to mod/. Read CLAUDE.md and README.md first, and your memory note "worktree-tooling-worktrunk" (decisions, zellij 0.45 facts, incidents). The hub is the zellij session "hub" (layout written by bin/wt-hub): worktree list (fzf, bin/wt-sidebar) | agent viewer (bin/wt-hub-pane agent; opens on the hub Claude, a background agent, since 2026-10-21) | review (tuicr via bin/wt-hub-pane) ⇄ files (yazi).
 
 Alex's to-do list, in his words (2026-10-19):
 1. Clean up the tops of the panes — "the stacks are cumbersome/ugly" (zellij stacked-pane title bars in the middle and right columns). Done 2026-10-19: one pane per column, panes in place.
@@ -57,6 +57,16 @@ Alex's to-do list, in his words (2026-10-19):
 - Kept as is (Alex): idle background agents stay until removed; the Octicons for uncommitted,
   conflict, safe and rebase.
 
+## Done 2026-10-21
+
+- The hub Claude is back (Alex: "i now see some utility for it"), as a background agent named
+  `hub` (Alex picked this over the old pane under the viewer, a floating pane or a pane under
+  the list). Its use (Alex): orchestrate agents and answer questions across repos; its system
+  prompt says how (`wtl_hub_claude_prompt`). A fresh hub opens on it with the focus in the
+  middle column; the "◆ hub" row (top of the list, with its state sign) and `wt go hub` show it
+  again; review does not change on that pick. `wtl_hub_claude` starts it when
+  `~/.local/state/wt-hub-claude` names no agent. No in-place panes: it uses the agent viewer.
+
 ## Other open items
 
 None. Dropped 2026-10-20 (Alex): `wt step prune` (bulk removal; the list's dim ✓ and `d` do it
@@ -66,7 +76,7 @@ memory note "worktree-tooling-worktrunk" names it).
 ## How to work
 
 - Taste items: first show Alex 2–3 concrete options (short ASCII previews, what each costs), let him pick, then build. Key items: propose the keys in one message, then build. Alex wants idiomatic keys ("q means quit").
-- Removing a worktree is destructive: confirm in the UI first, use `wt remove`, never remove a main checkout, never run `wt step prune` (see "Other open items"). Removing an agent: `claude rm <id>` after a confirm. The agent viewer never closes (no hub Claude under it since 2026-10-20).
+- Removing a worktree is destructive: confirm in the UI first, use `wt remove`, never remove a main checkout, never run `wt step prune` (see "Other open items"). Removing an agent: `claude rm <id>` after a confirm. The agent viewer never closes; the hub Claude is a background agent shown in it (since 2026-10-21), never a pane under it.
 - Test zellij behaviour in a throwaway session as CLAUDE.md says, never on Alex's live hub. Apply to the live hub only when an item is done, and restart a live pane in place (focus it, `zellij -s hub run --in-place --close-replaced-pane ... -- env -u CLAUDE_JOB_DIR <cmd>`, refocus) — never quit the hub session.
 - Edit running scripts write-then-mv. Commit each finished item in this repo (no Claude-Session trailer, no ticket ids); there is no remote.
 - Respond in Simplified Technical English. End each item with what changed and how Alex uses it.

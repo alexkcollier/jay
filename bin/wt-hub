@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# wt hub — zellij session "hub": the live worktree list (left), the picked agent (middle) and
-# review + files (right). Goes to the hub's Ghostty tab when it has one, else opens the hub in
+# wt hub — zellij session "hub": the live worktree list (left), the picked agent (middle; at
+# start the hub Claude) and review + files (right). Goes to the hub's Ghostty tab when it has one, else opens the hub in
 # this terminal; a new tab only without a terminal or from inside another zellij session.
 # --here: in this terminal.  --tab: in a new tab.  --print-layout: the zellij layout it starts.
 set -euo pipefail
@@ -59,8 +59,8 @@ layout {
     }
     tab name="hub" focus=true {
         pane split_direction="vertical" {
-            pane size="$list%" name="worktrees" focus=true command="$HOME/.local/bin/wt-sidebar"
-            pane size="$middle%" name="agent" command="$HOME/.local/bin/wt-hub-pane" {
+            pane size="$list%" name="worktrees" command="$HOME/.local/bin/wt-sidebar"
+            pane size="$middle%" name="hub" focus=true command="$HOME/.local/bin/wt-hub-pane" {
                 args "agent"
             }
             pane size="$right%" name="review" command="$HOME/.local/bin/wt-hub-pane" {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# wt go <agent id | session id | name, or a part of a name>
+# wt go <agent id | session id | name, or a part of a name | hub (the hub Claude)>
 # Bring a Claude session in front. While the hub runs, a background one opens in the
 # hub's agent pane (from anywhere, also from an agent) and the hub's Ghostty tab comes
 # to the front; with no hub, in a Ghostty tab running `claude attach`.
@@ -11,6 +11,12 @@ source "$HOME/.local/lib/wt-lib.sh"
 
 query="$*"
 query=${query#[\"\']}; query=${query%[\"\']}
+# hub: the hub Claude (started when it has none).
+hubid=$(wtl_hub_claude_id)
+if [[ "$query" == hub ]]; then
+  hubid=$(wtl_hub_claude) || { echo "Could not start the hub Claude." >&2; exit 1; }
+  query=$hubid
+fi
 # Match order: id or session id (prefix), exact name, then a part of a name (any case).
 # Several name matches: the live ones win; still several is an error that lists them.
 matches=$(claude agents --json --all 2>/dev/null | jq -c --arg q "$query" '
@@ -37,12 +43,18 @@ cwd=$(jq -r .cwd <<<"$agent")
 pid=$(jq -r '.pid // empty' <<<"$agent")
 
 if [[ "$kind" == background ]] && { wtl_in_hub || wtl_hub_live; }; then
-  # The turn chain of a background agent is named after its id (see claude-turn-snapshot).
-  hub_pick() { wtl_hub_show "$id" "$(jq -r '.name // .id' <<<"$agent")" "$cwd" && wtl_hub_target "$cwd" "$id"; }
+  # The turn chain of a background agent is named after its id (see claude-turn-snapshot). The
+  # hub Claude works in no worktree: review stays on what it shows.
+  hub_pick() {
+    wtl_hub_show "$id" "$(jq -r '.name // .id' <<<"$agent")" "$cwd" || return
+    [[ "$id" == "$hubid" ]] || wtl_hub_target "$cwd" "$id"
+  }
   wtl_hub_locked hub_pick || { echo "Could not show $id in the hub." >&2; exit 1; }
   # The list's cursor follows (a list pick has it there already). Detached: called from a list
   # key (n), the list's fzf answers only after this script ends.
-  [[ -n "${WT_LIST_PICK:-}" ]] || (wtl_list_follow "$sid" &) >/dev/null 2>&1
+  row=$sid
+  [[ "$id" == "$hubid" ]] && row=hub
+  [[ -n "${WT_LIST_PICK:-}" ]] || (wtl_list_follow "$row" &) >/dev/null 2>&1
   if ! wtl_in_hub && tab=$(wtl_gh_tab_for_session "$WT_HUB_SESSION"); then
     wtl_gh_select "$tab"
   fi

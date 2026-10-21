@@ -431,6 +431,76 @@ wtl_hub_show() {
   wtl_hub_focus_middle
 }
 
+# --- The hub Claude: a background agent named "hub" in the first root folder, to start and
+# steer agents and to answer questions across repos. The "◆ hub" row of the list shows it in
+# the middle column, and a fresh hub opens on it. Its short id is in WT_HUB_CLAUDE_FILE.
+
+WT_HUB_CLAUDE_FILE=${WT_HUB_CLAUDE_FILE:-$HOME/.local/state/wt-hub-claude}
+
+# Added to the hub Claude's system prompt.
+wtl_hub_claude_prompt() {
+  cat <<EOF
+You are the hub Claude of a worktree hub: a zellij session "hub" with a list of worktrees and
+Claude agents on the left, one agent in the middle column (you now) and a review of that agent's
+turns on the right. The user comes to you to start and steer agents, and with questions across
+repos. Each agent is a background Claude session in its own git worktree. Repos live under
+$WT_ROOTS (a folder per client, then the repo; worktrees are siblings named <repo>.<branch>).
+
+- Agents: \`claude agents --json --all\` (id, name, cwd, state, status); recent output:
+  \`claude logs <id>\`; what an agent did per turn: \`git log refs/wt-turns/<id>/base..refs/wt-turns/<id>/head\`
+  in its worktree.
+- Worktrees with git state and task notes: \`wt-all --json\`; in a repo also \`wt list\`.
+- New worktree with an agent: in the repo's main checkout, \`wt new <branch> -t "<task>" -- <prompt>\`
+  (-a: an idle agent). New agent in a worktree that exists: \`cd <worktree> && claude --bg
+  --name "<repo>/<branch>" "<prompt>"\`. Start agents only when the user asks or agrees.
+- Send a prompt to a running agent: the ListAgents and SendMessage tools.
+- Show an agent in the middle column: \`wt go <id or name>\`; \`wt go hub\` comes back to you.
+- Read other worktrees in place. Do not edit files in an agent's worktree, and never remove
+  worktrees or agents (\`wt remove\`, \`claude rm\`, \`wt step prune\`) unless the user asks.
+  Never \`claude --resume\` a conversation that a live agent holds.
+EOF
+}
+
+# The short id of the hub Claude. When there is none (never started, or `claude rm` removed it),
+# start it, and wait until `claude agents` lists it. A stopped one stays: `claude attach` opens
+# it again. A lock keeps two callers (the pane at hub start, a list pick) from starting two.
+wtl_hub_claude() {
+  local lock="$HOME/.local/state/wt-hub-claude.lock" id out var i rc=0
+  local strip=() dirs=() args=()
+  for i in $(seq 150); do mkdir "$lock" 2>/dev/null && break; sleep 0.1; done
+  [[ -d "$lock" ]] || mkdir "$lock"
+  id=$(cat "$WT_HUB_CLAUDE_FILE" 2>/dev/null)
+  if [[ -z "$id" ]] || ! claude agents --json --all 2>/dev/null | jq -e --arg id "$id" 'any(.[]; .id == $id)' >/dev/null; then
+    # An inherited CLAUDE_CODE_CHILD_SESSION (a caller in an agent) hides a session from
+    # `claude agents`: start it without CLAUDE*/ANTHROPIC* variables.
+    for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
+    # It starts in the first root; the other roots are added folders.
+    IFS=: read -ra dirs <<<"$WT_ROOTS"
+    for ((i = 1; i < ${#dirs[@]}; i++)); do args+=(--add-dir "${dirs[i]}"); done
+    out=$(cd "${dirs[0]:-$HOME}" && env ${strip[@]+"${strip[@]}"} claude --bg --name hub \
+      ${args[@]+"${args[@]}"} --append-system-prompt "$(wtl_hub_claude_prompt)" 2>&1)
+    id=$(wtl_bg_id "$out")
+    if [[ -n "$id" ]]; then
+      printf '%s\n' "$id" >"$WT_HUB_CLAUDE_FILE"
+      for i in $(seq 20); do
+        claude agents --json --all 2>/dev/null | jq -e --arg id "$id" 'any(.[]; .id == $id)' >/dev/null && break
+        sleep 0.5
+      done
+    else
+      printf '%s\n' "$out" >&2
+      rc=1
+    fi
+  fi
+  rmdir "$lock" 2>/dev/null
+  ((rc == 0)) && printf '%s\n' "$id"
+  return $rc
+}
+
+# The hub Claude's id when it has one, without starting it.
+wtl_hub_claude_id() {
+  cat "$WT_HUB_CLAUDE_FILE" 2>/dev/null
+}
+
 # Move the cursor of each running list (wt-sidebar's fzf, through its --listen socket) to the
 # row of the agent with session id $1, so the cursor follows a pick made elsewhere (a notice
 # click, `wt go`, a new agent). A new agent's row may not be there yet: then reload and wait up
