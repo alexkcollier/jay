@@ -1,0 +1,465 @@
+#!/usr/bin/env bash
+# hub-run — long-running commands (dev servers, watchers, docker compose) in the hub's "tasks"
+# tab, where you and agents both see them. Each pane in that tab is a task: a shell you type in,
+# or a pane that hub-run started. Output stays in zellij's scrollback: no log files.
+#   hub-run [-n name] [-w [-t s]] [--] <command...>   a new pane in the tasks tab, in this folder.
+#                            -w: wait until it listens (see wait). Without the hub: runs here.
+#   hub-run ls [--json]      the tasks: name, state, ports, worktree, command
+#   hub-run log <task> [-n lines | --all]   what the pane shows, as plain text (default 100 lines)
+#   hub-run wait <task> [-t seconds]   wait until the task listens on a port; print its URLs
+#   hub-run stop <task>      Ctrl-C to the task; a pane that hub-run started closes
+#   hub-run restart <task>   stop and start again, in the same pane (panes that hub-run started)
+#   hub-run port <port>      who listens on a port
+# <task>: a name, a pane id (terminal_3 or 3), or a part of the command or folder.
+set -uo pipefail
+source "$HOME/.local/lib/wt-lib.sh"
+
+TAB=${WT_HUB_TASKS_TAB:-tasks}
+STATE_DIR="$HOME/.local/state/hub-tasks"
+SELF="$HOME/.local/bin/hub-run"
+
+die() { printf 'hub-run: %s\n' "$*" >&2; exit 1; }
+
+usage() { sed -n '2,13s/^# \{0,1\}//p' "$0"; }
+
+# The values of jq array $1 on one line, split by \x1f: `read` with a tab IFS would merge empty
+# fields.
+fields() { jq -r "$1"' | map(tostring) | join("\u001f")'; }
+
+# zellij -s <a session that is not there> exits 0: look for the session first.
+hub_answers() {
+  wtl_live_sessions | grep -qxF "$WT_HUB_SESSION" && zellij -s "$WT_HUB_SESSION" action list-clients >/dev/null 2>&1
+}
+
+# The command line of args "$@": one arg is a shell string as it is; several are quoted.
+command_line() {
+  if (($# == 1)); then
+    printf '%s\n' "$1"
+  else
+    local out="" a
+    for a in "$@"; do out+="${out:+ }$(printf '%q' "$a")"; done
+    printf '%s\n' "$out"
+  fi
+}
+
+# A short name for a command line: the program, and its first word when that is a short
+# subcommand ("pnpm dev", "docker compose").
+short_name() {
+  jq -rn --arg c "$1" '$c | split(" ") | map(select(length > 0 and (test("^[A-Za-z_][A-Za-z0-9_]*=") | not)))
+    | (if .[0] == "env" then .[1:] else . end)
+    | ((.[0] // "shell") | split("/") | last) as $a | (.[1] // "") as $b
+    | if ($b | test("^[A-Za-z][A-Za-z0-9:_.-]{0,19}$")) then "\($a) \($b)" else $a end'
+}
+
+# --- The pane side: `hub-run --exec <command line>` runs in each pane that hub-run starts ---
+
+# The command runs in the foreground, in the pane's process group (no job control here), so
+# Ctrl-C reaches it and all its children; this loop ignores it and goes on. `hub-run restart`
+# writes <pid>.again and stops the command from outside; the loop then starts it again.
+run_pane() {
+  local cmd=$1 rc r var line
+  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do unset "$var"; done
+  mkdir -p "$STATE_DIR"
+  trap ':' INT
+  while :; do
+    rm -f "$STATE_DIR/$$.exit" "$STATE_DIR/$$.again"
+    printf '\e[2m$ %s\e[0m\n' "$cmd"
+    "${SHELL:-/bin/zsh}" -lc "$cmd"
+    rc=$?
+    [[ -f "$STATE_DIR/$$.again" ]] && { printf '\n'; continue; }
+    printf '%s\n' "$rc" >"$STATE_DIR/$$.exit"
+    printf '\n\e[2mexited (%s) · Enter: run again · q: close\e[0m\n' "$rc"
+    # bash 3.2's read -t returns 1 on a time-out, as on end of input: read single keys, and
+    # look for a restart each second.
+    while :; do
+      line=""
+      read -r -s -n 1 -t 1 line; r=$?
+      ((r == 0)) && [[ -z "$line" ]] && break
+      [[ "$line" == q ]] && { rm -f "$STATE_DIR/$$.exit"; exit "$rc"; }
+      [[ -f "$STATE_DIR/$$.again" ]] && break
+    done
+  done
+}
+
+# Stop a command: Ctrl-C (SIGINT) to process group $1 first, so docker compose stops its
+# containers; after 10 s TERM, after 5 s more KILL. With $2 (the pid of a hub-run pane, which is
+# in that group and ignores Ctrl-C), only its children are stopped. Fails when they still run.
+stop_group() {
+  local group=$1 keep=${2:-} step
+  alive() { if [[ -n "$keep" ]]; then pgrep -P "$keep" >/dev/null; else kill -0 -- "-$group" 2>/dev/null; fi; }
+  for step in INT TERM KILL; do
+    case $step in
+      INT) kill -INT -- "-$group" 2>/dev/null ;;
+      TERM) if [[ -n "$keep" ]]; then wtl_kill_children "$keep"; else kill -TERM -- "-$group" 2>/dev/null; fi ;;
+      KILL) if [[ -n "$keep" ]]; then pkill -KILL -P "$keep"; else kill -KILL -- "-$group" 2>/dev/null; fi ;;
+    esac
+    for _ in $(seq $([[ $step == INT ]] && echo 100 || echo 50)); do alive || return 0; sleep 0.1; done
+  done
+  ! alive
+}
+
+# --- The tasks: panes of the tasks tab, with their processes and ports ---
+
+# One line per pane of the hub: root pid<TAB>tty<TAB>foreground pid<TAB>pids (,)<TAB>foreground command
+pane_procs() {
+  local srv
+  srv=$(pgrep -f "zellij --server .*/$WT_HUB_SESSION\$" | head -1)
+  [[ -n "$srv" ]] || return 0
+  ps -x -o pid=,ppid=,tpgid=,tty=,command= | awk -v srv="$srv" '
+    { cmd = $0; sub(/^ *[0-9]+ +[0-9]+ +-?[0-9]+ +[^ ]+ +/, "", cmd)
+      pid[NR] = $1; tty[$1] = $4; tp[$1] = $3; c[$1] = cmd
+      if ($4 != "??") on[$4] = on[$4] (on[$4] == "" ? "" : ",") $1
+      if ($2 == srv && $4 != "??") roots[$1] = 1 }
+    END { for (r in roots) { fg = (tp[r] in c) ? tp[r] : r
+            printf "%s\t%s\t%s\t%s\t%s\n", r, tty[r], fg, on[tty[r]], c[fg] } }'
+}
+
+# Ports that pids listen on: pid<TAB>port lines, from one lsof call.
+listen_ports() {
+  lsof -nP -iTCP -sTCP:LISTEN -Fpn 2>/dev/null | awk '
+    /^p/ { p = substr($0, 2) } /^n/ { n = $0; sub(/.*:/, "", n); print p "\t" n }' | sort -u
+}
+
+# Current folders of pids $1 (comma list): pid<TAB>cwd lines.
+proc_cwds() {
+  [[ -n "$1" ]] || return 0
+  lsof -a -d cwd -p "$1" -Fpn 2>/dev/null | awk '/^p/ { p = substr($0, 2) } /^n/ { print p "\t" substr($0, 2) }'
+}
+
+# Ports that docker publishes for a compose project in folder $1, or for `docker run -p` in
+# command line $2.
+docker_ports() {
+  local dir=$1 cmd=$2
+  if [[ "$cmd" =~ docker[[:space:]]+compose|docker-compose ]]; then
+    (cd "$dir" 2>/dev/null && perl -e 'alarm 3; exec @ARGV' docker compose ps --format json 2>/dev/null) \
+      | jq -r 'if type == "array" then .[] else . end | .Publishers[]? | select(.PublishedPort > 0) | .PublishedPort' 2>/dev/null
+  fi
+  grep -oE '(-p|--publish)[ =]+([0-9.]+:)?[0-9]+:[0-9]+' <<<"$cmd" | sed -E 's/.*[ =]([0-9.]+:)?([0-9]+):[0-9]+$/\2/'
+}
+
+# The tasks as one JSON array.
+tasks_json() {
+  local panes procs fgs listen cwds
+  hub_answers || return 1
+  panes=$(zellij -s "$WT_HUB_SESSION" action list-panes -a -j -c 2>/dev/null) || return 1
+  jq -e 'type == "array"' <<<"$panes" >/dev/null 2>&1 || return 1
+  procs=$(pane_procs)
+  fgs=$(cut -f3 <<<"$procs" | paste -sd, -)
+  listen=$(listen_ports)
+  cwds=$(proc_cwds "$fgs")
+  local raw
+  raw=$(jq -c --arg tab "$TAB" --arg procs "$procs" --arg listen "$listen" --arg cwds "$cwds" --arg self "hub-run --exec " '
+    def lines: split("\n") | map(select(length > 0) | split("\t"));
+    ($procs | lines | map({root: (.[0] | tonumber), tty: .[1], fg: (.[2] | tonumber),
+                           pids: (.[3] | split(",") | map(tonumber)), fgcmd: .[4]}) | sort_by(.root)) as $R
+    | ($listen | lines | reduce .[] as $l ({}; .[$l[0]] += [$l[1] | tonumber])) as $L
+    | ($cwds | lines | map({key: .[0], value: .[1]}) | from_entries) as $C
+    | [.[] | select((.is_plugin | not) and .tab_name == $tab)] | sort_by(.id)
+    # A pane gets the first free root process whose foreground command is the pane command,
+    # in the same folder when there is one (panes and roots both go in start order). When
+    # zellij gives no command (it can be null), the only free root in the pane folder.
+    | reduce .[] as $p ({used: [], out: []};
+        .used as $used
+        | (if $p.exited then null else
+            [$R[] | select(.root as $r | $used | index([$r]) | not)] as $free
+            | ([$free[] | select(.fgcmd == ($p.pane_command // "\u0000"))]
+               | ((map(select($C[.fg | tostring] == $p.pane_cwd)) + .) | first))
+              // ([$free[] | select($C[.fg | tostring] == $p.pane_cwd)] | if length == 1 then .[0] else null end)
+          end) as $m
+        | .used += (if $m then [$m.root] else [] end)
+        | .out += [{pane: $p, proc: $m}])
+    | .out[]
+    | .pane as $p | .proc as $m
+    | (($p.terminal_command // "") | index($self)) as $at
+    | ($at != null) as $owned
+    | (if $owned then $p.terminal_command[($at + ($self | length)):] else null end) as $line
+    | {id: $p.id, pane: "terminal_\($p.id)", owned: $owned, title: $p.title,
+       root: ($m.root // null), fg: ($m.fg // null), pids: ($m.pids // []),
+       state: (if $p.exited then "exited"
+               elif $m == null then "unknown"
+               elif $owned then (if ($m.pids | length) > 1 then "running" else "exited" end)
+               elif $p.terminal_command == null and $m.fg == $m.root then "idle"
+               else "running" end),
+       exit: $p.exit_status,
+       command: (if $owned then $line
+                 elif $m == null or ($p.terminal_command == null and $m.fg == $m.root) then null
+                 else $m.fgcmd end),
+       cwd: ($C[($m.fg // -1) | tostring] // $p.pane_cwd),
+       ports: ([$m.pids[]? | $L[tostring][]?] | unique)}' <<<"$panes") || return 1
+  # Exit codes of panes whose command ended (hub-run --exec writes them), names, worktrees and
+  # docker ports.
+  local line root rc name cwd cmd wt dport top branch repo
+  local -a out=()
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    IFS=$'\x1f' read -r root name cwd cmd < <(fields '[(.root // ""), (if .owned then .title else "" end), .cwd, (.command // "")]' <<<"$line")
+    rc=""
+    [[ -n "$root" && -f "$STATE_DIR/$root.exit" ]] && rc=$(cat "$STATE_DIR/$root.exit")
+    if [[ -z "$name" ]]; then
+      if [[ -n "$cmd" ]]; then name=$(short_name "$cmd"); else name=shell; fi
+    fi
+    wt=""
+    if top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null); then
+      repo=$(basename "$(wtl_primary "$top")")
+      branch=$(git -C "$top" branch --show-current 2>/dev/null)
+      wt="$repo/${branch:-$(basename "$top")}"
+    fi
+    dport=""
+    [[ "$cmd" == *docker* ]] && dport=$(docker_ports "$cwd" "$cmd" | paste -sd, -)
+    out+=("$(jq -c --arg rc "$rc" --arg name "$name" --arg wt "$wt" --arg dport "$dport" '
+      .name = $name | .worktree = (if $wt == "" then null else $wt end)
+      | (if $rc != "" then .exit = ($rc | tonumber) else . end)
+      | .ports = ((.ports + ($dport | split(",") | map(select(length > 0) | tonumber))) | unique)
+      | .urls = [.ports[] | "http://localhost:\(.)"]' <<<"$line")")
+  done <<<"$raw"
+  # Exit files of panes that are gone.
+  local f pid
+  for f in "$STATE_DIR"/*.exit; do
+    [[ -f "$f" ]] || continue
+    pid=${f##*/}; pid=${pid%.exit}
+    kill -0 "$pid" 2>/dev/null || rm -f "$f"
+  done
+  printf '%s\n' ${out[@]+"${out[@]}"} | jq -s .
+}
+
+# The task that selector $1 names, as JSON. Fails with a message when none or several match.
+find_task() {
+  local sel=$1 tasks found n
+  tasks=$(tasks_json) || die "the hub does not answer (start it with: wt hub)"
+  found=$(jq -c --arg s "$sel" '
+    ($s | ascii_downcase) as $l
+    | ($s | sub("^terminal_"; "")) as $id
+    | (map(select(.pane == $s or (.id | tostring) == $id))) as $byid
+    | (map(select((.name | ascii_downcase) == $l))) as $byname
+    | (map(select([.name, (.command // ""), .cwd, (.worktree // "")] | map(ascii_downcase) | any(contains($l))))) as $bypart
+    | ([$byid, $byname, $bypart] | map(select(length > 0)) | first // [])
+    | if length > 1 and any(.state != "idle") then map(select(.state != "idle")) else . end' <<<"$tasks")
+  n=$(jq length <<<"$found")
+  ((n == 0)) && die "no task matches \"$sel\" (hub-run ls)"
+  if ((n > 1)); then
+    printf 'hub-run: %s tasks match "%s"; use a pane id:\n' "$n" "$sel" >&2
+    jq -r '.[] | "  \(.pane)  \(.name)  \(.worktree // .cwd)"' <<<"$found" >&2
+    exit 1
+  fi
+  jq -c '.[0]' <<<"$found"
+}
+
+# --- Commands ---
+
+cmd_start() {
+  local name="" wait=0 secs=120 line tid pane
+  while (($#)); do
+    case $1 in
+      -n) name=${2:-}; shift 2 || die "-n needs a name" ;;
+      -w) wait=1; shift ;;
+      -t) secs=${2:-}; shift 2 || die "-t needs seconds" ;;
+      --) shift; break ;;
+      -*) die "unknown option $1 (hub-run -h)" ;;
+      *) break ;;
+    esac
+  done
+  (($#)) || { usage >&2; exit 2; }
+  line=$(command_line "$@")
+  [[ -n "$name" ]] || name=$(short_name "$line")
+  if ! hub_answers; then
+    if [[ -t 0 && -t 1 ]]; then
+      printf '\e[2mhub-run: the hub does not run; this runs here, where agents cannot see it\e[0m\n' >&2
+      exec "${SHELL:-/bin/zsh}" -lc "$line"
+    fi
+    die "the hub does not run, so nobody would see this task. Ask the user to start it (wt hub)"
+  fi
+  # The same command, running in the same folder: show that one, do not start a second one.
+  local same
+  same=$(tasks_json | jq -c --arg l "$line" --arg d "$(pwd -P)" \
+    '[.[] | select(.state == "running" and .command == $l and .cwd == $d)] | first // empty')
+  if [[ -n "$same" ]]; then
+    jq -r '"hub-run: this runs already: \(.name) (\(.pane))" + (if .urls != [] then " · " + (.urls | join(" ")) else "" end)' <<<"$same" >&2
+    exit 1
+  fi
+  local strip=() var
+  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
+  tid=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null | jq -r --arg t "$TAB" 'first(.[] | select(.name == $t) | .tab_id) // empty')
+  if [[ -z "$tid" ]]; then
+    env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-tab --name "$TAB" --cwd "${WT_ROOTS%%:*}" >/dev/null 2>&1
+    tid=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null | jq -r --arg t "$TAB" 'first(.[] | select(.name == $t) | .tab_id) // empty')
+    [[ -n "$tid" ]] || die "the hub has no $TAB tab, and a new one did not open"
+  fi
+  pane=$(env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --tab-id "$tid" \
+    --cwd "$PWD" --name "$name" --close-on-exit -- "$SELF" --exec "$line") || die "zellij did not open the pane"
+  printf '%s: started in the hub'"'"'s %s tab (%s)\n' "$name" "$TAB" "$pane"
+  if ((wait)); then
+    sleep 1
+    cmd_wait "$pane" -t "$secs"
+  else
+    printf 'hub-run log %s · hub-run wait %s\n' "$pane" "$pane"
+  fi
+}
+
+cmd_ls() {
+  local tasks
+  tasks=$(tasks_json) || die "the hub does not answer (start it with: wt hub)"
+  if [[ "${1:-}" == --json ]]; then
+    jq . <<<"$tasks"
+    return
+  fi
+  if [[ "$(jq length <<<"$tasks")" == 0 ]]; then
+    printf 'No panes in the hub'"'"'s %s tab.\n' "$TAB"
+    return
+  fi
+  jq -r --arg home "$HOME" '
+    ["PANE", "NAME", "STATE", "PORTS", "WHERE", "COMMAND"],
+    (.[] | [.pane, .name,
+            (if .state == "exited" then "exited \(.exit // "?")" else .state end),
+            (if .ports == [] then "-" else (.ports | map(tostring) | join(",")) end),
+            (.worktree // (.cwd | sub("^" + $home; "~"))),
+            (.command // "-" | sub("^/[^ ]*/"; ""))])
+    | @tsv' <<<"$tasks" | column -t -s $'\t'
+}
+
+cmd_log() {
+  local sel="" lines=100 task pane
+  while (($#)); do
+    case $1 in
+      -n) lines=${2:-}; shift 2 || die "-n needs a number" ;;
+      --all) lines=all; shift ;;
+      *) sel=$1; shift ;;
+    esac
+  done
+  [[ -n "$sel" ]] || die "which task? (hub-run ls)"
+  task=$(find_task "$sel") || exit 1
+  pane=$(jq -r .pane <<<"$task")
+  # The screen and scrollback, without the blank rows under the last line.
+  zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" --full 2>/dev/null \
+    | awk '{ a[NR] = $0 } NF { last = NR } END { for (i = 1; i <= last; i++) print a[i] }' \
+    | if [[ "$lines" == all ]]; then cat; else tail -n "$lines"; fi
+}
+
+cmd_wait() {
+  local sel="" secs=120 task end state
+  while (($#)); do
+    case $1 in
+      -t) secs=${2:-}; shift 2 || die "-t needs seconds" ;;
+      *) sel=$1; shift ;;
+    esac
+  done
+  [[ -n "$sel" ]] || die "which task? (hub-run ls)"
+  task=$(find_task "$sel") || exit 1
+  sel=$(jq -r .pane <<<"$task")
+  end=$((SECONDS + secs))
+  while :; do
+    task=$(find_task "$sel") || exit 1
+    state=$(jq -r .state <<<"$task")
+    if [[ "$(jq '.ports | length' <<<"$task")" != 0 ]]; then
+      sleep 1
+      find_task "$sel" | jq -r '"\(.name) listens: " + (.urls | join(" "))'
+      return 0
+    fi
+    if [[ "$state" == exited || "$state" == idle ]]; then
+      printf 'hub-run: %s ended (%s) before it listened. Its last lines:\n' "$(jq -r .name <<<"$task")" "$(jq -r '.exit // "?"' <<<"$task")" >&2
+      cmd_log "$sel" -n 30 >&2
+      return 1
+    fi
+    ((SECONDS >= end)) && { printf 'hub-run: %s does not listen after %s s (hub-run log %s)\n' "$(jq -r .name <<<"$task")" "$secs" "$sel" >&2; return 1; }
+    sleep 1
+  done
+}
+
+cmd_stop() {
+  local task owned root fg state name pane
+  [[ -n "${1:-}" ]] || die "which task? (hub-run ls)"
+  task=$(find_task "$1") || exit 1
+  IFS=$'\x1f' read -r owned root fg state name pane < <(fields '[.owned, (.root // ""), (.fg // ""), .state, .name, .pane]' <<<"$task")
+  if [[ "$owned" == true ]]; then
+    [[ -n "$root" ]] && { stop_group "$root" "$root" || die "$name: still runs after Ctrl-C, TERM and KILL"; }
+    zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "$pane" >/dev/null 2>&1
+    printf '%s: stopped, pane closed\n' "$name"
+    return 0
+  fi
+  [[ "$state" == running && -n "$fg" ]] || die "$name: nothing runs in $pane"
+  stop_group "$fg" || die "$name: still runs after Ctrl-C, TERM and KILL"
+  printf '%s: stopped (the shell in %s stays)\n' "$name" "$pane"
+}
+
+cmd_restart() {
+  local task owned root name pane
+  [[ -n "${1:-}" ]] || die "which task? (hub-run ls)"
+  task=$(find_task "$1") || exit 1
+  IFS=$'\x1f' read -r owned root name pane < <(fields '[.owned, (.root // ""), .name, .pane]' <<<"$task")
+  [[ "$owned" == true ]] || die "$name: a shell pane; stop it (hub-run stop $pane) and type the command again there"
+  [[ -n "$root" ]] || die "$name: its pane does not run"
+  mkdir -p "$STATE_DIR"
+  : >"$STATE_DIR/$root.again"
+  stop_group "$root" "$root" || die "$name: still runs after Ctrl-C, TERM and KILL"
+  printf '%s: restarted in %s\n' "$name" "$pane"
+}
+
+cmd_port() {
+  local port=${1:-} pid cmd cwd task tasks ctr
+  [[ "$port" =~ ^[0-9]+$ ]] || die "which port?"
+  pid=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -1)
+  [[ -n "$pid" ]] || { printf 'port %s: free\n' "$port"; return 0; }
+  if tasks=$(tasks_json 2>/dev/null); then
+    task=$(jq -c --argjson pid "$pid" --argjson port "$port" 'first(.[] | select((.pids | index([$pid])) or (.ports | index([$port])))) // empty' <<<"$tasks")
+    if [[ -n "$task" ]]; then
+      jq -r --arg p "$port" '"port \($p): task \(.name) (\(.pane)) in \(.worktree // .cwd) · hub-run stop \(.pane)"' <<<"$task"
+      return 0
+    fi
+  fi
+  cmd=$(ps -o command= -p "$pid" 2>/dev/null)
+  if [[ "$cmd" == *com.docker* || "$cmd" == *vpnkit* || "$cmd" == *[Dd]ocker* ]]; then
+    ctr=$(perl -e 'alarm 3; exec @ARGV' docker ps --filter "publish=$port" \
+      --format '{{.Names}} (compose project {{.Label "com.docker.compose.project"}})' 2>/dev/null | head -1)
+    printf 'port %s: docker container %s\n' "$port" "${ctr:-?}"
+    return 0
+  fi
+  cwd=$(proc_cwds "$pid" | cut -f2)
+  printf 'port %s: pid %s, not a hub task: %s (in %s)\n' "$port" "$pid" "$cmd" "${cwd/#$HOME/~}"
+}
+
+# The bar text: one item per task that runs or ended, with its first port. Names that two tasks
+# share get the branch.
+cmd_bar() {
+  local tasks
+  tasks=$(tasks_json 2>/dev/null) || return 0
+  jq -r '
+    def c($x): "\u001b[" + $x + "m";
+    [.[] | select(.state == "running" or .state == "exited")] as $t
+    | ($t | group_by(.name) | map(select(length > 1) | .[0].name)) as $dup
+    | $t | map(
+        (if .state == "running" then c("32") + "●"
+         elif (.exit // 0) == 0 then c("2") + "○"
+         else c("31") + "✗" end) + c("0") + " "
+        + (if (.name | IN($dup[])) and .worktree then (.worktree | split("/") | last) + " " else "" end)
+        + (.name | .[0:24])
+        + (if .ports != [] then c("2") + ":" + (.ports[0] | tostring) + c("0") else "" end))
+    | join("  ")' <<<"$tasks"
+}
+
+# SessionStart hook: tells each Claude session about the tasks tab (stdout becomes context).
+cmd_hook() {
+  cat <<'EOF'
+Long-running commands (dev servers, watchers, `docker compose up`): when the user's hub runs, start
+them with `hub-run -n <name> -w -- <command>` in the folder they run in, not with a background Bash
+call. They run in the hub's "tasks" tab, where the user sees them, and keep running after you stop.
+`hub-run ls --json` lists the tasks (name, state, ports, URLs, worktree, command), also the ones the
+user started by hand; `hub-run log <task>` shows a task's recent output; `hub-run wait <task>`
+waits until it listens; `hub-run stop|restart <task>`; `hub-run port <n>` tells who holds a port
+(for "address in use"). Stop or restart only tasks you started, unless the user asks. When
+hub-run says the hub does not run, use a background Bash call.
+EOF
+}
+
+case ${1:-} in
+  -h | --help) usage ;;
+  --exec) shift; run_pane "$*" ;;
+  --bar) cmd_bar ;;
+  --hook) cmd_hook ;;
+  ls) shift; cmd_ls "$@" ;;
+  log) shift; cmd_log "$@" ;;
+  wait) shift; cmd_wait "$@" ;;
+  stop) shift; cmd_stop "$@" ;;
+  restart) shift; cmd_restart "$@" ;;
+  port) shift; cmd_port "$@" ;;
+  "") usage >&2; exit 2 ;;
+  *) cmd_start "$@" ;;
+esac

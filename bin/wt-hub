@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # wt hub — zellij session "hub": the live worktree list (left), the picked agent (middle; at
-# start the hub Claude) and review + files (right). Goes to the hub's Ghostty tab when it has one, else opens the hub in
-# this terminal; a new tab only without a terminal or from inside another zellij session.
+# start the hub Claude) and review + files (right); a second tab "tasks" for dev servers
+# (hub-run). Goes to the hub's Ghostty tab when it has one, else opens the hub in this
+# terminal; a new tab only without a terminal or from inside another zellij session.
 # --here: in this terminal.  --tab: in a new tab.  --print-layout: the zellij layout it starts.
 set -euo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
-[[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,5s/^# \{0,1\}//p' "$0"; exit 0; }
+[[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,6s/^# \{0,1\}//p' "$0"; exit 0; }
 
 SESSION=$WT_HUB_SESSION
 root=${WT_ROOTS%%:*}
@@ -14,8 +15,8 @@ layout="$HOME/.local/state/wt-hub-layout.kdl"
 # Without it the hub uses zellij's compact bar.
 ZJSTATUS="$HOME/.local/share/wt-hub/zjstatus-v0.25.0.wasm"
 
-# The bar at the bottom of the hub, in kanagawa colors: the agent counts (sent by the list,
-# see wt-sidebar), the zellij mode when it is not locked, the tabs and the time.
+# The bar at the bottom of the hub, in kanagawa colors: the agent counts and the tasks (both
+# sent by the list, see wt-sidebar), the zellij mode when it is not locked, the tabs and the time.
 bar() {
   if [[ ! -f "$ZJSTATUS" ]]; then
     printf '%s\n' 'plugin location="zellij:compact-bar"'
@@ -25,11 +26,13 @@ bar() {
   tz=$(readlink /etc/localtime | sed 's#.*/zoneinfo/##')
   cat <<KDL
 plugin location="file:$ZJSTATUS" {
-                format_left   "#[fg=#7E9CD8,bold] ◆ hub  {pipe_agents}"
+                format_left   "#[fg=#7E9CD8,bold] ◆ hub  {pipe_agents}   {pipe_tasks}"
                 format_right  "{mode}{tabs}#[fg=#727169] {datetime} "
                 format_space  ""
                 pipe_agents_format     "{output}"
                 pipe_agents_rendermode "raw"
+                pipe_tasks_format      "{output}"
+                pipe_tasks_rendermode  "raw"
                 mode_locked          ""
                 mode_normal          "#[fg=#1F1F28,bg=#E6C384,bold] {name} #[fg=#727169] Ctrl q: quit hub · Ctrl g: lock  "
                 mode_default_to_mode "normal"
@@ -67,6 +70,9 @@ layout {
                 args "review"
             }
         }
+    }
+    tab name="tasks" {
+        pane cwd="$root"
     }
 }
 KDL

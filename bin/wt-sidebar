@@ -607,6 +607,16 @@ send_sum() {
   (zellij pipe "zjstatus::pipe::pipe_agents::$sum" >/dev/null 2>&1 &)
 }
 
+# The same for the tasks of the tasks tab (hub-run --bar). An empty text clears the bar's part.
+last_tasks="-"
+send_tasks() {
+  local tasks
+  tasks=$(hub-run --bar 2>/dev/null)
+  [[ "$tasks" != "$last_tasks" || "${1:-}" == --again ]] || return 0
+  last_tasks=$tasks
+  (zellij pipe "zjstatus::pipe::pipe_tasks::$tasks" >/dev/null 2>&1 &)
+}
+
 # Save the list's share of the hub's width when it changes (mouse drag, h/l), so `wt hub`
 # starts it at that width.
 last_cols=""
@@ -634,7 +644,7 @@ remember_width() {
     after=$(cat "$WT_SIDEBAR_COUNT" 2>/dev/null)
     if [[ "$before" != "$after" ]] || ((tick % 10 == 0)); then post 'clear-screen'; fi
     if wtl_in_hub; then
-      if ((tick % 10 == 0)); then send_sum --again; else send_sum; fi
+      if ((tick % 10 == 0)); then send_sum --again; send_tasks --again; else send_sum; send_tasks; fi
     fi
   done
 ) &

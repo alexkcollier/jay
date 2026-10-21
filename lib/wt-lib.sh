@@ -400,8 +400,9 @@ wtl_hub_point() {
 # a suspended pane it makes that pane float. `move-focus` moves the terminal's focus.
 
 # Move the focus to the middle column (the agent viewer), from any column: left twice reaches
-# the list, then one step right.
+# the list, then one step right. From the tasks tab, go to the hub's tab first.
 wtl_hub_focus_middle() {
+  zellij -s "$WT_HUB_SESSION" action go-to-tab-name hub >/dev/null 2>&1
   zellij -s "$WT_HUB_SESSION" action move-focus left >/dev/null 2>&1
   zellij -s "$WT_HUB_SESSION" action move-focus left >/dev/null 2>&1
   zellij -s "$WT_HUB_SESSION" action move-focus right >/dev/null 2>&1
@@ -455,6 +456,8 @@ $WT_ROOTS (a folder per client, then the repo; worktrees are siblings named <rep
   --name "<repo>/<branch>" "<prompt>"\`. Start agents only when the user asks or agrees.
 - Send a prompt to a running agent: the ListAgents and SendMessage tools.
 - Show an agent in the middle column: \`wt go <id or name>\`; \`wt go hub\` comes back to you.
+- Dev servers and other long-running commands: the hub's "tasks" tab (\`hub-run ls --json\`,
+  \`hub-run log <task>\`, \`hub-run -n <name> -w -- <command>\`), not a background Bash call.
 - Read other worktrees in place. Do not edit files in an agent's worktree, and never remove
   worktrees or agents (\`wt remove\`, \`claude rm\`, \`wt step prune\`) unless the user asks.
   Never \`claude --resume\` a conversation that a live agent holds.

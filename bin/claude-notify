@@ -50,7 +50,8 @@ claude_pid() {
 
 # No notice while the selected Ghostty tab, with Ghostty in front, shows this agent (Alex; the
 # zellij pane in that tab does not matter): its own tab (`claude attach`, its zellij session,
-# or the terminal of an interactive session), or the hub, whose list shows every agent.
+# or the terminal of an interactive session), or the hub on its "hub" tab, whose list shows
+# every agent (on its tasks tab the list is not on screen).
 if wtl_gh_ok && [[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
   selected=$(wtl_gh_tabs | awk -F'\t' '$2 == "true" && $3 == "true" { print $1; exit }')
   tabs=""
@@ -62,7 +63,10 @@ if wtl_gh_ok && [[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
     tty=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
     [[ -n "$tty" && "$tty" != "??" ]] && tabs=$(wtl_gh_tab_for_tty "$tty" || true)
   fi
-  wtl_hub_live && tabs+=$'\n'$(wtl_gh_tab_for_session "$WT_HUB_SESSION" || true)
+  if wtl_hub_live && [[ "$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null \
+    | jq -r 'first(.[] | select(.active) | .name) // "hub"' 2>/dev/null)" == hub ]]; then
+    tabs+=$'\n'$(wtl_gh_tab_for_session "$WT_HUB_SESSION" || true)
+  fi
   [[ -n "$selected" ]] && grep -qxF "$selected" <<<"$tabs" && exit 0
 fi
 

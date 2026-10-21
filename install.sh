@@ -301,7 +301,7 @@ install_hooks() {
   else current='{}'; fi
   merged=$(merged_settings <(printf '%s\n' "$current") | jq -S .)
   if [[ "$merged" == "$current" ]]; then
-    ok "$SETTINGS has the hub's hooks (Stop, UserPromptSubmit, Notification)"
+    ok "$SETTINGS has the hub's hooks (SessionStart, Stop, UserPromptSubmit, Notification)"
     return 0
   fi
   if [[ $mode == check ]]; then
@@ -360,8 +360,9 @@ install_mod() {
 check_zellij() {
   head_ "zellij keys (optional, in ~/.config/zellij/config.kdl; this script never edits it)"
   local conf="$HOME/.config/zellij/config.kdl"
-  if [[ -f "$conf" ]] && grep -qF 'MoveFocus "left"; MoveFocus "left"; MoveFocus "right"' "$conf"; then
-    ok "pane keys (Ctrl g, then 1 2 3 h l ;)"
+  if [[ -f "$conf" ]] && grep -qF 'MoveFocus "left"; MoveFocus "left"; MoveFocus "right"' "$conf" \
+    && grep -qF 'GoToNextTab; SwitchToMode "locked"' "$conf"; then
+    ok "pane keys (Ctrl g, then 1 2 3 h l ; Tab)"
     return 0
   fi
   note "for the pane keys, add these binds to the normal block of keybinds:"
@@ -373,6 +374,7 @@ check_zellij() {
               bind "2" { MoveFocus "left"; MoveFocus "left"; MoveFocus "right"; SwitchToMode "locked"; }
               bind "3" { MoveFocus "right"; MoveFocus "right"; SwitchToMode "locked"; }
               bind ";" { FocusLastPane; SwitchToMode "locked"; }
+              bind "Tab" { GoToNextTab; SwitchToMode "locked"; }
           }
 KDL
   note "the hub expects default_mode \"locked\", with Ctrl g to normal mode and Ctrl q to quit"
@@ -393,7 +395,7 @@ uninstall() {
     need "the mod: claude plugin uninstall wt-hub@alex-wt-hub && claude plugin marketplace remove alex-wt-hub"
   fi
   rm -rf "$SHARE" && did "removed $SHARE (zjstatus, mod copy, list of installed files)"
-  need "remove the hub's hooks (claude-notify, claude-turn-snapshot) from $SETTINGS"
+  need "remove the hub's hooks (claude-notify, claude-turn-snapshot, hub-run --hook) from $SETTINGS"
   note "kept: ~/.config/wt-hub/config and ~/.config/worktrunk/config.toml (your settings), ~/.local/state (hub state and logs)"
 }
 

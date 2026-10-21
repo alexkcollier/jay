@@ -66,6 +66,19 @@ Alex's to-do list, in his words (2026-10-19):
   middle column; the "◆ hub" row (top of the list, with its state sign) and `wt go hub` show it
   again; review does not change on that pick. `wtl_hub_claude` starts it when
   `~/.local/state/wt-hub-claude` names no agent. No in-place panes: it uses the agent viewer.
+- Tasks tab for dev servers (Alex: "we sometimes lose visibility of it"; coworkers run a backend
+  and several frontends, with ports that overlap across projects). Alex's choices: no repo
+  config, no `wt` subcommands (worktrunk is third-party), an embedded terminal that agents can
+  see, an overview in the bar, a tiled "tasks" tab (picked over floating panes and a mix), no
+  log files ("i will 100% accidentally print secrets"), panes readable by default and no
+  private-pane key for now (only a README note). Built: `bin/hub-run` (start in a new pane of
+  the tab, ls, log via `dump-screen`, wait, stop, restart, port), the tab in the layout, the
+  bar's `pipe_tasks` (sent by the list), the SessionStart hook for agents, Ctrl g Tab
+  (`GoToNextTab`: `ToggleTab` does nothing in a fresh session, which has no previous tab), a
+  pick from the tasks tab goes back to the hub tab, and notices come while the hub shows the
+  tasks tab. Facts: `ps -E` does not show the env of pane processes, so panes are matched to
+  their processes by foreground command and folder; `new-pane --tab-id` works from outside,
+  also on a hub without a client; bash 3.2 `read -t` returns 1 on a time-out.
 
 ## Other open items
 
