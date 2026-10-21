@@ -666,7 +666,7 @@ point.
 | `!` bold yellow | agent needs input: it is blocked, or it asks you something |
 | `✗` red | agent failed |
 | `✓` bold magenta | done, unread: a turn ended after you last saw the agent |
-| `●` green | agent works: its process is busy |
+| `●` dim green | agent works: its process is busy |
 | `○` dim | idle: you saw it since its last turn, it is in the middle column now, or it waits for its first prompt |
 
 The agents sort in that order. An agent whose turn goes on while its process is idle (state
