@@ -30,7 +30,9 @@ the yazi keys and the tuicr config are symlinks into it, so an edit is live at o
   20 rows. Tests of the list need the fake HOME's `bin` first on PATH (fzf binds call `wt-sidebar`).
   Give the fake HOME a `.config/zellij/config.kdl` with `show_startup_tips false` and
   `show_release_notes false`: else a floating About pane takes the focus and `close-pane` acts
-  on the wrong pane.
+  on the wrong pane. A test pane that runs hub scripts needs `WT_HUB_SESSION=<name>` exported,
+  and the test commands need the agent's own `ZELLIJ*` variables unset: `lib/wt-lib.sh` uses
+  `hub` when `WT_HUB_SESSION` is empty, so a `wt-sidebar --files` from a test acts on the live hub.
 - Starting a pane in the live hub from an agent: strip `CLAUDE*`/`ANTHROPIC*` env vars. The hub
   server must not inherit them either (`wt hub --here` removes them before zellij starts).
 - Never replace a suspended pane in place on the live hub; wait until it is visible.
