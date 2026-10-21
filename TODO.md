@@ -100,6 +100,11 @@ Alex's to-do list, in his words (2026-10-19):
   bar has no tab list; the banners say where you are. `d` on a worktree closes its tab. Cost
   measured: the hub server used 68 MB with 5 plugin panes; a tab adds a shell and two zjstatus
   instances.
+- Launcher (Alex: a command typed in a tasks shell uses that shell; "will 1 have autocomplete and
+  stuff from my shell?"; "skip 3", the slash command): Ctrl g r runs `hub-run --launcher` in a
+  floating pane: your zsh through our ZDOTDIR (it loads your startup files), Enter hands the
+  line to hub-run. Open (Alex: "not yet"): tasks run with `$SHELL -lc`, so `.zshrc` aliases and
+  `mise activate` do not apply in them; `-ic` would fix it, after a test of Ctrl-C and run again.
 
 ## Other open items
 

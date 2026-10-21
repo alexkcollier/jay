@@ -155,7 +155,9 @@ tasks_json() {
                            pids: (.[3] | split(",") | map(tonumber)), fgcmd: .[4]}) | sort_by(.root)) as $R
     | ($listen | lines | reduce .[] as $l ({}; .[$l[0]] += [$l[1] | tonumber])) as $L
     | ($cwds | lines | map({key: .[0], value: .[1]}) | from_entries) as $C
-    | [.[] | select((.is_plugin | not) and .tab_name != $hub)] | sort_by(.id)
+    # Not the short-lived panes of the keys (hub-run --switch, --launcher).
+    | [.[] | select((.is_plugin | not) and .tab_name != $hub
+                    and ((.terminal_command // "") | test("hub-run --(switch|launcher)") | not))] | sort_by(.id)
     # A pane gets the first free root process whose foreground command is the pane command,
     # in the same folder when there is one (panes and roots both go in start order). When
     # zellij gives no command (it can be null), the only free root in the pane folder.
@@ -294,6 +296,69 @@ cmd_switch() {
   [[ -n "$dir" && -d "$dir" ]] || dir=${WT_ROOTS%%:*}
   tid=$(ensure_tab "$dir") || return 0
   zellij -s "$WT_HUB_SESSION" action go-to-tab-by-id "$tid" >/dev/null 2>&1
+}
+
+# Ctrl g r (a zellij Run binding, in a floating pane): a prompt that starts a command with
+# hub-run, in the picked worktree (from the hub tab) or in the worktree of the tasks tab you are
+# on. With zsh it is your own zsh (your .zshrc: completion, aliases, history, prompt) whose Enter
+# hands the line to hub-run and closes the pane; another shell gets a plain prompt.
+cmd_launcher() {
+  local tabs active tid dir name zd line
+  tabs=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null)
+  active=$(jq -r 'first(.[] | select(.active) | .name) // empty' <<<"$tabs")
+  if [[ "$active" == "$HUB_TAB" || -z "$active" ]]; then
+    dir=$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)
+  else
+    tid=$(jq -r 'first(.[] | select(.active) | .tab_id)' <<<"$tabs")
+    dir=$(tasks_json 2>/dev/null | jq -r --argjson t "$tid" 'first(.[] | select(.tab_id == $t) | .cwd) // empty')
+  fi
+  [[ -n "$dir" && -d "$dir" ]] || dir=${WT_ROOTS%%:*}
+  dir=$(wtl_toplevel "$dir")
+  name=$(tab_name "$dir")
+  cd "$dir" || exit 1
+  if [[ "$(basename "${SHELL:-}")" != zsh ]]; then
+    printf '\e[1;34mrun in %s\e[0m · Enter: run in its tasks tab · Ctrl-C: cancel\n' "$name"
+    HISTFILE="$STATE_DIR/launcher.history"
+    set -o history
+    history -r "$HISTFILE" 2>/dev/null
+    read -r -e -p '❯ ' line || exit 0
+    [[ -n "${line//[[:space:]]/}" ]] || exit 0
+    history -s "$line"; history -w "$HISTFILE" 2>/dev/null
+    "$SELF" -- "$line" >/dev/null || { read -r -s -n 1 -p 'Press a key.' _; }
+    exit 0
+  fi
+  # zsh reads its startup files from ZDOTDIR: ours load yours ($HOME), then the .zshrc adds the
+  # launcher's Enter.
+  zd="$STATE_DIR/zdotdir"
+  mkdir -p "$zd"
+  for f in .zshenv .zprofile .zlogin; do
+    printf '[[ -f "$HOME/%s" ]] && source "$HOME/%s"\n' "$f" "$f" >"$zd/$f"
+  done
+  cat >"$zd/.zshrc" <<'ZSH'
+ZDOTDIR=$HOME
+[[ -f "$HOME/.zshrc" ]] && source "$HOME/.zshrc"
+# Enter: the line goes into your history and to hub-run (in this worktree's tasks tab), and the
+# launcher closes. An empty line or Ctrl-C closes it.
+_wt_hub_launch() {
+  if [[ -z ${BUFFER//[[:space:]]/} ]]; then BUFFER=' exit'; zle .accept-line; return; fi
+  print -s -- "$BUFFER"
+  WT_HUB_LINE=$BUFFER
+  BUFFER=' _wt_hub_run'
+  zle .accept-line
+}
+_wt_hub_run() {
+  "$HOME/.local/bin/hub-run" -- "$WT_HUB_LINE" >/dev/null || read -sk1 '?Press a key.'
+  exit
+}
+_wt_hub_nohist() { [[ $1 != ' _wt_hub_run'* && $1 != ' exit'* ]]; }
+zshaddhistory_functions+=(_wt_hub_nohist)
+zle -N _wt_hub_launch
+bindkey '^M' _wt_hub_launch
+bindkey '^J' _wt_hub_launch
+TRAPINT() { exit 0; }
+print -P "%B%F{blue}run in $WT_HUB_LAUNCH_IN%f%b · Enter: run in its tasks tab · Ctrl-C: cancel"
+ZSH
+  WT_HUB_LAUNCH_IN=$name ZDOTDIR=$zd exec "$SHELL" -i -l
 }
 
 # The tasks tab of worktree $1, for the list's remove (wt-sidebar): --name prints its name (read
@@ -558,6 +623,7 @@ case ${1:-} in
   --hook) cmd_hook ;;
   --where) shift; cmd_where "$@" ;;
   --switch) cmd_switch ;;
+  --launcher) cmd_launcher ;;
   --worktree-tab) shift; cmd_worktree_tab "$@" ;;
   --close-tab) shift; cmd_close_tab "$@" ;;
   ls) shift; cmd_ls "$@" ;;

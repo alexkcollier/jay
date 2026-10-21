@@ -164,6 +164,7 @@ it off. Without tab control:
        bind "3" { MoveFocus "right"; MoveFocus "right"; SwitchToMode "locked"; }
        bind ";" { FocusLastPane; SwitchToMode "locked"; }
        bind "Tab" { Run "/Users/<you>/.local/bin/hub-run" "--switch" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }
+       bind "r" { Run "/Users/<you>/.local/bin/hub-run" "--launcher" { floating true; close_on_exit true; x "10%"; y "15%"; width "80%"; height "12"; }; SwitchToMode "locked"; }
    }
    ```
 4. Start the hub: `wt hub`. At the first start, zellij asks for the bar's permissions: click
@@ -376,6 +377,12 @@ hub tab, `◆ HUB › tasks <its worktree>` on a tasks tab, with where Ctrl g Ta
   worktree row; a new tab when it has none); from a tasks tab back to the hub. zellij has no key
   action for a tab by name, so the key runs `hub-run --switch` in a floating pane of 1 cell that
   closes at once. A pick does not change the tab you are on.
+- **Launcher** (Ctrl g `r`, from any tab): a floating prompt in the picked worktree (from the
+  hub tab) or in the worktree of the tasks tab you are on. It is your own zsh, with your
+  `.zshrc`: completion, history, autosuggestions and the prompt work as in a terminal. Enter
+  starts the line with `hub-run` in that worktree's tasks tab (it gets its own pane, a name in
+  the bar, run again and restart), puts it in your history, and closes the launcher; you stay
+  where you are. An empty line or Ctrl-C closes it. With another shell it is a plain prompt.
 - **By hand**: type the command in a shell of the tab, as in any terminal. A tab always has a
   free shell in its worktree: when a command takes the last one, the hub opens a new one (within
   3 s), without moving your focus. More panes: Ctrl g `p` `n` (zellij's pane mode; the new pane
@@ -543,6 +550,7 @@ to locked mode.
 | Ctrl g, `h` / `l` | pane to the left / right |
 | Ctrl g, `;` | last pane |
 | Ctrl g, Tab | hub tab ⇄ the picked worktree's tasks tab |
+| Ctrl g, `r` | the launcher: start a task in the picked worktree (or this tab's worktree) |
 | Ctrl g, Ctrl q | quit the hub (the agents keep running) |
 | Ctrl g, Ctrl g / Esc / Enter | back to locked mode |
 | Ctrl g, `p` `t` `r` `s` `m` `o` | zellij's pane, tab, resize, scroll, move and session modes |
@@ -623,7 +631,7 @@ Hooks and internal commands (not for hand use): `claude-notify` (Stop, Notificat
 `claude-turn-snapshot` (UserPromptSubmit, Stop), `hub-run --hook` (SessionStart), `hub-run --bar`
 (the bar's tasks), `hub-run --tick` (the list's tick: a free shell in each tasks tab, then the
 bar's tasks), `hub-run --where` (the hub banner's worktree, at each pick), `hub-run --switch`
-(Ctrl g Tab), `hub-run --worktree-tab <dir> --name|--tasks` and `hub-run --close-tab <name>`
+(Ctrl g Tab), `hub-run --launcher` (Ctrl g r), `hub-run --worktree-tab <dir> --name|--tasks` and `hub-run --close-tab <name>`
 (`d` on a worktree), `hub-run --exec` (a pane that `hub-run` started), `wt-sidebar` (the list),
 `wt-hub-pane agent|review|files` (the panes), `wt-hub-keys` (tuicr's `t` and `e`).
 
@@ -666,6 +674,8 @@ In `~/.local/state/`:
 | `wt-hub-prune.log` | each agent the list pruned, and each turn chain removed |
 | `claude-notify.log` | one line per notify hook call, and the output of notice clicks |
 | `hub-tasks/<pid>.exit`, `<pid>.again` | the exit code of a `hub-run` pane whose command ended; a restart request (no output is stored) |
+| `hub-tasks/zdotdir/` | the launcher's zsh startup files: they load yours, then add its Enter |
+| `hub-tasks/launcher.history` | the launcher's history, for a shell other than zsh |
 
 Elsewhere:
 
