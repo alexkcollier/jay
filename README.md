@@ -342,8 +342,10 @@ prompt, name and short id, in the same process. Only its session id changes. So 
 `~/.local/state/wt-hub-claude` and the middle column stay correct. The old conversation stays
 in its transcript.
 
-- The agent must be idle. `/clear` typed into a question or a permission prompt would answer
-  it. When the agent works or waits for you, the list says so and does nothing.
+- The agent must be idle or unread (`○` or `✓`). `/clear` typed into a question or a permission
+  prompt would answer it. When the agent works, waits for you or failed, the list says so and
+  does nothing. An agent that only waits for its workers (state `working`, status `idle`) is
+  idle: `c` clears it, and it forgets those workers. Its workers keep running.
 - An orchestrator in a worktree that it entered: tell it to leave the worktree first
   (`ExitWorktree`).
 - All `claude attach` clients of an agent share one input box. `claude-clear` deletes a draft
@@ -708,13 +710,6 @@ point.
 | `✓` bold magenta | done, unread: a turn ended after you last saw the agent |
 | `●` dim green | agent works: its process is busy |
 | `○` dim | idle: you saw it since its last turn, it is in the middle column now, or it waits for its first prompt |
-
-The agents sort in that order. An agent whose turn goes on while its process is idle (state
-`working`, status `idle`: it waits for workers it started) does not work: it is unread or idle.
-You see an agent when it comes into or leaves the middle column, when `wt go` shows it, and
-when its turn ends while its own Ghostty tab is in front. The Stop hook (`claude-notify`)
-records when a turn ends. An agent with no turn since this record started is idle. The list,
-`wt all`, `wt agents` and the mod use one rule (`wtl_agent_phases` in `lib/wt-lib.sh`).
 | `bg 12m` (dim, after the name) | background agent; age (m, h, d) |
 | Octicon home (U+F46D), before the branch | the main checkout |
 | Octicon diff (U+F440), yellow | uncommitted changes |
@@ -724,6 +719,14 @@ records when a turn ends. An agent with no turn since this record started is idl
 | Octicon alert (U+F421), red | a merge into the default branch would conflict |
 | Octicon check (U+F42E), dim | safe to remove: the branch is empty or integrated (its name is dim too) |
 | Octicon git-merge (U+F419), red | conflicts now, or a rebase or merge in progress |
+
+The agents sort in the order of their state signs in the table (`!`, `✗`, `✓`, `●`, `○`). An
+agent whose turn goes on while its process is idle (state `working`, status `idle`: it waits
+for workers it started) does not work: it is unread or idle. You see an agent when it comes
+into or leaves the middle column, when `wt go` shows it, and when its turn ends while its own
+Ghostty tab is in front. The Stop hook (`claude-notify`) records when a turn ends. An agent
+with no turn since this record started is idle. The list, `wt all`, `wt agents` and the mod
+use one rule (`wtl_agent_phases` in `lib/wt-lib.sh`). `c` and `d` use it too.
 
 "On the remote" means the branch has a tracking branch, or `origin/<branch>` exists (as for a PR
 pushed without `-u`). The list uses local refs only; it does not fetch.

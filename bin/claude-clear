@@ -3,9 +3,9 @@
 # through a hidden `claude attach`. Claude keeps the session's system prompt (its
 # --append-system-prompt), name, short id and process; only the session id changes, so the turn
 # chain, the hub Claude's id file and a `claude attach` that shows the agent stay right.
-# Only an idle agent (status idle, not working): /clear typed into a question or a permission
-# prompt would answer it. Exit 0 when the session id changed, 1 when it did not, 2 for usage,
-# 3 when the agent is missing or not idle.
+# Only an idle agent (see idle(): the phase rule of the list): /clear typed into a question or a
+# permission prompt would answer it. Exit 0 when the session id changed, 1 when it did not, 2 for
+# usage, 3 when the agent is missing or not idle.
 #
 # Facts found by test (Claude Code 2.1.306): all attach clients share one input box, and the
 # agent's screen takes the size of the client that joined last and keeps it after that client
@@ -23,6 +23,24 @@ def agent(short):
         return next((a for a in json.loads(out) if a.get("id") == short), None)
     except (OSError, ValueError, subprocess.TimeoutExpired):
         return None
+
+
+def idle(a):
+    """The phase rule of wtl_agent_phases (lib/wt-lib.sh) without its marks: the agent is idle or
+    unread, not working, input or failed. Its process is idle (status idle), so a state working
+    only means that it waits for its workers. A blocked agent asks something, except a new one
+    that waits for its first prompt (wtl_fresh_ids)."""
+    state = a.get("state")
+    if a.get("status") != "idle" or state in ("failed", "stopped"):
+        return False
+    if state == "blocked":
+        jobs = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+        try:
+            with open(os.path.join(jobs, "jobs", a.get("id", ""), "state.json")) as f:
+                return json.load(f).get("needs") == "send a prompt to start"
+        except (OSError, ValueError):
+            return False
+    return True
 
 
 def client_size(short):
@@ -58,8 +76,8 @@ def main():
     if a is None or a.get("kind") != "background":
         print(f"No background agent {short}.", file=sys.stderr)
         return 3
-    if a.get("state") == "working" or a.get("status") != "idle":
-        print(f"{a.get('name') or short} is working or waits for you. Try again when it is idle.", file=sys.stderr)
+    if not idle(a):
+        print(f"{a.get('name') or short} is working, waits for you or failed. Try again when it is idle.", file=sys.stderr)
         return 3
     old = a.get("sessionId")
     rows, cols = client_size(short)
@@ -94,25 +112,29 @@ def main():
             os.write(fd, ch)
             time.sleep(gap)
 
-    rc = 1
+    rc, why = 1, "the session id did not change after /clear."
     try:
-        if pump(10, quiet=1.0):
-            typ([b"\x15"] * 4, gap=0.05)
-            pump(0.3)
-            typ([c.encode() for c in "/clear"])
-            pump(0.5)
-            os.write(fd, b"\r")
-            end = time.time() + 20
-            while time.time() < end:
-                pump(1)
-                now = agent(short)
-                if now and now.get("sessionId") and now.get("sessionId") != old:
-                    print(f"{short}: new session {now['sessionId']}")
-                    rc = 0
-                    break
-        if rc:
-            print(f"{short}: the session id did not change after /clear.", file=sys.stderr)
+        if not pump(10, quiet=1.0):
+            raise OSError
+        typ([b"\x15"] * 4, gap=0.05)
+        pump(0.3)
+        typ([c.encode() for c in "/clear"])
+        pump(0.5)
+        os.write(fd, b"\r")
+        end = time.time() + 20
+        while time.time() < end:
+            pump(1)
+            now = agent(short)
+            if now and now.get("sessionId") and now.get("sessionId") != old:
+                print(f"{short}: new session {now['sessionId']}")
+                rc = 0
+                break
+    except OSError:
+        # The client ended (its pty closed): claude attach failed, or the agent ended.
+        why = "claude attach ended before /clear went in. Nothing was sent."
     finally:
+        if rc:
+            print(f"{short}: {why}", file=sys.stderr)
         try:
             os.write(fd, b"\x1a")  # Ctrl+Z: leave the agent; it keeps running
             pump(1)

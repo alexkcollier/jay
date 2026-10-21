@@ -433,10 +433,13 @@ clear_context() {
       return 0 ;;
   esac
   name=$(jq -r '.name // .id' <<<"$agent")
-  if [[ "$(jq -r '.state // ""' <<<"$agent")" == working || "$(jq -r '.status // ""' <<<"$agent")" != idle ]]; then
-    pause "\"$name\" is working or waits for you. Try again when it is idle."
-    return 0
-  fi
+  # The phase rule of the list (wtl_agent_phases): unread and idle are idle. An agent whose state
+  # is working while its process is idle only waits for its workers, so it is idle too.
+  case $(wtl_agent_phases "[$agent]" "" | jq -r '.[0].phase') in
+    input) pause "\"$name\" waits for you: it asks something, or it waits for a permission. Answer it first."; return 0 ;;
+    failed) pause "\"$name\" failed. Look at it first (Enter on its row)."; return 0 ;;
+    working) pause "\"$name\" is working. Try again when it is idle."; return 0 ;;
+  esac
   confirm "Give \"$name\" ($short) a fresh context?
 
 The list types /clear into it. It starts a new conversation with the same system prompt, name and id. The old conversation stays in its transcript." "y: clear" || return 0
@@ -613,7 +616,8 @@ Their transcripts stay." || return 0
 }
 
 # The agents in agents JSON $1 whose folder is $2 or in it, as what<TAB>id<TAB>name. what is open
-# (an interactive session: the list cannot remove it), busy (it works or waits for input), visit
+# (an interactive session: the list cannot remove it), busy (its phase is working or input, see
+# wtl_agent_phases: an agent that only waits for its workers is not busy), visit
 # (it entered the worktree, see wtl_jobs; also when it does not run now) or idle. Agent id $3
 # (optional) is idle when it is a visit: d on that agent takes its worktree with it.
 agents_in() {
@@ -621,9 +625,9 @@ agents_in() {
     def inside($d): $d == $p or ($d | startswith($p + "/"));
     .[] | select(.state != "stopped" and (inside(.cwd // "") or inside($jobs[.id // ""].tree // "")))
     | [(if .kind != "background" or .id == null then "open"
-        elif (.state | IN("working", "blocked")) or (.status | IN("busy", "waiting")) then "busy"
+        elif .phase | IN("working", "input") then "busy"
         elif $jobs[.id].tree != null and .id != $take then "visit"
-        else "idle" end), (.id // ""), (.name // .id // .sessionId[0:8])] | @tsv' <<<"$1"
+        else "idle" end), (.id // ""), (.name // .id // .sessionId[0:8])] | @tsv' <<<"$(wtl_agent_phases "$1" "")"
 }
 
 # Return 0 after a note when agents TSV $1 (from agents_in) has an agent that the list must not
