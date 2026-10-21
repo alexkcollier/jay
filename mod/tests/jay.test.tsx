@@ -4,7 +4,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { findAgent, groupsOf, parseAgents, parseWorktrees, phaseOf, summaryOf, transitions } from '../hooks/model'
 
-const PLUGIN = 'wt-hub'
+const PLUGIN = 'jay'
 const HOME = '/Users/me'
 const SHOP = '/Users/me/projects/acme/shop'
 const FEATURE = '/Users/me/projects/acme/shop.feat-login'
@@ -37,8 +37,8 @@ function host(on: On, agents: { current: RawAgent[] }) {
     const [program = ''] = e.argv
     const ok = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
     if (program === '/bin/sh' && String(e.argv[2] ?? '').includes('command -v claude')) return ok(`${HOME}\t`)
-    if (program.endsWith('/wt-all')) return ok(worktreeLines)
-    if (program.endsWith('/wt-agents') || program.endsWith('/claude')) return ok(JSON.stringify(agents.current))
+    if (program.endsWith('/jay-all')) return ok(worktreeLines)
+    if (program.endsWith('/jay-agents') || program.endsWith('/claude')) return ok(JSON.stringify(agents.current))
     return ok('')
   })
   on('ui.toast', (_$, e) => {
@@ -69,8 +69,8 @@ function host(on: On, agents: { current: RawAgent[] }) {
   return { calls, toasts, sent, files, opened, status: () => status }
 }
 
-const wt = ($: Engine, args: string) =>
-  $.command.run({ command: 'wt', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+const jay = ($: Engine, args: string) =>
+  $.command.run({ command: 'jay', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
 
 describe('model', () => {
   test('phases follow the agent view fields', () => {
@@ -84,7 +84,7 @@ describe('model', () => {
     expect(phaseOf('failed', 'idle')).toBe('failed')
   })
 
-  test('the phase from wt agents --json wins: it knows what the user saw', () => {
+  test('the phase from jay agents --json wins: it knows what the user saw', () => {
     const rows = parseWorktrees(worktreeLines)
     const busy = parseAgents(JSON.stringify([hub, worker('working')]))
     const unread = parseAgents(JSON.stringify([hub, { ...worker('working'), status: 'idle', phase: 'unread' }]))
@@ -134,14 +134,14 @@ describe('model', () => {
   })
 })
 
-test('/wt go passes the whole name, without quotes, to wt-go', async ($, on) => {
+test('/jay go passes the whole name, without quotes, to jay-go', async ($, on) => {
   mock.clock(on, { now: T0 })
   const seen = host(on, { current: [] })
   await $.session.start({ cwd: SHOP, surface: 'terminal', isInteractive: true })
-  await wt($, 'go "login-44 work"')
-  expect(seen.calls.at(-1)).toEqual([`${HOME}/.local/bin/wt-go`, 'login-44 work'])
-  await wt($, 'go login-44 work')
-  expect(seen.calls.at(-1)).toEqual([`${HOME}/.local/bin/wt-go`, 'login-44 work'])
+  await jay($,'go "login-44 work"')
+  expect(seen.calls.at(-1)).toEqual([`${HOME}/.local/bin/jay-go`, 'login-44 work'])
+  await jay($,'go login-44 work')
+  expect(seen.calls.at(-1)).toEqual([`${HOME}/.local/bin/jay-go`, 'login-44 work'])
 })
 
 test('the hub polls, toasts state changes, draws the sidebar and reaches agents', async ($, on) => {
@@ -152,7 +152,7 @@ test('the hub polls, toasts state changes, draws the sidebar and reaches agents'
 
   await $.session.start({ cwd: SHOP, surface: 'terminal', isInteractive: true })
 
-  const on1 = await wt($, '')
+  const on1 = await jay($,'')
   expect(on1.text).toContain('Hub on.')
   expect(seen.opened).toEqual([])
   expect(seen.toasts).toEqual([])
@@ -169,23 +169,23 @@ test('the hub polls, toasts state changes, draws the sidebar and reaches agents'
       plugin: PLUGIN,
       surface,
       component: 'Pane',
-      requestId: 'wt-hub',
+      requestId: 'jay',
       props: { title: 'Worktrees', isFocused: true, bodyColumns: 48, placement: 'dock' } as never,
     })
     expect(await ui.find({ type: 'Text', text: /acme › shop/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Fix the login/ })).toBeDefined()
     await ui.press({ key: 'go:aaaa1111-2222' })
-    expect(seen.calls.at(-1)).toEqual([`${HOME}/.local/bin/wt-go`, 'aaaa1111-2222'])
+    expect(seen.calls.at(-1)).toEqual([`${HOME}/.local/bin/jay-go`, 'aaaa1111-2222'])
     await ui.press({ key: `open:${FEATURE}` })
-    expect(seen.calls.at(-1)).toEqual([`${HOME}/.local/bin/wt-open`, FEATURE])
+    expect(seen.calls.at(-1)).toEqual([`${HOME}/.local/bin/jay-open`, FEATURE])
     await ui.unmount()
   }
 
-  const msg = await wt($, 'msg aaaa1111 use the staging config')
+  const msg = await jay($,'msg aaaa1111 use the staging config')
   expect(msg.text).toBe('Sent to shop/login.')
   expect(seen.sent).toEqual([{ to: 'aaaa1111-2222', text: 'use the staging config' }])
 
-  const off = await wt($, 'off')
+  const off = await jay($,'off')
   expect(off.text).toBe('Hub off.')
   expect(seen.status()).toBeUndefined()
   const polls = seen.calls.length
@@ -194,30 +194,30 @@ test('the hub polls, toasts state changes, draws the sidebar and reaches agents'
   expect(seen.calls.length).toBe(polls)
 })
 
-test('/wt new passes the arguments through a shell to wt-new', async ($, on) => {
+test('/jay new passes the arguments through a shell to jay-new', async ($, on) => {
   mock.clock(on, { now: T0 })
   const seen = host(on, { current: [] })
   await $.session.start({ cwd: SHOP, surface: 'terminal', isInteractive: true })
-  await wt($, 'new feat/x -t "Try it" -- write the tests')
-  const call = seen.calls.find(argv => argv[0] === '/bin/sh' && String(argv[3] ?? '').endsWith('/wt-new'))
+  await jay($,'new feat/x -t "Try it" -- write the tests')
+  const call = seen.calls.find(argv => argv[0] === '/bin/sh' && String(argv[3] ?? '').endsWith('/jay-new'))
   expect(call?.[2]).toBe('exec "$0" feat/x -t "Try it" -- write the tests')
 })
 
-test('/wt turns the hub on with no dock pane; a finished agent toasts; /wt pane opens the dock', async ($, on) => {
+test('/jay turns the hub on with no dock pane; a finished agent toasts; /jay pane opens the dock', async ($, on) => {
   const clock = mock.clock(on, { now: T0 })
   const agents = { current: [hub, worker('working')] }
   const seen = host(on, agents)
   await $.session.start({ cwd: SHOP, surface: 'terminal', isInteractive: true })
-  await wt($, '')
+  await jay($,'')
   expect(seen.status()).toBe('● 1 working')
   expect(seen.opened).toEqual([])
   agents.current = [hub, worker('done')]
   await clock.advance(3000)
   await clock.settle()
   expect(seen.toasts).toEqual(['✓ finished: acme › shop · login'])
-  const pane = await wt($, 'pane')
+  const pane = await jay($,'pane')
   expect(pane.text).toBe('Worktree list opened in the dock.')
-  expect(seen.opened).toEqual(['wt-hub'])
+  expect(seen.opened).toEqual(['jay'])
 })
 
 test('a headless session does not start the hub', async ($, on) => {
@@ -225,5 +225,5 @@ test('a headless session does not start the hub', async ($, on) => {
   const seen = host(on, { current: [hub] })
   await $.session.start({ cwd: SHOP, surface: null, isInteractive: false })
   expect(seen.status()).toBeUndefined()
-  expect(seen.calls.some(argv => argv[0]?.endsWith('/claude') || argv[0]?.endsWith('/wt-agents'))).toBe(false)
+  expect(seen.calls.some(argv => argv[0]?.endsWith('/claude') || argv[0]?.endsWith('/jay-agents'))).toBe(false)
 })

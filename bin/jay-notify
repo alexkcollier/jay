@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# claude-notify — Claude Code hook (Stop, Notification) that posts a macOS notice
+# jay-notify — Claude Code hook (Stop, Notification) that posts a macOS notice
 # naming client › repo · branch, the task note and the agent's message.
 # No notice while Ghostty is in front with a selected tab that shows the agent: its own tab,
 # or the hub's tab. Without terminal-notifier it does nothing.
-# Click: `wt go <session>` brings the agent in front.
+# Click: `jay go <session>` brings the agent in front. JAY_NOTIFY_LOG: a log of each call.
 set -uo pipefail
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-source "$HOME/.local/lib/wt-lib.sh"
+source "$HOME/.local/lib/jay-lib.sh"
 NOTIFIER=$(command -v terminal-notifier 2>/dev/null || true)
 
 input=$(cat)
@@ -26,10 +26,10 @@ case $event in
     text=$(jq -r '.message // ""' <<<"$input")
     ;;
   Stop)
-    # The hub's unread sign (wtl_agent_phases): the agent's turn ended now. Not while it has
+    # The hub's unread sign (jay_agent_phases): the agent's turn ended now. Not while it has
     # background tasks: the turn goes on when they end.
-    key=$(wtl_agent_key "$sid")
-    jq -e '(.background_tasks // []) | length > 0' <<<"$input" >/dev/null || wtl_mark ended "$key"
+    key=$(jay_agent_key "$sid")
+    jq -e '(.background_tasks // []) | length > 0' <<<"$input" >/dev/null || jay_mark ended "$key"
     icon="✓" headline="Turn finished"
     text=$(jq -r '.last_assistant_message // ""' <<<"$input" | awk '
       /^(result|needs input|failed):/ { flagged = $0 }
@@ -39,7 +39,7 @@ case $event in
   *) exit 0 ;;
 esac
 
-[[ -n "${WT_NOTIFY_LOG:-}" ]] && printf '%s %s %s %s bg=%s\n' "$(date '+%F %T')" "$event" "$type" "$cwd" "${CLAUDE_JOB_DIR:+yes}" >>"$WT_NOTIFY_LOG"
+[[ -n "${JAY_NOTIFY_LOG:-}" ]] && mkdir -p "$(dirname "$JAY_NOTIFY_LOG")" && printf '%s %s %s %s bg=%s\n' "$(date '+%F %T')" "$event" "$type" "$cwd" "${CLAUDE_JOB_DIR:+yes}" >>"$JAY_NOTIFY_LOG"
 
 claude_pid() {
   local p=${CLAUDE_PID:-$PPID} comm
@@ -55,26 +55,26 @@ claude_pid() {
 # zellij pane in that tab does not matter): its own tab (`claude attach`, its zellij session,
 # or the terminal of an interactive session), or the hub on its "hub" tab, whose list shows
 # every agent (on its tasks tab the list is not on screen).
-if wtl_gh_ok && [[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
-  selected=$(wtl_gh_tabs | awk -F'\t' '$2 == "true" && $3 == "true" { print $1; exit }')
+if jay_gh_ok && [[ "$(jay_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
+  selected=$(jay_gh_tabs | awk -F'\t' '$2 == "true" && $3 == "true" { print $1; exit }')
   tabs=""
   if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
-    tabs=$(wtl_gh_tab_for_command "^claude attach (${sid:0:8}|$(basename "$CLAUDE_JOB_DIR"))" || true)
-  elif wtl_in_zellij; then
-    tabs=$(wtl_gh_tab_for_session "$ZELLIJ_SESSION_NAME" || true)
+    tabs=$(jay_gh_tab_for_command "^claude attach (${sid:0:8}|$(basename "$CLAUDE_JOB_DIR"))" || true)
+  elif jay_in_zellij; then
+    tabs=$(jay_gh_tab_for_session "$ZELLIJ_SESSION_NAME" || true)
   elif pid=$(claude_pid); then
     tty=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
-    [[ -n "$tty" && "$tty" != "??" ]] && tabs=$(wtl_gh_tab_for_tty "$tty" || true)
+    [[ -n "$tty" && "$tty" != "??" ]] && tabs=$(jay_gh_tab_for_tty "$tty" || true)
   fi
   # In its own tab the user sees the agent end its turn: it is not unread. (In the hub, the agent
   # in the middle column is seen; the list alone does not show the turn.)
   if [[ -n "$selected" ]] && grep -qxF "$selected" <<<"$tabs"; then
-    [[ "$event" == Stop ]] && wtl_mark seen "$key"
+    [[ "$event" == Stop ]] && jay_mark seen "$key"
     exit 0
   fi
-  if wtl_hub_live && [[ "$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null \
+  if jay_hub_live && [[ "$(zellij -s "$JAY_SESSION" action list-tabs -j 2>/dev/null \
     | jq -r 'first(.[] | select(.active) | .name) // "hub"' 2>/dev/null)" == hub ]]; then
-    tabs+=$'\n'$(wtl_gh_tab_for_session "$WT_HUB_SESSION" || true)
+    tabs+=$'\n'$(jay_gh_tab_for_session "$JAY_SESSION" || true)
   fi
   [[ -n "$selected" ]] && grep -qxF "$selected" <<<"$tabs" && exit 0
 fi
@@ -82,7 +82,7 @@ fi
 [[ -n "$NOTIFIER" && -x "$NOTIFIER" ]] || exit 0
 # No notice while the agent has background tasks: the turn goes on when they end.
 [[ "$event" == Stop ]] && jq -e '(.background_tasks // []) | length > 0' <<<"$input" >/dev/null && exit 0
-IFS=$'\t' read -r client repo branch top < <(wtl_describe "${cwd:-$PWD}")
+IFS=$'\t' read -r client repo branch top < <(jay_describe "${cwd:-$PWD}")
 task=$(wt -C "$top" config state vars get task 2>/dev/null)
 sound=()
 [[ "$headline" == "Needs input" ]] && sound=(-sound default)
@@ -93,8 +93,8 @@ sound=()
     -subtitle "$branch${task:+ — $task}" \
     -message "${text:-$headline}" \
     -group "claude-$sid" \
-    -execute "$(printf '%q ' "$HOME/.local/bin/wt-go" "$sid") >>$(printf '%q' "$HOME/.local/state/claude-notify.log") 2>&1" \
+    -execute "$(printf '%q ' "$HOME/.local/bin/jay-go" "$sid") >>$(printf '%q' "$JAY_STATE/notify.log") 2>&1" \
     ${sound[@]+"${sound[@]}"}
-) </dev/null >>"${WT_NOTIFY_LOG:-/dev/null}" 2>&1 &
+) </dev/null >>"${JAY_NOTIFY_LOG:-/dev/null}" 2>&1 &
 disown
 exit 0

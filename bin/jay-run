@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
-# hub-run — long-running commands (dev servers, watchers, docker compose) in the hub, in a tab per
+# jay run — long-running commands (dev servers, watchers, docker compose) in the hub, in a tab per
 # worktree, where you and agents both see them. Each pane outside the "hub" tab is a task: a shell
-# you type in, or a pane that hub-run started. Output stays in zellij's scrollback: no log files.
-#   hub-run [-n name] [-w [-t s]] [--] <command...>   a new pane in this worktree's tab, in this
+# you type in, or a pane that jay run started. Output stays in zellij's scrollback: no log files.
+#   jay run [-n name] [-w [-t s]] [--] <command...>   a new pane in this worktree's tab, in this
 #                            folder. -w: wait until it listens (see wait). Without the hub: runs here.
-#   hub-run ls [--json]      the tasks: name, state, ports, worktree, command; and the ones that a
+#   jay run ls [--json]      the tasks: name, state, ports, worktree, command; and the ones that a
 #                            hub restart took (state gone), with the command that starts them again
-#   hub-run log <task> [-n lines | --all]   what the pane shows, as plain text (default 100 lines)
-#   hub-run wait <task> [-t seconds]   wait until the task listens on a port; print its URLs
-#   hub-run stop <task>      Ctrl-C to the task; a pane that hub-run started closes
-#   hub-run restart <task>   stop and start again, in the same pane (panes that hub-run started)
-#   hub-run port <port>      who listens on a port
+#   jay run log <task> [-n lines | --all]   what the pane shows, as plain text (default 100 lines)
+#   jay run wait <task> [-t seconds]   wait until the task listens on a port; print its URLs
+#   jay run stop <task>      Ctrl-C to the task; a pane that jay run started closes
+#   jay run restart <task>   stop and start again, in the same pane (panes that jay run started)
+#   jay run port <port>      who listens on a port
 # <task>: a name, a pane id (terminal_3 or 3), or a part of the command or folder.
 set -uo pipefail
-source "$HOME/.local/lib/wt-lib.sh"
+source "$HOME/.local/lib/jay-lib.sh"
 
 # The hub's own tab (list, agent, review); every other tab of the hub is a worktree's tasks tab.
 HUB_TAB=hub
-STATE_DIR="$HOME/.local/state/hub-tasks"
-# A record of each task that hub-run started (see record_task), and of the ones a hub restart took.
+STATE_DIR="$JAY_STATE/tasks"
+# A record of each task that jay run started (see record_task), and of the ones a hub restart took.
 STARTED="$STATE_DIR/started"
 GONE="$STATE_DIR/gone"
-SELF="$HOME/.local/bin/hub-run"
+SELF="$HOME/.local/bin/jay-run"
 
-die() { printf 'hub-run: %s\n' "$*" >&2; exit 1; }
+die() { printf 'jay run: %s\n' "$*" >&2; exit 1; }
 
 usage() { sed -n '2,13s/^# \{0,1\}//p' "$0"; }
 
@@ -33,7 +33,7 @@ fields() { jq -r "$1"' | map(tostring) | join("\u001f")'; }
 
 # zellij -s <a session that is not there> exits 0: look for the session first.
 hub_answers() {
-  wtl_live_sessions | grep -qxF "$WT_HUB_SESSION" && zellij -s "$WT_HUB_SESSION" action list-clients >/dev/null 2>&1
+  jay_live_sessions | grep -qxF "$JAY_SESSION" && zellij -s "$JAY_SESSION" action list-clients >/dev/null 2>&1
 }
 
 # The command line of args "$@": one arg is a shell string as it is; several are quoted.
@@ -57,18 +57,18 @@ short_name() {
     | if ($b | test("^[A-Za-z][A-Za-z0-9:_.-]{0,19}$")) then "\($a) \($b)" else $a end'
 }
 
-# --- The pane side: `hub-run --exec <command line>` runs in each pane that hub-run starts ---
+# --- The pane side: `jay-run --exec <command line>` runs in each pane that jay run starts ---
 
 # The command runs in the foreground, in the pane's process group (no job control here), so
-# Ctrl-C reaches it and all its children; this loop ignores it and goes on. `hub-run restart`
+# Ctrl-C reaches it and all its children; this loop ignores it and goes on. `jay run restart`
 # writes <pid>.again and stops the command from outside; the loop then starts it again.
 # The command runs as you would type it: zsh and bash read your rc file (aliases, mise), with
-# job control off (+m), so the command stays in this group. WT_TASK_SHELL overrides it.
+# job control off (+m), so the command stays in this group. JAY_TASK_SHELL overrides it.
 run_pane() {
   local cmd=$1 rc r var line sh=()
   for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do unset "$var"; done
-  if [[ -n "${WT_TASK_SHELL:-}" ]]; then
-    read -ra sh <<<"$WT_TASK_SHELL"
+  if [[ -n "${JAY_TASK_SHELL:-}" ]]; then
+    read -ra sh <<<"$JAY_TASK_SHELL"
   else
     case $(basename "${SHELL:-zsh}") in
       zsh | bash) sh=("${SHELL:-/bin/zsh}" -i +m -c) ;;
@@ -98,7 +98,7 @@ run_pane() {
 }
 
 # Stop a command: Ctrl-C (SIGINT) to process group $1 first, so docker compose stops its
-# containers; after 10 s TERM, after 5 s more KILL. With $2 (the pid of a hub-run pane, which is
+# containers; after 10 s TERM, after 5 s more KILL. With $2 (the pid of a jay run pane, which is
 # in that group and ignores Ctrl-C), only its children are stopped. Fails when they still run.
 stop_group() {
   local group=$1 keep=${2:-} step
@@ -106,7 +106,7 @@ stop_group() {
   for step in INT TERM KILL; do
     case $step in
       INT) kill -INT -- "-$group" 2>/dev/null ;;
-      TERM) if [[ -n "$keep" ]]; then wtl_kill_children "$keep"; else kill -TERM -- "-$group" 2>/dev/null; fi ;;
+      TERM) if [[ -n "$keep" ]]; then jay_kill_children "$keep"; else kill -TERM -- "-$group" 2>/dev/null; fi ;;
       KILL) if [[ -n "$keep" ]]; then pkill -KILL -P "$keep"; else kill -KILL -- "-$group" 2>/dev/null; fi ;;
     esac
     for _ in $(seq $([[ $step == INT ]] && echo 100 || echo 50)); do alive || return 0; sleep 0.1; done
@@ -118,7 +118,7 @@ stop_group() {
 
 # The pid of the hub's zellij server. -a: inside a hub pane (the list's tick, the launcher) the
 # server is an ancestor, which pgrep leaves out without it.
-hub_server() { pgrep -a -f "zellij --server .*/$WT_HUB_SESSION\$" | head -1; }
+hub_server() { pgrep -a -f "zellij --server .*/$JAY_SESSION\$" | head -1; }
 
 # One line per pane of the hub: root pid<TAB>tty<TAB>foreground pid<TAB>pids (,)<TAB>foreground command.
 # The pids are the root's process tree, not the processes on its tty: turbo, for one, runs each
@@ -170,21 +170,21 @@ docker_ports() {
 panes_raw() {
   local panes procs fgs listen="" cwds
   hub_answers || return 1
-  panes=$(zellij -s "$WT_HUB_SESSION" action list-panes -a -j -c 2>/dev/null) || return 1
+  panes=$(zellij -s "$JAY_SESSION" action list-panes -a -j -c 2>/dev/null) || return 1
   jq -e 'type == "array"' <<<"$panes" >/dev/null 2>&1 || return 1
   procs=$(pane_procs)
   fgs=$(cut -f3 <<<"$procs" | paste -sd, -)
   [[ "${1:-}" == --light ]] || listen=$(listen_ports)
   cwds=$(proc_cwds "$fgs")
-  jq -c --arg hub "$HUB_TAB" --arg procs "$procs" --arg listen "$listen" --arg cwds "$cwds" --arg self "hub-run --exec " '
+  jq -c --arg hub "$HUB_TAB" --arg procs "$procs" --arg listen "$listen" --arg cwds "$cwds" --arg self "jay-run --exec " '
     def lines: split("\n") | map(select(length > 0) | split("\t"));
     ($procs | lines | map({root: (.[0] | tonumber), tty: .[1], fg: (.[2] | tonumber),
                            pids: (.[3] | split(",") | map(tonumber)), fgcmd: .[4]}) | sort_by(.root)) as $R
     | ($listen | lines | reduce .[] as $l ({}; .[$l[0]] += [$l[1] | tonumber])) as $L
     | ($cwds | lines | map({key: .[0], value: .[1]}) | from_entries) as $C
-    # Not the short-lived panes of the keys (hub-run --switch, --launcher).
+    # Not the short-lived panes of the keys (jay-run --switch, --launcher; hub-run in old binds).
     | [.[] | select((.is_plugin | not) and .tab_name != $hub
-                    and ((.terminal_command // "") | test("hub-run --(switch|launcher)") | not))] | sort_by(.id)
+                    and ((.terminal_command // "") | test("(jay|hub)-run --(switch|launcher)") | not))] | sort_by(.id)
     # A pane gets the first free root process whose foreground command is the pane command,
     # in the same folder when there is one (panes and roots both go in start order). When
     # zellij gives no command (it can be null), the only free root in the pane folder.
@@ -200,7 +200,7 @@ panes_raw() {
         | .out += [{pane: $p, proc: $m}])
     | .out[]
     | .pane as $p | .proc as $m
-    # A shell at its prompt: a default pane, or a free shell that hub-run opened ($SHELL -l).
+    # A shell at its prompt: a default pane, or a free shell that jay run opened ($SHELL -l).
     | ($m != null and $m.fg == $m.root
        and ($p.terminal_command == null or ($m.fgcmd | test("^-?(/[^ ]*/)?(zsh|bash|fish|sh)( -l| -i| --login)*$")))) as $prompt
     | (($p.terminal_command // "") | index($self)) as $at
@@ -223,7 +223,7 @@ tasks_json() {
   local raw srv
   raw=$(panes_raw) || return 1
   srv=$(hub_server)
-  # Exit codes of panes whose command ended (hub-run --exec writes them), names, who started
+  # Exit codes of panes whose command ended (jay-run --exec writes them), names, who started
   # them, worktrees and docker ports.
   local line id root rc name cwd cmd wt dport top branch repo agent
   local -a out=()
@@ -243,7 +243,7 @@ tasks_json() {
     fi
     wt=""
     if top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null); then
-      repo=$(basename "$(wtl_primary "$top")")
+      repo=$(basename "$(jay_primary "$top")")
       branch=$(git -C "$top" branch --show-current 2>/dev/null)
       wt="$repo/${branch:-$(basename "$top")}"
     fi
@@ -267,16 +267,16 @@ tasks_json() {
   printf '%s\n' ${out[@]+"${out[@]}"} | jq -s .
 }
 
-# --- Task records: <server pid>-<pane id>.json in $STARTED, for each pane that hub-run starts ---
+# --- Task records: <server pid>-<pane id>.json in $STARTED, for each pane that jay run starts ---
 # zellij starts the pane ids at 0 again in each new hub, so the hub's server pid is in the key. A
 # record says who started the task (the agent's key, as a pick in the list has it: see
 # cmd_switch) and how to start it again after a hub restart, which takes all panes with it.
 
-# Record the task that hub-run started in pane id $2 of server $1: name $3, command line $4.
+# Record the task that jay run started in pane id $2 of server $1: name $3, command line $4.
 record_task() {
   local srv=$1 id=$2 name=$3 line=$4 agent="" cwd f
   [[ -n "$srv" ]] || return 0
-  [[ -n "${CLAUDE_CODE_SESSION_ID:-}" ]] && agent=$(wtl_agent_key "$CLAUDE_CODE_SESSION_ID")
+  [[ -n "${CLAUDE_CODE_SESSION_ID:-}" ]] && agent=$(jay_agent_key "$CLAUDE_CODE_SESSION_ID")
   cwd=$(pwd -P)
   mkdir -p "$STARTED"
   jq -nc --arg name "$name" --arg cwd "$cwd" --arg line "$line" --arg agent "$agent" \
@@ -314,8 +314,8 @@ tidy_records() {
 start_again() {
   local cwd name line sq="'" esc="'\\''"
   IFS=$'\x1f' read -r cwd name line < <(fields '[.cwd, .name, .line]' <<<"$1")
-  # The line in single quotes: one arg, which hub-run runs as a shell line.
-  printf "cd %q && hub-run -n %q -w -- '%s'\n" "$cwd" "$name" "${line//$sq/$esc}"
+  # The line in single quotes: one arg, which jay run runs as a shell line.
+  printf "cd %q && jay run -n %q -w -- '%s'\n" "$cwd" "$name" "${line//$sq/$esc}"
 }
 
 # The tasks that a hub restart took, as a JSON array, oldest first: the records, with .gone (the
@@ -339,7 +339,7 @@ gone_text() {
 # stop): such a task is forgotten, and the output is a line that says so, not JSON.
 find_task() {
   local sel=$1 tasks found n gone
-  tasks=$(tasks_json) || die "the hub does not answer (start it with: wt hub)"
+  tasks=$(tasks_json) || die "the hub does not answer (start it with: jay)"
   found=$(jq -c --arg s "$sel" '
     ($s | ascii_downcase) as $l
     | ($s | sub("^terminal_"; "")) as $id
@@ -355,14 +355,14 @@ find_task() {
         // (map(select([.name, .line, .cwd] | map(ascii_downcase) | any(contains($l)))) | last) // empty')
     if [[ -n "$gone" && "${2:-}" == --forget ]]; then
       rm -f "$(jq -r .file <<<"$gone")"
-      jq -r '"\(.name): gone already (the hub started again at \(.gone | strflocaltime("%H:%M"))); hub-run forgets it"' <<<"$gone"
+      jq -r '"\(.name): gone already (the hub started again at \(.gone | strflocaltime("%H:%M"))); jay run forgets it"' <<<"$gone"
       exit 0
     fi
     [[ -n "$gone" ]] && die "$(gone_text "$gone")"
-    die "no task matches \"$sel\" (hub-run ls)"
+    die "no task matches \"$sel\" (jay run ls)"
   fi
   if ((n > 1)); then
-    printf 'hub-run: %s tasks match "%s"; use a pane id:\n' "$n" "$sel" >&2
+    printf 'jay run: %s tasks match "%s"; use a pane id:\n' "$n" "$sel" >&2
     jq -r '.[] | "  \(.pane)  \(.name)  \(.worktree // .cwd)"' <<<"$found" >&2
     exit 1
   fi
@@ -374,29 +374,29 @@ find_task() {
 # repos of the same name get two tabs.
 tab_name() {
   local client repo branch top
-  IFS=$'\t' read -r client repo branch top < <(wtl_describe "$1")
+  IFS=$'\t' read -r client repo branch top < <(jay_describe "$1")
   if [[ -n "$client" && "$client" != "$repo" ]]; then printf '%s/%s · %s\n' "$repo" "$branch" "$client"
   else printf '%s/%s\n' "$repo" "$branch"; fi
 }
 
 tab_id_of() {
-  zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null \
+  zellij -s "$JAY_SESSION" action list-tabs -j 2>/dev/null \
     | jq -r --arg t "$1" 'first(.[] | select(.name == $t) | .tab_id) // empty' 2>/dev/null
 }
 
 # The id of the tasks tab of the worktree that holds $1. A worktree without one gets it, with
-# the banner and the bar (wt hub --print-tasks-tab), without moving the view.
+# the banner and the bar (jay --print-tasks-tab), without moving the view.
 ensure_tab() {
   local top name tid layout strip=() var
-  top=$(wtl_toplevel "$1")
+  top=$(jay_toplevel "$1")
   name=$(tab_name "$top")
   tid=$(tab_id_of "$name")
   [[ -n "$tid" ]] && { printf '%s\n' "$tid"; return 0; }
   mkdir -p "$STATE_DIR"
   layout="$STATE_DIR/tasks-tab.$$.kdl"
-  "$HOME/.local/bin/wt-hub" --print-tasks-tab "$top" "$name" >"$layout" || return 1
+  "$HOME/.local/bin/jay" --print-tasks-tab "$top" "$name" >"$layout" || return 1
   for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
-  env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-tab --no-focus --layout "$layout" \
+  env ${strip[@]+"${strip[@]}"} zellij -s "$JAY_SESSION" action new-tab --no-focus --layout "$layout" \
     --name "$name" --cwd "$top" >/dev/null 2>&1
   rm -f "$layout"
   tid=$(tab_id_of "$name")
@@ -407,50 +407,50 @@ ensure_tab() {
 # tasks tab of the worktree picked in the hub (made when it has none); from any other tab back
 # to the hub tab. With an agent picked whose worktree runs no task, the tab of the newest task
 # that agent started (a dev server in another worktree). Its pane shows a hidden review too (see
-# wtl_hub_keep_hidden).
+# jay_hub_keep_hidden).
 cmd_switch() {
   local active dir agent tid="" tasks
-  wtl_hub_keep_hidden "${ZELLIJ_PANE_ID:-}"
-  active=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null | jq -r 'first(.[] | select(.active) | .name) // empty')
+  jay_hub_keep_hidden "${ZELLIJ_PANE_ID:-}"
+  active=$(zellij -s "$JAY_SESSION" action list-tabs -j 2>/dev/null | jq -r 'first(.[] | select(.active) | .name) // empty')
   if [[ "$active" != "$HUB_TAB" ]]; then
-    zellij -s "$WT_HUB_SESSION" action go-to-tab-name "$HUB_TAB" >/dev/null 2>&1
+    zellij -s "$JAY_SESSION" action go-to-tab-name "$HUB_TAB" >/dev/null 2>&1
     return 0
   fi
-  IFS=$'\t' read -r dir agent 2>/dev/null <"$(wtl_hub_target_file review)"
-  [[ -n "$dir" && -d "$dir" ]] || dir=${WT_ROOTS%%:*}
+  IFS=$'\t' read -r dir agent 2>/dev/null <"$(jay_hub_target_file review)"
+  [[ -n "$dir" && -d "$dir" ]] || dir=${JAY_ROOTS%%:*}
   if [[ -n "$agent" ]] && tasks=$(tasks_json 2>/dev/null); then
-    tid=$(jq -r --arg t "$(tab_name "$(wtl_toplevel "$dir")")" --arg a "$agent" '
+    tid=$(jq -r --arg t "$(tab_name "$(jay_toplevel "$dir")")" --arg a "$agent" '
       if any(.[]; .tab == $t and .state == "running") then empty
       else [.[] | select(.agent == $a)] | max_by(.id) // empty | .tab_id end' <<<"$tasks")
   fi
   [[ -n "$tid" ]] || tid=$(ensure_tab "$dir") || return 0
-  zellij -s "$WT_HUB_SESSION" action go-to-tab-by-id "$tid" >/dev/null 2>&1
+  zellij -s "$JAY_SESSION" action go-to-tab-by-id "$tid" >/dev/null 2>&1
 }
 
 # Ctrl g r (a zellij Run binding, in a floating pane): a prompt that starts a command with
-# hub-run, in the picked worktree (from the hub tab) or in the worktree of the tasks tab you are
+# jay run, in the picked worktree (from the hub tab) or in the worktree of the tasks tab you are
 # on. With zsh it is your own zsh (your .zshrc: completion, aliases, history, prompt) whose Enter
-# hands the line to hub-run and closes the pane; its prompt is only "❯". WT_LAUNCHER (a command)
+# hands the line to jay run and closes the pane; its prompt is only "❯". JAY_LAUNCHER (a command)
 # replaces it, for other shells; else another shell gets a plain prompt. The pane is one line
 # (the binding's size): its title says where the command runs.
 cmd_launcher() {
   local tabs active tid dir name zd line
-  wtl_hub_keep_hidden "${ZELLIJ_PANE_ID:-}"
-  tabs=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null)
+  jay_hub_keep_hidden "${ZELLIJ_PANE_ID:-}"
+  tabs=$(zellij -s "$JAY_SESSION" action list-tabs -j 2>/dev/null)
   active=$(jq -r 'first(.[] | select(.active) | .name) // empty' <<<"$tabs")
   if [[ "$active" == "$HUB_TAB" || -z "$active" ]]; then
-    dir=$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)
+    dir=$(cut -f1 "$(jay_hub_target_file review)" 2>/dev/null)
   else
     tid=$(jq -r 'first(.[] | select(.active) | .tab_id)' <<<"$tabs")
     dir=$(tasks_json 2>/dev/null | jq -r --argjson t "$tid" 'first(.[] | select(.tab_id == $t) | .cwd) // empty')
   fi
-  [[ -n "$dir" && -d "$dir" ]] || dir=${WT_ROOTS%%:*}
-  dir=$(wtl_toplevel "$dir")
+  [[ -n "$dir" && -d "$dir" ]] || dir=${JAY_ROOTS%%:*}
+  dir=$(jay_toplevel "$dir")
   name=$(tab_name "$dir")
   cd "$dir" || exit 1
   zellij action rename-pane "run in $name · Enter: run · Ctrl-C: cancel" >/dev/null 2>&1
-  if [[ -n "${WT_LAUNCHER:-}" ]]; then
-    WT_HUB_LAUNCH_IN=$name exec /bin/sh -c "$WT_LAUNCHER"
+  if [[ -n "${JAY_LAUNCHER:-}" ]]; then
+    JAY_LAUNCH_IN=$name exec /bin/sh -c "$JAY_LAUNCHER"
   fi
   if [[ "$(basename "${SHELL:-}")" != zsh ]]; then
     HISTFILE="$STATE_DIR/launcher.history"
@@ -472,24 +472,24 @@ cmd_launcher() {
   cat >"$zd/.zshrc" <<'ZSH'
 ZDOTDIR=$HOME
 [[ -f "$HOME/.zshrc" ]] && source "$HOME/.zshrc"
-# Enter: the line goes into your history and to hub-run (in this worktree's tasks tab), and the
+# Enter: the line goes into your history and to jay run (in this worktree's tasks tab), and the
 # launcher closes. An empty line or Ctrl-C closes it.
-_wt_hub_launch() {
+_jay_launch() {
   if [[ -z ${BUFFER//[[:space:]]/} ]]; then BUFFER=' exit'; zle .accept-line; return; fi
   print -s -- "$BUFFER"
-  WT_HUB_LINE=$BUFFER
-  BUFFER=' _wt_hub_run'
+  JAY_LINE=$BUFFER
+  BUFFER=' _jay_run'
   zle .accept-line
 }
-_wt_hub_run() {
-  "$HOME/.local/bin/hub-run" --launch -- "$WT_HUB_LINE" || read -sk1 '?Press a key.'
+_jay_run() {
+  "$HOME/.local/bin/jay-run" --launch -- "$JAY_LINE" || read -sk1 '?Press a key.'
   exit
 }
-_wt_hub_nohist() { [[ $1 != ' _wt_hub_run'* && $1 != ' exit'* ]]; }
-zshaddhistory_functions+=(_wt_hub_nohist)
-zle -N _wt_hub_launch
-bindkey '^M' _wt_hub_launch
-bindkey '^J' _wt_hub_launch
+_jay_nohist() { [[ $1 != ' _jay_run'* && $1 != ' exit'* ]]; }
+zshaddhistory_functions+=(_jay_nohist)
+zle -N _jay_launch
+bindkey '^M' _jay_launch
+bindkey '^J' _jay_launch
 TRAPINT() { exit 0; }
 # One line: the pane title says where the command runs.
 PROMPT='%F{green}❯%f ' RPROMPT=''
@@ -497,7 +497,7 @@ ZSH
   ZDOTDIR=$zd exec "$SHELL" -i -l
 }
 
-# The tasks tab of worktree $1, for the list's remove (wt-sidebar): --name prints its name (read
+# The tasks tab of worktree $1, for the list's remove (jay-sidebar): --name prints its name (read
 # it before `wt remove`: the name comes from git); --tasks prints its running tasks ("  name:
 # command" lines, for the confirm). `--close-tab <name>` closes it.
 cmd_worktree_tab() {
@@ -513,7 +513,7 @@ cmd_worktree_tab() {
 cmd_close_tab() {
   local tid
   tid=$(tab_id_of "${1:?}")
-  [[ -n "$tid" ]] && zellij -s "$WT_HUB_SESSION" action close-tab-by-id "$tid" >/dev/null 2>&1
+  [[ -n "$tid" ]] && zellij -s "$JAY_SESSION" action close-tab-by-id "$tid" >/dev/null 2>&1
   return 0
 }
 
@@ -528,7 +528,7 @@ cmd_start() {
       --launch) launch=1; shift ;;
       -t) secs=${2:-}; shift 2 || die "-t needs seconds" ;;
       --) shift; break ;;
-      -*) die "unknown option $1 (hub-run -h)" ;;
+      -*) die "unknown option $1 (jay run -h)" ;;
       *) break ;;
     esac
   done
@@ -537,10 +537,10 @@ cmd_start() {
   [[ -n "$name" ]] || name=$(short_name "$line")
   if ! hub_answers; then
     if [[ -t 0 && -t 1 ]]; then
-      printf '\e[2mhub-run: the hub does not run; this runs here, where agents cannot see it\e[0m\n' >&2
+      printf '\e[2mjay run: the hub does not run; this runs here, where agents cannot see it\e[0m\n' >&2
       exec "${SHELL:-/bin/zsh}" -lc "$line"
     fi
-    die "the hub does not run, so nobody would see this task. Ask the user to start it (wt hub)"
+    die "the hub does not run, so nobody would see this task. Ask the user to start it (jay)"
   fi
   ((launch)) && { console_run "$line"; return; }
   # The same command, running in the same folder: show that one, do not start a second one.
@@ -548,13 +548,13 @@ cmd_start() {
   same=$(tasks_json | jq -c --arg l "$line" --arg d "$(pwd -P)" \
     '[.[] | select(.state == "running" and .command == $l and .cwd == $d)] | first // empty')
   if [[ -n "$same" ]]; then
-    jq -r '"hub-run: this runs already: \(.name) (\(.pane))" + (if .urls != [] then " · " + (.urls | join(" ")) else "" end)' <<<"$same" >&2
+    jq -r '"jay run: this runs already: \(.name) (\(.pane))" + (if .urls != [] then " · " + (.urls | join(" ")) else "" end)' <<<"$same" >&2
     exit 1
   fi
   local strip=() var
   for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
   tid=$(ensure_tab "$PWD") || die "the hub did not open a tab for $(tab_name "$PWD")"
-  pane=$(env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --tab-id "$tid" \
+  pane=$(env ${strip[@]+"${strip[@]}"} zellij -s "$JAY_SESSION" action new-pane --tab-id "$tid" \
     --cwd "$PWD" --name "$name" --close-on-exit -- "$SELF" --exec "$line") || die "zellij did not open the pane"
   [[ "$pane" == terminal_* ]] && record_task "$(hub_server)" "${pane#terminal_}" "$name" "$line"
   printf '%s: started in the hub, tab %s (%s)\n' "$name" "$(tab_name "$PWD")" "$pane"
@@ -562,7 +562,7 @@ cmd_start() {
     sleep 1
     cmd_wait "$pane" -t "$secs"
   else
-    printf 'hub-run log %s · hub-run wait %s\n' "$pane" "$pane"
+    printf 'jay run log %s · jay run wait %s\n' "$pane" "$pane"
   fi
 }
 
@@ -585,7 +585,7 @@ console_of() {
      | "\(.pane)\t\(.root)\t\(.cwd)"' | grep .
 }
 
-# hub-run --launch <line> (the launcher's Enter), in folder $PWD. The line goes into the console
+# jay run --launch <line> (the launcher's Enter), in folder $PWD. The line goes into the console
 # (Ctrl-E Ctrl-U first, to drop any typed text; a leading space keeps it out of the console's
 # history, as the launcher saved it already; a cd when the console is elsewhere). For up to 2 s
 # the launcher watches it: a command that ends shows the console's new lines in the launcher,
@@ -598,10 +598,10 @@ console_run() {
   if ! IFS=$'\t' read -r pane root cwd < <(console_of "$tid"); then
     # A new tab's console, or the one the tick opens, may still start: take the newest shell
     # pane of the tab that has no command, else open one; then wait up to 3 s for its prompt.
-    pane=$(zellij -s "$WT_HUB_SESSION" action list-panes -a -j -c 2>/dev/null | jq -r --argjson t "$tid" \
+    pane=$(zellij -s "$JAY_SESSION" action list-panes -a -j -c 2>/dev/null | jq -r --argjson t "$tid" \
       '[.[] | select(.tab_id == $t and (.is_plugin | not) and (.exited | not) and .title == "console")] | max_by(.id) // empty | "terminal_\(.id)"')
     if [[ -z "$pane" ]]; then
-      pane=$(env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --tab-id "$tid" --close-on-exit \
+      pane=$(env ${strip[@]+"${strip[@]}"} zellij -s "$JAY_SESSION" action new-pane --tab-id "$tid" --close-on-exit \
         --cwd "$dir" --name console -- "${SHELL:-/bin/zsh}" -l 2>/dev/null)
     fi
     [[ "$pane" == terminal_* ]] || die "no console in $(tab_name "$dir")"
@@ -613,8 +613,8 @@ console_run() {
     done
   fi
   [[ "$cwd" == "$dir" ]] || cd="cd -- $(printf '%q' "$dir") && "
-  before=$(zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | trim_dump | wc -l)
-  zellij -s "$WT_HUB_SESSION" action write-chars --pane-id "$pane" $'\x05\x15'" $cd$line"$'\r' >/dev/null 2>&1
+  before=$(zellij -s "$JAY_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | trim_dump | wc -l)
+  zellij -s "$JAY_SESSION" action write-chars --pane-id "$pane" $'\x05\x15'" $cd$line"$'\r' >/dev/null 2>&1
   printf '%s\n' "$line" >"$STATE_DIR/console-${pane#terminal_}.line"
   # A console that did not reach its prompt in time gets the line too (its shell reads it when
   # it is ready), but the launcher does not wait for the output.
@@ -628,12 +628,12 @@ console_run() {
     [[ -n "$tp" ]] || break
     if [[ "$tp" != "$root" ]]; then started=1; continue; fi
     ((started || i >= 20)) && { ended=1; break; }
-    now=$(zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | trim_dump)
+    now=$(zellij -s "$JAY_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | trim_dump)
     if (($(wc -l <<<"$now") > before + 1)) && tail -1 <<<"$now" | grep -qE "$PROMPT_END"; then ended=1; break; fi
   done
   ((ended)) || return 0
   sleep 0.1
-  out=$(zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | trim_dump \
+  out=$(zellij -s "$JAY_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | trim_dump \
     | awk -v from="$((before > 0 ? before : 1))" 'NR >= from')
   if [[ -t 1 && -n "${ZELLIJ_PANE_ID:-}" ]]; then
     h=$(($(printf '%s\n' "$out" | wc -l) + 3))
@@ -651,7 +651,7 @@ console_run() {
 
 cmd_ls() {
   local tasks gone
-  tasks=$(tasks_json) || die "the hub does not answer (start it with: wt hub)"
+  tasks=$(tasks_json) || die "the hub does not answer (start it with: jay)"
   gone=$(gone_tasks)
   if [[ "${1:-}" == --json ]]; then
     # The gone tasks after the others, without a pane: .start starts one again.
@@ -661,7 +661,7 @@ cmd_ls() {
     return
   fi
   if [[ "$(jq length <<<"$tasks")" == 0 ]]; then
-    printf 'No tasks tabs in the hub (Ctrl g Tab, or hub-run <command>, opens one).\n'
+    printf 'No tasks tabs in the hub (Ctrl g Tab, or jay run <command>, opens one).\n'
   else
     jq -r --arg home "$HOME" '
       ["PANE", "TAB", "NAME", "STATE", "PORTS", "WHERE", "COMMAND"],
@@ -673,7 +673,7 @@ cmd_ls() {
       | @tsv' <<<"$tasks" | column -t -s $'\t'
   fi
   [[ "$(jq length <<<"$gone")" == 0 ]] && return 0
-  printf '\nGone with a hub restart (hub-run stop <name> forgets one); start one again with its line:\n'
+  printf '\nGone with a hub restart (jay run stop <name> forgets one); start one again with its line:\n'
   jq -r '.[] | "  \(.name) (\(.gone | strflocaltime("%H:%M"))): \(.start)"' <<<"$gone"
 }
 
@@ -686,11 +686,11 @@ cmd_log() {
       *) sel=$1; shift ;;
     esac
   done
-  [[ -n "$sel" ]] || die "which task? (hub-run ls)"
+  [[ -n "$sel" ]] || die "which task? (jay run ls)"
   task=$(find_task "$sel") || exit 1
   pane=$(jq -r .pane <<<"$task")
   # The screen and scrollback, without the blank rows under the last line.
-  zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" --full 2>/dev/null \
+  zellij -s "$JAY_SESSION" action dump-screen -p "$pane" --full 2>/dev/null \
     | awk '{ a[NR] = $0 } NF { last = NR } END { for (i = 1; i <= last; i++) print a[i] }' \
     | if [[ "$lines" == all ]]; then cat; else tail -n "$lines"; fi
 }
@@ -703,7 +703,7 @@ cmd_wait() {
       *) sel=$1; shift ;;
     esac
   done
-  [[ -n "$sel" ]] || die "which task? (hub-run ls)"
+  [[ -n "$sel" ]] || die "which task? (jay run ls)"
   task=$(find_task "$sel") || exit 1
   sel=$(jq -r .pane <<<"$task")
   end=$((SECONDS + secs))
@@ -716,25 +716,25 @@ cmd_wait() {
       return 0
     fi
     if [[ "$state" == exited || "$state" == idle ]]; then
-      printf 'hub-run: %s ended (%s) before it listened. Its last lines:\n' "$(jq -r .name <<<"$task")" "$(jq -r '.exit // "?"' <<<"$task")" >&2
+      printf 'jay run: %s ended (%s) before it listened. Its last lines:\n' "$(jq -r .name <<<"$task")" "$(jq -r '.exit // "?"' <<<"$task")" >&2
       cmd_log "$sel" -n 30 >&2
       return 1
     fi
-    ((SECONDS >= end)) && { printf 'hub-run: %s does not listen after %s s (hub-run log %s)\n' "$(jq -r .name <<<"$task")" "$secs" "$sel" >&2; return 1; }
+    ((SECONDS >= end)) && { printf 'jay run: %s does not listen after %s s (jay run log %s)\n' "$(jq -r .name <<<"$task")" "$secs" "$sel" >&2; return 1; }
     sleep 1
   done
 }
 
 cmd_stop() {
   local task owned root fg state name pane
-  [[ -n "${1:-}" ]] || die "which task? (hub-run ls)"
+  [[ -n "${1:-}" ]] || die "which task? (jay run ls)"
   task=$(find_task "$1" --forget) || exit 1
   # A gone task: find_task forgot it and printed that.
   [[ "$task" == "{"* ]] || { printf '%s\n' "$task"; return 0; }
   IFS=$'\x1f' read -r owned root fg state name pane < <(fields '[.owned, (.root // ""), (.fg // ""), .state, .name, .pane]' <<<"$task")
   if [[ "$owned" == true ]]; then
     [[ -n "$root" ]] && { stop_group "$root" "$root" || die "$name: still runs after Ctrl-C, TERM and KILL"; }
-    zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "$pane" >/dev/null 2>&1
+    zellij -s "$JAY_SESSION" action close-pane --pane-id "$pane" >/dev/null 2>&1
     printf '%s: stopped, pane closed\n' "$name"
     return 0
   fi
@@ -745,20 +745,20 @@ cmd_stop() {
 
 cmd_restart() {
   local task owned root name pane
-  [[ -n "${1:-}" ]] || die "which task? (hub-run ls)"
+  [[ -n "${1:-}" ]] || die "which task? (jay run ls)"
   task=$(find_task "$1") || exit 1
   IFS=$'\x1f' read -r owned root name pane < <(fields '[.owned, (.root // ""), .name, .pane]' <<<"$task")
   if [[ "$owned" != true ]]; then
     # A console's command that the launcher typed: stop it, then type that line again.
     local lf fg i again
     lf="$STATE_DIR/console-${pane#terminal_}.line"
-    [[ -f "$lf" ]] || die "$name: a shell pane; stop it (hub-run stop $pane) and type the command again there"
+    [[ -f "$lf" ]] || die "$name: a shell pane; stop it (jay run stop $pane) and type the command again there"
     again=$(cat "$lf")
     fg=$(jq -r '.fg // empty' <<<"$task")
     [[ -n "$fg" ]] && { stop_group "$fg" || die "$name: still runs after Ctrl-C, TERM and KILL"; }
     for i in $(seq 20); do [[ "$(ps -o tpgid= -p "$root" | tr -d ' ')" == "$root" ]] && break; sleep 0.1; done
     printf '%s\n' "$again" >"$lf"
-    zellij -s "$WT_HUB_SESSION" action write-chars --pane-id "$pane" $'\x05\x15'" $again"$'\r' >/dev/null 2>&1
+    zellij -s "$JAY_SESSION" action write-chars --pane-id "$pane" $'\x05\x15'" $again"$'\r' >/dev/null 2>&1
     printf '%s: restarted in %s\n' "$name" "$pane"
     return 0
   fi
@@ -777,7 +777,7 @@ cmd_port() {
   if tasks=$(tasks_json 2>/dev/null); then
     task=$(jq -c --argjson pid "$pid" --argjson port "$port" 'first(.[] | select((.pids | index([$pid])) or (.ports | index([$port])))) // empty' <<<"$tasks")
     if [[ -n "$task" ]]; then
-      jq -r --arg p "$port" '"port \($p): task \(.name) (\(.pane)) in \(.worktree // .cwd) · hub-run stop \(.pane)"' <<<"$task"
+      jq -r --arg p "$port" '"port \($p): task \(.name) (\(.pane)) in \(.worktree // .cwd) · jay run stop \(.pane)"' <<<"$task"
       return 0
     fi
   fi
@@ -819,8 +819,8 @@ spare_shell() {
   for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
   while IFS=$'\t' read -r tid cwd; do
     [[ -n "$tid" ]] || continue
-    top=$(wtl_toplevel "$cwd")
-    env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --tab-id "$tid" --close-on-exit \
+    top=$(jay_toplevel "$cwd")
+    env ${strip[@]+"${strip[@]}"} zellij -s "$JAY_SESSION" action new-pane --tab-id "$tid" --close-on-exit \
       --cwd "$top" --name console -- "${SHELL:-/bin/zsh}" -l >/dev/null 2>&1
   done < <(jq -r 'group_by(.tab_id)[] | select(all(.[]; .state != "idle" and .state != "unknown"))
     | "\(.[0].tab_id)\t\(.[0].cwd)"' <<<"$tasks")
@@ -835,7 +835,7 @@ tidy_shells() {
   now=$(date +%s)
   while IFS=$'\t' read -r pane title want; do
     [[ -n "$pane" && "$title" != "$want" ]] || continue
-    zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" "$want" >/dev/null 2>&1
+    zellij -s "$JAY_SESSION" action rename-pane -p "$pane" "$want" >/dev/null 2>&1
   done < <(jq -r '.[] | select((.owned | not) and (.state == "idle" or .state == "running"))
     | [.pane, .title, (if .state == "idle" then "console" else .name end)] | @tsv' <<<"$tasks")
   # A console back at its prompt: the line the launcher typed is done.
@@ -847,7 +847,7 @@ tidy_shells() {
     if [[ -z "$since" ]]; then
       printf '%s\n' "$now" >"$STATE_DIR/idle-$id"
     elif ((now - since >= 600)); then
-      zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "terminal_$id" >/dev/null 2>&1
+      zellij -s "$JAY_SESSION" action close-pane --pane-id "terminal_$id" >/dev/null 2>&1
       rm -f "$STATE_DIR/idle-$id" "$STATE_DIR/console-$id.line"
     fi
   done
@@ -860,7 +860,7 @@ tidy_shells() {
   done
 }
 
-# The list's tick (wt-sidebar, every 3 s): a console in each tasks tab, names, then the bar text.
+# The list's tick (jay-sidebar, every 3 s): a console in each tasks tab, names, then the bar text.
 cmd_tick() {
   local tasks
   tasks=$(tasks_json 2>/dev/null) || return 0
@@ -870,30 +870,30 @@ cmd_tick() {
   cmd_bar "$tasks"
 }
 
-# The banner of the hub tab (see wt-hub) shows the picked worktree $1 as <repo>/<branch> (a pick
-# sends it, see wtl_hub_target); without $1, the worktree of the hub's review.
+# The banner of the hub tab (see bin/jay) shows the picked worktree $1 as <repo>/<branch> (a pick
+# sends it, see jay_hub_target); without $1, the worktree of the hub's review.
 cmd_where() {
   local dir=${1:-} client repo branch top
-  [[ -n "$dir" ]] || dir=$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)
+  [[ -n "$dir" ]] || dir=$(cut -f1 "$(jay_hub_target_file review)" 2>/dev/null)
   [[ -n "$dir" && -d "$dir" ]] || return 0
-  IFS=$'\t' read -r client repo branch top < <(wtl_describe "$dir")
-  zellij -s "$WT_HUB_SESSION" pipe "zjstatus::pipe::pipe_where::$repo/$branch" >/dev/null 2>&1
+  IFS=$'\t' read -r client repo branch top < <(jay_describe "$dir")
+  zellij -s "$JAY_SESSION" pipe "zjstatus::pipe::pipe_where::$repo/$branch" >/dev/null 2>&1
 }
 
 # SessionStart hook: tells each Claude session about the tasks tab (stdout becomes context).
 cmd_hook() {
   cat <<'EOF'
 Long-running commands (dev servers, watchers, `docker compose up`): when the user's hub runs, start
-them with `hub-run -n <name> -w -- <command>` in the folder they run in, not with a background Bash
+them with `jay run -n <name> -w -- <command>` in the folder they run in, not with a background Bash
 call. They run in the hub, in the tab of that worktree, where the user sees them, and keep
 running after you stop.
-`hub-run ls --json` lists the tasks (name, state, ports, URLs, worktree, command), also the ones the
-user started by hand; `hub-run log <task>` shows a task's recent output; `hub-run wait <task>`
-waits until it listens; `hub-run stop|restart <task>`; `hub-run port <n>` tells who holds a port
+`jay run ls --json` lists the tasks (name, state, ports, URLs, worktree, command), also the ones the
+user started by hand; `jay run log <task>` shows a task's recent output; `jay run wait <task>`
+waits until it listens; `jay run stop|restart <task>`; `jay run port <n>` tells who holds a port
 (for "address in use"). Stop or restart only tasks you started, unless the user asks. When
-hub-run says the hub does not run, use a background Bash call. The user sees a task with Ctrl g
+jay run says the hub does not run, use a background Bash call. The user sees a task with Ctrl g
 Tab when you or its worktree is picked in the hub list. A hub restart stops all tasks: then
-`hub-run ls` lists them as gone, with the command that starts each one again.
+`jay run ls` lists them as gone, with the command that starts each one again.
 EOF
 }
 

@@ -1,5 +1,5 @@
-# lazygit settings for the hub's review pane (WT_REVIEW=lazygit), installed as
-# ~/.config/wt-hub/lazygit/hub.yml. wt-hub-lazygit loads your own config.yml first and this file
+# lazygit settings for the hub's review pane (JAY_REVIEW=lazygit), installed as
+# ~/.config/jay/lazygit/hub.yml. jay-lazygit loads your own config.yml first and this file
 # over it (LG_CONFIG_FILE), so your theme stays; the diff renderers are the hub's (below). Your
 # own lazygit outside the hub does not read this file.
 gui:
@@ -22,16 +22,16 @@ promptToReturnFromSubprocess: false
 update:
   method: never
 git:
-  # The patch for a narrow column: wt-hub-diff gives a bar on each file (3/8, status, path), a
+  # The patch for a narrow column: jay-diff gives a bar on each file (3/8, status, path), a
   # line on each hunk (path:line 2/3), one column of line numbers, and wraps long lines under
-  # the code. | cycles the renderers; WT_REVIEW_DIFF in ~/.config/wt-hub/config puts another
+  # the code. | cycles the renderers; JAY_REVIEW_DIFF in ~/.config/jay/config puts another
   # one first (diff-difft.yml, diff-plain.yml next to this file).
   diffRenderers:
     - name: delta (hub)
-      command: "$HOME/.local/bin/wt-hub-diff delta {{width}} {{colorScheme}}"
+      command: "$HOME/.local/bin/jay-diff delta {{width}} {{colorScheme}}"
     - name: difftastic (hub)
       type: extDiff
-      command: "$HOME/.local/bin/wt-hub-diff difft {{width}} {{colorScheme}}"
+      command: "$HOME/.local/bin/jay-diff difft {{width}} {{colorScheme}}"
     - name: delta (plain)
       command: "delta --no-gitconfig --{{colorScheme}} --paging=never --true-color=always --line-numbers --line-numbers-left-format= --line-numbers-right-format='{np:>4}│' --hunk-header-style='file line-number syntax' --hunk-header-decoration-style=none --file-decoration-style=ol"
   autoFetch: false
@@ -49,10 +49,10 @@ customCommands:
   - key: t
     context: global
     description: "hub: turns or commits"
-    command: "$HOME/.local/bin/wt-hub-lazygit --toggle"
+    command: "$HOME/.local/bin/jay-lazygit --toggle"
     output: none
   - key: e
     context: global
     description: "hub: files (yazi)"
-    command: "$HOME/.local/bin/wt-sidebar --files"
+    command: "$HOME/.local/bin/jay-sidebar --files"
     output: none

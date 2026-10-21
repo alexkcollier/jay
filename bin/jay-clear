@@ -1,5 +1,5 @@
 #!/usr/bin/python3 -I
-# claude-clear <id> — a fresh context for background agent <id> (short id): type /clear into it
+# jay clear <id> — a fresh context for background agent <id> (short id): type /clear into it
 # through a hidden `claude attach`. Claude keeps the session's system prompt (its
 # --append-system-prompt), name, short id and process; only the session id changes, so the turn
 # chain, the hub Claude's id file and a `claude attach` that shows the agent stay right.
@@ -13,7 +13,7 @@
 # hidden client takes the size of a client that is attached already (the hub's middle column).
 import fcntl, json, os, pty, re, select, signal, struct, subprocess, sys, termios, time
 
-USAGE = "usage: claude-clear <id>"
+USAGE = "usage: jay clear <id>"
 
 
 def agent(short):
@@ -26,10 +26,10 @@ def agent(short):
 
 
 def idle(a):
-    """The phase rule of wtl_agent_phases (lib/wt-lib.sh) without its marks: the agent is idle or
+    """The phase rule of jay_agent_phases (lib/jay-lib.sh) without its marks: the agent is idle or
     unread, not working, input or failed. Its process is idle (status idle), so a state working
     only means that it waits for its workers. A blocked agent asks something, except a new one
-    that waits for its first prompt (wtl_fresh_ids)."""
+    that waits for its first prompt (jay_fresh_ids)."""
     state = a.get("state")
     if a.get("status") != "idle" or state in ("failed", "stopped"):
         return False

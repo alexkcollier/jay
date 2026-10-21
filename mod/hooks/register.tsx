@@ -16,26 +16,26 @@ import {
   unquote,
 } from './model'
 
-const PANE = 'wt-hub'
+const PANE = 'jay'
 const AGENTS_EVERY_MS = 3000
 const WORKTREES_EVERY_MS = 30000
 
-const isHub = atom({ plugin: 'wt-hub', key: 'isHub' } as const, false)
-const selfId = atom({ plugin: 'wt-hub', key: 'selfId' } as const, '')
-const worktrees = atom({ plugin: 'wt-hub', key: 'worktrees' } as const, [] as WorktreeRow[])
-const agents = atom({ plugin: 'wt-hub', key: 'agents' } as const, [] as AgentRow[])
-const events = atom({ plugin: 'wt-hub', key: 'events' } as const, [] as HubEvent[])
+const isHub = atom({ plugin: 'jay', key: 'isHub' } as const, false)
+const selfId = atom({ plugin: 'jay', key: 'selfId' } as const, '')
+const worktrees = atom({ plugin: 'jay', key: 'worktrees' } as const, [] as WorktreeRow[])
+const agents = atom({ plugin: 'jay', key: 'agents' } as const, [] as AgentRow[])
+const events = atom({ plugin: 'jay', key: 'events' } as const, [] as HubEvent[])
 
 const USAGE = [
-  '/wt                      turn the hub on (status line, toasts)',
-  '/wt pane                 show the worktree list in the dock',
-  '/wt hub                  open the hub in its tab (a new one if needed): list, agent, review',
-  '/wt off                  turn the hub off',
-  '/wt new <branch> [-t "task"] [-- prompt]   new worktree; with a prompt, a background agent',
-  '/wt go <agent>           bring an agent in front: id, name or part of a name',
-  '/wt open <branch|path>   select or open the worktree\'s Ghostty tab',
-  '/wt msg <agent> <text>   send a message to an agent',
-  '/wt refresh              reload worktrees and agents now',
+  '/jay                      turn the hub on (status line, toasts)',
+  '/jay pane                 show the worktree list in the dock',
+  '/jay hub                  open the hub in its tab (a new one if needed): list, agent, review',
+  '/jay off                  turn the hub off',
+  '/jay new <branch> [-t "task"] [-- prompt]   new worktree; with a prompt, a background agent',
+  '/jay go <agent>           bring an agent in front: id, name or part of a name',
+  '/jay open <branch|path>   select or open the worktree\'s Ghostty tab',
+  '/jay msg <agent> <text>   send a message to an agent',
+  '/jay refresh              reload worktrees and agents now',
 ].join('\n')
 
 type Env = { home: string; claude: string }
@@ -58,13 +58,13 @@ async function shell($: EngineInterface, program: string, args: string, timeoutM
 }
 
 async function refreshWorktrees($: EngineInterface) {
-  const { exitCode, stdout } = await run($, [bin('wt-all'), '--json'], 60000)
+  const { exitCode, stdout } = await run($, [bin('jay-all'), '--json'], 60000)
   if (exitCode === 0) await update($, worktrees, () => parseWorktrees(stdout))
 }
 
 async function refreshAgents($: EngineInterface) {
-  // With each agent's phase (the list's rule); `claude agents` alone when wt-agents fails.
-  let { exitCode, stdout } = await run($, [bin('wt-agents'), '--json'], 10000)
+  // With each agent's phase (the list's rule); `claude agents` alone when jay-agents fails.
+  let { exitCode, stdout } = await run($, [bin('jay-agents'), '--json'], 10000)
   if (exitCode !== 0) ({ exitCode, stdout } = await run($, [env.claude || `${env.home}/.local/bin/claude`, 'agents', '--json', '--all'], 10000))
   if (exitCode !== 0) return
   const next = parseAgents(stdout)
@@ -111,13 +111,13 @@ const openPane = ($: EngineInterface) => $.ui.open({ id: PANE, title: 'Worktrees
 
 async function go($: EngineInterface, query: string) {
   const agent = findAgent(await read($, agents), query)
-  const { exitCode, stderr } = await run($, [bin('wt-go'), agent?.sessionId ?? query])
-  return exitCode === 0 ? `Brought ${agent?.name ?? query} in front.` : stderr.trim() || `wt go ${query} failed.`
+  const { exitCode, stderr } = await run($, [bin('jay-go'), agent?.sessionId ?? query])
+  return exitCode === 0 ? `Brought ${agent?.name ?? query} in front.` : stderr.trim() || `jay go ${query} failed.`
 }
 
 async function openWorktree($: EngineInterface, target: string) {
-  const { exitCode, stderr } = await run($, [bin('wt-open'), target])
-  return exitCode === 0 ? `Opened ${target}.` : stderr.trim() || `wt open ${target} failed.`
+  const { exitCode, stderr } = await run($, [bin('jay-open'), target])
+  return exitCode === 0 ? `Opened ${target}.` : stderr.trim() || `jay open ${target} failed.`
 }
 
 
@@ -128,8 +128,8 @@ export const register: Register = on => {
     const id = await $.session.id()
     await update($, selfId, () => id)
     await $.command.register({
-      name: 'wt',
-      description: 'Worktree hub: sidebar of worktrees and agents; new, go, open, msg',
+      name: 'jay',
+      description: 'jay, the worktree hub: sidebar of worktrees and agents; new, go, open, msg',
       argumentHint: '[off | new <branch> [-- prompt] | go <agent> | open <branch> | msg <agent> <text> | refresh]',
     })
     if (e.isInteractive && (await read($, isHub))) await startHub($)
@@ -141,7 +141,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'wt' }, async ($, e) => {
+  on('command.run', { command: 'jay' }, async ($, e) => {
     const args = e.args.trim()
     const [verb = '', ...rest] = args.split(/\s+/)
     const tail = args.slice(verb.length).trim()
@@ -159,8 +159,8 @@ export const register: Register = on => {
         return { text: 'Worktree list opened in the dock.' }
       }
       case 'hub': {
-        const { exitCode, stderr } = await run($, [bin('wt-hub')])
-        return { text: exitCode === 0 ? 'Hub tab in front.' : stderr.trim() || 'wt hub failed.' }
+        const { exitCode, stderr } = await run($, [bin('jay')])
+        return { text: exitCode === 0 ? 'Hub tab in front.' : stderr.trim() || 'jay failed.' }
       }
       case 'off': {
         await update($, isHub, () => false)
@@ -175,10 +175,10 @@ export const register: Register = on => {
       }
       case 'new': {
         if (!tail) return { text: USAGE }
-        const { exitCode, stdout, stderr } = await shell($, 'wt-new', tail, 600000)
+        const { exitCode, stdout, stderr } = await shell($, 'jay-new', tail, 600000)
         await refreshWorktrees($)
         await refreshAgents($)
-        return { text: exitCode === 0 ? stdout.trim() || 'Worktree ready.' : `wt new failed:\n${stderr.trim()}` }
+        return { text: exitCode === 0 ? stdout.trim() || 'Worktree ready.' : `jay new failed:\n${stderr.trim()}` }
       }
       case 'go':
         return { text: tail ? await go($, unquote(tail)) : USAGE }

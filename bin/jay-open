@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# jay open [branch|path]
+# Select the Ghostty tab that shows the worktree's zellij session, or open a tab
+# in the worktree that attaches to it (created with your default layout if new).
+set -euo pipefail
+source "$HOME/.local/lib/jay-lib.sh"
+
+case ${1:-} in
+  -h|--help) sed -n '2,4s/^# \{0,1\}//p' "$0"; exit 0 ;;
+  "") path=$(git rev-parse --show-toplevel) ;;
+  *) if [[ -d "$1" ]]; then path=$(jay_toplevel "$1"); else path=$(wt switch "$1" --no-cd --format=json | jq -er .path); fi ;;
+esac
+
+IFS=$'\t' read -r client repo branch path < <(jay_describe "$path")
+name=$(jay_session_name "$repo" "$branch")
+
+# Tabs need Ghostty (see jay_gh_ok): else print the command that opens the session.
+if ! jay_gh_ok; then
+  if session=$(jay_session_for_worktree "$path" "$name"); then
+    echo "A tab needs Ghostty. Attach in a terminal: zellij attach $session" >&2
+  else
+    echo "A tab needs Ghostty. Open it in a terminal: cd $(printf '%q' "$path") && zellij attach -c $name" >&2
+  fi
+  exit 1
+fi
+
+if session=$(jay_session_for_worktree "$path" "$name"); then
+  if tab=$(jay_gh_tab_for_session "$session"); then
+    jay_gh_select "$tab"
+  else
+    jay_gh_new_tab "$path" "zellij attach $session" >/dev/null
+  fi
+else
+  jay_gh_new_tab "$path" "zellij attach -c $name" >/dev/null
+fi

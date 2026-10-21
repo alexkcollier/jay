@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# wt all [-a]   worktrees of every repo, grouped by client, with agents and task notes
-# wt pick [-a]  the same list in fzf; Enter runs `wt open` on the row
-# wt all --json one JSON object per worktree (for the hub sidebar); implies -a
+# jay all [-a]   worktrees of every repo, grouped by client, with agents and task notes
+# jay pick [-a]  the same list in fzf; Enter runs `jay open` on the row
+# jay all --json one JSON object per worktree (for the hub sidebar); implies -a
 #   -a  also show repos that only have their main checkout and no agent
 set -euo pipefail
-source "$HOME/.local/lib/wt-lib.sh"
+source "$HOME/.local/lib/jay-lib.sh"
 
 show_all=false json=false
 case ${1:-} in
@@ -17,7 +17,7 @@ trap 'rm -rf "$tmp"' EXIT
 
 repos() {
   local root
-  IFS=: read -ra roots <<<"$WT_ROOTS"
+  IFS=: read -ra roots <<<"$JAY_ROOTS"
   for root in "${roots[@]}"; do
     find "$root" -mindepth 2 -maxdepth 3 -name node_modules -prune -o -type d -name .git -print 2>/dev/null
   done | sed 's#/.git$##' | sort -u
@@ -37,11 +37,11 @@ remote_counts() {
   done
 }
 
-wt-agents --json >"$tmp/agents.json" 2>/dev/null || echo '[]' >"$tmp/agents.json" &
+jay-agents --json >"$tmp/agents.json" 2>/dev/null || echo '[]' >"$tmp/agents.json" &
 i=0
 while IFS= read -r repo; do
   i=$((i + 1))
-  { printf '%s\t%s\n' "$repo" "$(wtl_client "$repo")" >"$tmp/$i.meta"
+  { printf '%s\t%s\n' "$repo" "$(jay_client "$repo")" >"$tmp/$i.meta"
     wt -C "$repo" list --format json >"$tmp/$i.json" 2>/dev/null || echo '{"items":[]}' >"$tmp/$i.json"
     remote_counts "$repo" "$tmp/$i.json" >"$tmp/$i.remote"; } &
 done < <(repos)
@@ -72,7 +72,7 @@ rows=$(
     . as $rows
     | ($rows | map(.path) | sort_by(length) | reverse) as $paths
     | def owner($cwd): first($paths[] | select($cwd == . or ($cwd | startswith(. + "/"))));
-      # .phase from `wt agents --json` (wtl_agent_phases), the rule of the list and the mod.
+      # .phase from `jay agents --json` (jay_agent_phases), the rule of the list and the mod.
       ($agents[0] | map(select(.state != "stopped") | . + {wt: owner(.cwd)})) as $ag
     | map(. as $r | ($ag | map(select(.wt == $r.path) | .phase // "idle")) as $mine
         | $r + (["input", "failed", "unread", "working", "idle"]
@@ -97,7 +97,7 @@ if $json; then
   [[ -n "$rows" ]] && printf '%s\n' "$rows"
   exit 0
 fi
-[[ -n "$rows" ]] || { echo "No worktrees found under $WT_ROOTS"; exit 0; }
+[[ -n "$rows" ]] || { echo "No worktrees found under $JAY_ROOTS"; exit 0; }
 
 render() {
   awk -F'\t' '
@@ -108,13 +108,13 @@ render() {
     }'
 }
 
-if [[ "$(basename "$0")" == wt-pick ]]; then
+if [[ "$(basename "$0")" == jay-pick ]]; then
   choice=$(render <<<"$rows" | fzf --ansi --delimiter=$'\t' --with-nth=1 --no-sort --layout=reverse \
     --header='Enter: open its Ghostty tab   Ctrl-A: agents in this worktree' \
     --preview='git -C {2} status -sb | head -15; echo; git -C {2} log --oneline -8 --color=always' \
     --preview-window=down,45% \
-    --bind='ctrl-a:become(wt-agents {2})') || exit 0
-  exec wt-open "$(cut -f2 <<<"$choice")"
+    --bind='ctrl-a:become(jay-agents {2})') || exit 0
+  exec jay-open "$(cut -f2 <<<"$choice")"
 fi
 
 render <<<"$rows" | cut -f1

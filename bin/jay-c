@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# jay c (or c) [claude --bg options] [prompt] — Claude in this folder as a background agent,
+# shown here. It starts `claude --bg` and attaches this terminal to it, so the hub can show the
+# same agent. Ctrl+Z, closing the tab or ← (agent view) leave it running; the hub list,
+# `jay go` or `claude attach` reach it again. Plain `claude` stays an interactive session of
+# this terminal.
+set -uo pipefail
+source "$HOME/.local/lib/jay-lib.sh"
+
+# `claude --bg` has no trust prompt: ask here, as plain `claude` would.
+if ! jay_trusted "$PWD"; then
+  key=$(jay_trust_key "$PWD")
+  printf 'Claude does not trust %s yet. Trust it and all its worktrees? [y/N] ' "${key/#$HOME/~}"
+  read -rn1 answer
+  printf '\n'
+  [[ "$answer" == y ]] || exit 1
+  jay_trust "$PWD" || { echo "Could not change ~/.claude.json." >&2; exit 1; }
+fi
+
+out=$(claude --bg "$@" 2>&1)
+id=$(jay_bg_id "$out")
+if [[ -z "$id" ]]; then
+  printf '%s\n' "$out" >&2
+  exit 1
+fi
+exec claude attach "$id"

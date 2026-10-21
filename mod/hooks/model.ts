@@ -7,8 +7,8 @@ const text = (value: unknown) => (typeof value === 'string' ? value : '')
 
 const PHASES: readonly Phase[] = ['input', 'failed', 'unread', 'working', 'idle']
 
-// The phase comes from `wt agents --json` (wtl_agent_phases in wt-lib.sh), the rule of the list
-// and wt all, which also knows what the user saw (unread). Without it, this fallback: state working
+// The phase comes from `jay agents --json` (jay_agent_phases in jay-lib.sh), the rule of the list
+// and jay all, which also knows what the user saw (unread). Without it, this fallback: state working
 // with status idle (an agent that waits for its workers) is not working.
 export function phaseOf(state: unknown, status: unknown, phase?: unknown): Phase {
   if (PHASES.includes(phase as Phase)) return phase as Phase
@@ -188,7 +188,7 @@ export function ageOf(startedAt: number, now: number) {
 export const unquote = (value: string) => value.replace(/^(["'])(.*)\1$/, '$2')
 
 // Id or session id (prefix), then the exact name, then the one agent whose name holds the
-// query, in any case. Several left: undefined, and wt-go picks or lists them.
+// query, in any case. Several left: undefined, and jay-go picks or lists them.
 export function findAgent(agents: readonly AgentRow[], query: string) {
   const byId = agents.find(agent => agent.shortId === query || agent.sessionId.startsWith(query))
   if (byId) return byId

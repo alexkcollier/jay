@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.local/bin/hub-run --hook"
+            "command": "$HOME/.local/bin/jay-run --hook"
           }
         ]
       }
@@ -15,11 +15,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "WT_NOTIFY_LOG=$HOME/.local/state/claude-notify.log $HOME/.local/bin/claude-notify"
+            "command": "JAY_NOTIFY_LOG=$HOME/.local/state/jay/notify.log $HOME/.local/bin/jay-notify"
           },
           {
             "type": "command",
-            "command": "$HOME/.local/bin/claude-turn-snapshot"
+            "command": "$HOME/.local/bin/jay-snapshot"
           }
         ]
       }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.local/bin/claude-turn-snapshot"
+            "command": "$HOME/.local/bin/jay-snapshot"
           }
         ]
       }
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.local/bin/claude-turn-snapshot"
+            "command": "$HOME/.local/bin/jay-snapshot"
           }
         ]
       }
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "WT_NOTIFY_LOG=$HOME/.local/state/claude-notify.log $HOME/.local/bin/claude-notify"
+            "command": "JAY_NOTIFY_LOG=$HOME/.local/state/jay/notify.log $HOME/.local/bin/jay-notify"
           }
         ]
       }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# claude-turn-snapshot — Claude Code hook (UserPromptSubmit, Stop, PostToolUse) that records the
+# jay-snapshot — Claude Code hook (UserPromptSubmit, Stop, PostToolUse) that records the
 # worktree as a hidden commit chain per agent, one commit per agent turn. <id> is a background
 # agent's short id (it stays after a resume or /clear), else the first 8 characters of the
 # session id:
@@ -7,20 +7,23 @@
 #   refs/wt-turns/<id>/head   the latest snapshot; each snapshot's parent is the one before
 #   refs/wt-turns/<id>/live   while a turn runs: the turn so far, on top of head (PostToolUse
 #                             on Edit, Write, Bash..., at most once in 5 s); Stop removes it
+# (The refs keep the name of wt-hub, jay's old name: they live in every repo, and a new name
+# would orphan the old chains.)
 # Review one turn with `tuicr -r <turn>~1..<turn>`, all of them with `tuicr -r base..head`.
 # Branch, index and files are never touched: it hashes the tree through a copy of the index.
 # --list [path]            list the turn chains of a worktree (default: this folder)
 # --prune [--dry-run]      remove the chains of agents that `claude agents --all` no longer
 #                          lists, when their worktree is gone or their last turn is older than
 #                          7 days (an ended interactive session keeps its turns for a week),
-#                          and their lazygit views (wt-hub-lazygit).
+#                          and their lazygit views (jay-lazygit).
 set -uo pipefail
+STATE="$HOME/.local/state/jay"
 
 if [[ "${1:-}" == --prune ]]; then
   dry=false
   [[ "${2:-}" == --dry-run ]] && dry=true
-  state="$HOME/.local/state/wt-turns"
-  cache="$HOME/.local/state/wt-worktrees.ndjson"
+  state="$STATE/turns"
+  cache="$STATE/worktrees.ndjson"
   week=$((7 * 86400)) now=$(date +%s)
   # Never prune on missing data: no agent list or no repo list, no prune.
   agents=$(claude agents --json --all 2>/dev/null) || exit 0
@@ -38,8 +41,8 @@ if [[ "${1:-}" == --prune ]]; then
       git -C "$1" update-ref -d "refs/wt-turns/$2/base" 2>/dev/null
     fi
     rm -f "$state/$2".*
-    # The chain's view repo for lazygit (wt-hub-lazygit), if any.
-    rm -rf "$HOME/.local/state/wt-hub/lazygit/views/$2"
+    # The chain's view repo for lazygit (jay-lazygit), if any.
+    rm -rf "$STATE/lazygit/views/$2"
     printf '%s turn chain %s removed (%s)\n' "$(date '+%F %T')" "$2" "$3"
   }
   seen=""
@@ -58,8 +61,8 @@ if [[ "${1:-}" == --prune ]]; then
     done < <(git -C "$repo" for-each-ref --format='%(refname:lstrip=2)%09%(committerdate:unix)' 'refs/wt-turns/' 2>/dev/null \
       | awk -F'\t' '{ split($1, p, "/"); if ($2 > t[p[1]]) t[p[1]] = $2 } END { for (i in t) printf "%s\t%s\n", i, t[i] }')
   done
-  # lazygit views (wt-hub-lazygit) of agents that never got a chain and are gone.
-  for dir in "$HOME/.local/state/wt-hub/lazygit/views"/*; do
+  # lazygit views (jay-lazygit) of agents that never got a chain and are gone.
+  for dir in "$STATE/lazygit/views"/*; do
     [[ -d "$dir" ]] || continue
     id=$(basename "$dir")
     [[ " $seen " == *" $id "* || -f "$state/$id.worktree" ]] && continue
@@ -111,7 +114,7 @@ job=${CLAUDE_JOB_DIR:-}
 if [[ -n "$job" ]] && jq -e --arg s "$sid" '.sessionId == $s or .resumeSessionId == $s' "$job/state.json" >/dev/null 2>&1; then
   short=$(basename "$job")
 fi
-state="$HOME/.local/state/wt-turns"
+state="$STATE/turns"
 mkdir -p "$state"
 prompt_file="$state/$short.prompt"
 worktree_file="$state/$short.worktree"

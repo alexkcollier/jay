@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
-# wt agents [path]  Claude sessions (all repos, or one worktree) in fzf; needs-input first.
-# Enter: `wt go` — attach to a background agent, or select an interactive one's tab and pane.
-# wt agents --json  `claude agents --json --all` with each agent's .phase (input, failed, unread,
-#                   working, idle; see wtl_agent_phases), for wt all and the mod.
-# wt agents --orchestrators [main checkout]  The orchestrator of each repo (◇ in the hub list),
+# jay agents [path]  Claude sessions (all repos, or one worktree) in fzf; needs-input first.
+# Enter: `jay go` — attach to a background agent, or select an interactive one's tab and pane.
+# jay agents --json  `claude agents --json --all` with each agent's .phase (input, failed,
+#                    unread, working, idle; see jay_agent_phases), for jay all and the mod.
+# jay agents --orchestrators [main checkout]  The orchestrator of each repo (◇ in the hub list),
 # one line each: main checkout<TAB>id<TAB>name.
 set -euo pipefail
-source "$HOME/.local/lib/wt-lib.sh"
+source "$HOME/.local/lib/jay-lib.sh"
 
 if [[ "${1:-}" == --orchestrators ]]; then
-  wtl_orchestrators "${2:+$(wtl_toplevel "$2")}"
+  jay_orchestrators "${2:+$(jay_toplevel "$2")}"
   exit 0
 fi
 
 agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
-agents=$(wtl_agent_phases "$agents")
+agents=$(jay_agent_phases "$agents")
 if [[ "${1:-}" == --json ]]; then
   printf '%s\n' "$agents"
   exit 0
 fi
 
 filter=${1:-}
-[[ -n "$filter" ]] && filter=$(wtl_toplevel "$filter")
+[[ -n "$filter" ]] && filter=$(jay_toplevel "$filter")
 
 list=$(jq -r --arg f "$filter" '
   .[] | select($f == "" or .cwd == $f or (.cwd | startswith($f + "/")))
@@ -31,11 +31,11 @@ list=$(jq -r --arg f "$filter" '
 [[ -n "$list" ]] || { echo "No Claude sessions${filter:+ in $filter}."; exit 0; }
 
 rows=$(while IFS=$'\t' read -r _ state kind id sid cwd name; do
-  IFS=$'\t' read -r client repo branch _ < <(wtl_describe "$cwd")
+  IFS=$'\t' read -r client repo branch _ < <(jay_describe "$cwd")
   printf '%-8s %-10s %-11s %-36s %s\t%s\t%s\t%s\t%s\n' "$state" "$client" "$repo" "${branch:0:36}" "$name" "$kind" "$id" "$sid" "$cwd"
 done <<<"$list")
 
 choice=$(fzf --delimiter=$'\t' --with-nth=1 --no-sort --layout=reverse \
   --header='Enter: go to the agent' <<<"$rows") || exit 0
 IFS=$'\t' read -r _ kind id sid cwd <<<"$choice"
-exec wt-go "$sid"
+exec jay-go "$sid"

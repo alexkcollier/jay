@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# wt-hub-pane agent|review|files — a pane of the hub that follows its target.
-# The target is a line in ~/.local/state/wt-hub-<role>.target (wtl_hub_point writes it and stops
+# jay-pane agent|review|files — a pane of the hub that follows its target.
+# The target is a line in ~/.local/state/jay/<role>.target (jay_hub_point writes it and stops
 # the running program, so the pane starts it again for the new target).
 # agent:  `claude attach` on the picked agent, in the middle column; the pane never closes. A
-#         fresh hub opens on the hub Claude (a background agent, see wtl_hub_claude).
+#         fresh hub opens on the hub Claude (a background agent, see jay_hub_claude).
 #         When you leave the agent (Ctrl+Z, or ←: the list is the agent view here), it keeps
 #         running and Enter opens it again. An interactive agent runs in its own terminal tab:
 #         the pane says so. When attach fails at once (say the agent's worktree is gone), its
 #         error stays on screen.
-# review: tuicr in one of two modes (wt-hub-review.mode), switched with `t` (wt-hub-keys); the
+# review: tuicr in one of two modes (review.mode), switched with `t` (jay-keys); the
 #         title starts with the mode.
 #         turns: the agent's turn chain (refs/wt-turns/<agent id or session8>), else the newest
 #         chain in the worktree, else tuicr's own target picker. A chain opens on its last
@@ -18,21 +18,21 @@
 #         A new turn (or commit) starts tuicr again by itself, on the newest turn; also over
 #         the picker, when the first turn (or running turn) comes. A running turn that moves
 #         does not: q shows its newest state.
-#         WT_REVIEW=lazygit: lazygit in the same two modes instead (wt-hub-lazygit). It follows
+#         JAY_REVIEW=lazygit: lazygit in the same two modes instead (jay-lazygit). It follows
 #         new turns without a restart; its t and e are its own custom commands.
 # files:  yazi in the worktree. It covers review; e or q quits yazi and review comes back
 #         (e from the hub's yazi keymap, config/yazi).
 set -uo pipefail
 export PATH="$HOME/.local/share/mise/shims:/opt/homebrew/bin:$PATH"
-WT_HUB_SESSION=${ZELLIJ_SESSION_NAME:-${WT_HUB_SESSION:-hub}}
-source "$HOME/.local/lib/wt-lib.sh"
+JAY_SESSION=${ZELLIJ_SESSION_NAME:-${JAY_SESSION:-${WT_HUB_SESSION:-jay}}}
+source "$HOME/.local/lib/jay-lib.sh"
 reviewer=tuicr
-[[ "${WT_REVIEW:-}" == lazygit ]] && reviewer=lazygit
+[[ "${JAY_REVIEW:-}" == lazygit ]] && reviewer=lazygit
 
 role=$1
-target_file=$(wtl_hub_target_file "$role")
-printf '%s\t%s\n' "${ZELLIJ_PANE_ID:-}" "$$" >"$(wtl_hub_pane_file "$role")"
-trap 'wtl_hub_pane_gone "$role" $$' EXIT
+target_file=$(jay_hub_target_file "$role")
+printf '%s\t%s\n' "${ZELLIJ_PANE_ID:-}" "$$" >"$(jay_hub_pane_file "$role")"
+trap 'jay_hub_pane_gone "$role" $$' EXIT
 
 target() { cat "$target_file" 2>/dev/null; }
 
@@ -66,7 +66,7 @@ chain() {
   here=$(pwd -P)
   git for-each-ref --sort=-committerdate --format='%(refname)' 'refs/wt-turns/*/head' 'refs/wt-turns/*/live' \
     | sed -E 's#^refs/wt-turns/([^/]+)/(head|live)$#\1#' | while read -r candidate; do
-      [[ "$(cat "$HOME/.local/state/wt-turns/$candidate.worktree" 2>/dev/null)" -ef "$here" ]] && { printf '%s\n' "$candidate"; break; }
+      [[ "$(cat "$JAY_STATE/turns/$candidate.worktree" 2>/dev/null)" -ef "$here" ]] && { printf '%s\n' "$candidate"; break; }
     done
 }
 
@@ -89,10 +89,10 @@ select_last_turn() {
   [[ -n "${ZELLIJ_PANE_ID:-}" ]] || return 0
   while ((i < 40)); do
     sleep 0.25
-    [[ -f "$WT_HUB_HIDDEN" ]] || i=$((i + 1))
+    [[ -f "$JAY_HIDDEN" ]] || i=$((i + 1))
     [[ "$(target)" == "$1" ]] || return 0
-    if zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" 2>/dev/null | head -4 | grep -q '┌ Commits ─'; then
-      zellij -s "$WT_HUB_SESSION" action write-chars -p "$pane" '(' >/dev/null 2>&1
+    if zellij -s "$JAY_SESSION" action dump-screen -p "$pane" 2>/dev/null | head -4 | grep -q '┌ Commits ─'; then
+      zellij -s "$JAY_SESSION" action write-chars -p "$pane" '(' >/dev/null 2>&1
       return 0
     fi
   done
@@ -119,10 +119,10 @@ follow() {
   was=$("$@")
   while sleep 2; do
     [[ "$("$@")" == "$was" ]] && continue
-    zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -1 \
+    zellij -s "$JAY_SESSION" action dump-screen -p "$pane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -1 \
       | grep -qE '^[[:space:]]*(NORMAL|SELECT)' || continue
-    for p in $(pgrep -P $$ -f wt-hub-keys); do
-      wtl_kill_children "$p"
+    for p in $(pgrep -P $$ -f jay-keys); do
+      jay_kill_children "$p"
       kill -TERM "$p" 2>/dev/null
     done
     return 0
@@ -130,13 +130,13 @@ follow() {
 }
 
 # tuicr on range $1 (empty: tuicr's picker) that starts again when the output of the rest
-# changes (follow). Returns tuicr's status (99: wt-hub-keys' `t`).
+# changes (follow). Returns tuicr's status (99: jay-keys' `t`).
 review_range() {
   local range=$1 watcher rc
   shift
   follow "$@" &
   watcher=$!
-  "$HOME/.local/bin/wt-hub-keys" tuicr --no-update-check ${range:+-r "$range"}
+  "$HOME/.local/bin/jay-keys" tuicr --no-update-check ${range:+-r "$range"}
   rc=$?
   kill "$watcher" 2>/dev/null
   wait "$watcher" 2>/dev/null # no "Terminated" line on the screen
@@ -188,21 +188,21 @@ run() {
     review)
       IFS=$'\t' read -r path session <<<"$1"
       cd "$path" || return
-      # lazygit (WT_REVIEW=lazygit): its `t` toggles the mode itself and stops it. An agent
+      # lazygit (JAY_REVIEW=lazygit): its `t` toggles the mode itself and stops it. An agent
       # with no chain yet gets its view at once: it fills when the first (running) turn comes.
       if [[ "$reviewer" == lazygit ]]; then
-        if [[ "$(wtl_hub_mode)" == commits ]]; then
-          "$HOME/.local/bin/wt-hub-lazygit" commits
+        if [[ "$(jay_hub_mode)" == commits ]]; then
+          "$HOME/.local/bin/jay-lazygit" commits
         else
           id=$(chain "$session")
-          "$HOME/.local/bin/wt-hub-lazygit" turns "${id:-${session:0:8}}"
+          "$HOME/.local/bin/jay-lazygit" turns "${id:-${session:0:8}}"
         fi
         return
       fi
-      # wt-hub-keys exits 99 for `t` (toggle turns ⇄ commits).
+      # jay-keys exits 99 for `t` (toggle turns ⇄ commits).
       # With nothing to review yet, tuicr's picker opens, and review follows on as well: a
       # branch's first commit, an agent's first turn.
-      if [[ "$(wtl_hub_mode)" == commits ]]; then
+      if [[ "$(jay_hub_mode)" == commits ]]; then
         base=$(branch_base)
         review_range "${base:+$base..HEAD}" git rev-parse -q --verify HEAD
         return
@@ -215,16 +215,16 @@ run() {
       review_range "${id:+refs/wt-turns/$id/base..$last}" turns_state "$session" ;;
     files)
       cd "$1" || return
-      YAZI_CONFIG_HOME="$HOME/.config/wt-hub/yazi" yazi "$1" ;;
+      YAZI_CONFIG_HOME="$HOME/.config/jay/yazi" yazi "$1" ;;
   esac
 }
 
-# A fresh hub opens on the hub Claude (wtl_hub_claude starts it when it has none). Review stays
+# A fresh hub opens on the hub Claude (jay_hub_claude starts it when it has none). Review stays
 # empty: the hub Claude works in no worktree.
 if [[ "$role" == agent && -z "$(target)" ]]; then
   printf '\n  Opening the hub Claude...\n'
-  if hubid=$(wtl_hub_claude 2>/dev/null); then
-    [[ -z "$(target)" ]] && wtl_hub_write_target agent "$(printf '%s\t%s' "$hubid" "${WT_ROOTS%%:*}")"
+  if hubid=$(jay_hub_claude 2>/dev/null); then
+    [[ -z "$(target)" ]] && jay_hub_write_target agent "$(printf '%s\t%s' "$hubid" "${JAY_ROOTS%%:*}")"
   fi
   clear
 fi
@@ -241,7 +241,7 @@ while :; do
     clear
     continue
   fi
-  started=$SECONDS mode=$(wtl_hub_mode)
+  started=$SECONDS mode=$(jay_hub_mode)
   run "$now"
   rc=$?
   # 143: stopped (← in attach, see leave_agent_view), not failed.
@@ -259,18 +259,18 @@ while :; do
   if [[ "$role" == agent ]]; then
     IFS=$'\t' read -r _ _ kind _ <<<"$now"
     if [[ "$kind" != interactive ]]; then
-      wtl_hub_write_target agent ""
+      jay_hub_write_target agent ""
       printf '\n  You left this agent. It keeps running.\n\n  Enter: open it again.\n  Or pick an agent in the list.\n'
-      wait_change "" || wtl_hub_write_target agent "$now"
+      wait_change "" || jay_hub_write_target agent "$now"
       clear
     fi
     continue
   fi
   if [[ "$role" == review ]]; then
-    ((rc == 99)) && wtl_hub_toggle_mode
+    ((rc == 99)) && jay_hub_toggle_mode
     # A toggle (t) starts tuicr again in the other mode, under a new title.
-    if [[ "$(wtl_hub_mode)" != "$mode" ]]; then
-      wtl_hub_retitle review
+    if [[ "$(jay_hub_mode)" != "$mode" ]]; then
+      jay_hub_retitle review
       continue
     fi
   fi
@@ -280,7 +280,7 @@ while :; do
   # You left the program yourself: the pane closes and the one under it comes back. Review
   # gets its title after that (the delay outlives the pane, so HUP is ignored).
   if [[ "$role" == files ]]; then
-    (trap '' HUP; sleep 0.5; wtl_hub_retitle review) >/dev/null 2>&1 &
+    (trap '' HUP; sleep 0.5; jay_hub_retitle review) >/dev/null 2>&1 &
   fi
   [[ "$role" == review ]] || exit 0
   printf '\n  %s closed. Enter: open it again (it re-reads the turns).\n' "$reviewer"

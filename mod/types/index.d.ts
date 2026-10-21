@@ -29,7 +29,7 @@ export type HubEvent = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'wt-hub': {
+    jay: {
       isHub: boolean
       selfId: string
       worktrees: WorktreeRow[]

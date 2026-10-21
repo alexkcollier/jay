@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# wt new <branch|pr:N> [-b base] [-t "task note"] [-a] [-- prompt...]
-# Create (or reuse) the worktree and store the task note. With a prompt, or -a for an idle
-# one, start a background Claude agent there (see it in the hub list or `claude agents`).
-# Without -t, the first line of the prompt becomes the task note.
+# jay new <branch|pr:N> [-b base] [-t "task note"] [-a] [-- prompt...]
+# Create (or reuse) the worktree (worktrunk's wt switch) and store the task note. With a prompt,
+# or -a for an idle one, start a background Claude agent there (see it in the hub list or
+# `claude agents`). Without -t, the first line of the prompt becomes the task note.
 set -euo pipefail
-source "$HOME/.local/lib/wt-lib.sh"
+source "$HOME/.local/lib/jay-lib.sh"
 
 usage() { sed -n '2,5s/^# \{0,1\}//p' "$0"; }
 branch="" base="" task="" agent=false prompt=()
@@ -35,17 +35,17 @@ if [[ -z "$task" ]] && ((${#prompt[@]})); then
 fi
 [[ -n "$task" ]] && wt -C "$path" config state vars set task="$task" >/dev/null 2>&1
 
-IFS=$'\t' read -r _ repo branch _ < <(wtl_describe "$path")
+IFS=$'\t' read -r _ repo branch _ < <(jay_describe "$path")
 # Called from an agent (an orchestrator, the hub Claude), the agent's CLAUDE*/ANTHROPIC*
 # variables would reach the new one: an inherited CLAUDE_CODE_CHILD_SESSION hides it from
 # `claude agents` and turns off its transcript. Start it without them.
 strip=()
 for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
 if ((${#prompt[@]})); then
-  (cd "$path" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(wtl_tab_name "$repo" "$branch")" "${prompt[*]}")
+  (cd "$path" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(jay_tab_name "$repo" "$branch")" "${prompt[*]}")
 elif [[ "$agent" == true ]]; then
-  (cd "$path" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(wtl_tab_name "$repo" "$branch")")
+  (cd "$path" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(jay_tab_name "$repo" "$branch")")
 else
   echo "Worktree ready: $path"
-  echo "Open it with: wt open $branch"
+  echo "Open it with: jay open $branch"
 fi

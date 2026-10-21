@@ -1,6 +1,6 @@
 #!/usr/bin/python3 -I
-# wt-hub-diff delta|difft WIDTH SCHEME [ARGS...] — the diff renderer of the hub's lazygit review
-# (git.diffRenderers in config/lazygit/hub.yml; WT_REVIEW_DIFF picks the first, | cycles). It
+# jay-diff delta|difft WIDTH SCHEME [ARGS...] — the diff renderer of the hub's lazygit review
+# (git.diffRenderers in config/lazygit/hub.yml; JAY_REVIEW_DIFF picks the first, | cycles). It
 # fits a diff to the narrow review column:
 #   - a bar on each file: its place in the diff (3/8), the status (M A D R) and the path
 #   - a line on each hunk: path:line, its place in the file (2/3) and the function
@@ -21,7 +21,7 @@ signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 ESC = re.compile(r"(\x1b\[[0-9;:?]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))")
 RESET = "\x1b[0m"
 # Markers that delta writes in front of its file and hunk headers; this script replaces them.
-FILE_MARK, HUNK_MARK = "@@wt-file@@", "@@wt-hunk@@"
+FILE_MARK, HUNK_MARK = "@@jay-file@@", "@@jay-hunk@@"
 # delta's gutter as this script asks for it: "<old>|<new>|", 6 columns each.
 GUTTER = re.compile(r"^([ \d]{6})\|([ \d]{6})\|")
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$")

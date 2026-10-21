@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# wt sidebar — live list of worktrees and Claude agents for a narrow left pane.
+# jay-sidebar — the hub's live list of worktrees and Claude agents, for a narrow left pane.
 # Click, double-click or Enter: an agent → shown in the hub's middle column, and review (tuicr,
 # its turns) and files (yazi, when shown) switch to it; a worktree → review and files switch to
 # it; "◆ hub" → the hub Claude (a background agent, started when it has none) in the middle
@@ -14,18 +14,18 @@
 # b: an idle interactive session goes on as a background agent (asks first)
 # p: prune dead agents (folder gone; asks first). The list also prunes them by itself, every
 # 10 minutes, with plain `claude rm` (it keeps an agent whose worktree has work to lose), and
-# then the turn chains of gone agents; log in ~/.local/state/wt-hub-prune.log.
+# then the turn chains of gone agents; log in ~/.local/state/jay/prune.log.
 # r: reload this agent list (git signs now; the list starts again: new code and keys too)
 # h/l: narrower/wider
 # ?: keys. No quit key: the list belongs to the hub.
-# wt-sidebar --files: show files over review (e in the review pane, through wt-hub-keys).
-# wt-sidebar --review toggle|show: hide or show review (Ctrl g v), show it (Ctrl g 3).
+# jay-sidebar --files: show files over review (e in the review pane, through jay-keys).
+# jay-sidebar --review toggle|show: hide or show review (Ctrl g v), show it (Ctrl g 3).
 set -uo pipefail
-source "$HOME/.local/lib/wt-lib.sh"
+source "$HOME/.local/lib/jay-lib.sh"
 
-STATE="$HOME/.local/state"
-CACHE="$STATE/wt-worktrees.ndjson"
-HIDE_IDLE="$STATE/wt-hub-sidebar.hide-idle"
+STATE=$JAY_STATE
+CACHE="$STATE/worktrees.ndjson"
+HIDE_IDLE="$STATE/sidebar.hide-idle"
 mkdir -p "$STATE"
 
 # The git signs of the rows, one cell wide, as UTF-8 bytes because bash 3.2 has no \u: Nerd Font
@@ -37,7 +37,7 @@ G_DIFF=$'\xef\x91\x80' G_UP='+' G_ALERT=$'\xef\x90\xa1' G_OK=$'\xef\x90\xae'
 G_MERGE=$'\xef\x90\x99' G_PUSH=$'\xe2\x86\x91' G_PULL=$'\xe2\x86\x93' G_HOME=$'\xef\x91\xad'
 
 refresh_worktrees() {
-  wt-all --json >"$CACHE.$$" 2>/dev/null && mv "$CACHE.$$" "$CACHE"
+  jay-all --json >"$CACHE.$$" 2>/dev/null && mv "$CACHE.$$" "$CACHE"
 }
 
 # The folders of the agents in JSON $1 that no longer exist (a removed worktree), as a JSON array.
@@ -57,26 +57,26 @@ rows() {
   fi
   local agents jobs shown=""
   # The agent in the hub's middle column, marked with ▸ beside it.
-  wtl_hub_role agent >/dev/null && shown=$(cut -f1 "$(wtl_hub_target_file agent)" 2>/dev/null)
+  jay_hub_role agent >/dev/null && shown=$(cut -f1 "$(jay_hub_target_file agent)" 2>/dev/null)
   agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
-  agents=$(wtl_agent_phases "$agents" "$shown") || agents='[]'
-  jobs=$(wtl_jobs "$agents")
+  agents=$(jay_agent_phases "$agents" "$shown") || agents='[]'
+  jobs=$(jay_jobs "$agents")
   (auto_prune "$agents" &) >/dev/null 2>&1
   local hideidle=false width
   [[ -f "$HIDE_IDLE" ]] && hideidle=true
   # The text width: fzf's (it sets FZF_COLUMNS for reloads) less the pointer column.
   width=${FZF_COLUMNS:-$(stty size </dev/tty 2>/dev/null | cut -d' ' -f2)}
   width=$((${width:-40} - 1))
-  jq -rs --argjson agents "$agents" --arg shown "$shown" --arg hubid "$(wtl_hub_claude_id)" \
-    --argjson hideidle "$hideidle" --arg roots "$WT_ROOTS" --argjson gone "$(gone_dirs "$agents")" \
-    --argjson jobs "$jobs" --argjson orchs "$(wtl_orch_ranks "$agents" "$jobs")" \
+  jq -rs --argjson agents "$agents" --arg shown "$shown" --arg hubid "$(jay_hub_claude_id)" \
+    --argjson hideidle "$hideidle" --arg roots "$JAY_ROOTS" --argjson gone "$(gone_dirs "$agents")" \
+    --argjson jobs "$jobs" --argjson orchs "$(jay_orch_ranks "$agents" "$jobs")" \
     --argjson gl "$(jq -nc --arg diff "$G_DIFF" --arg up "$G_UP" --arg alert "$G_ALERT" --arg ok "$G_OK" \
       --arg merge "$G_MERGE" --arg push "$G_PUSH" --arg pull "$G_PULL" --arg home "$G_HOME" '$ARGS.named')" \
     --argjson width "$width" --argjson now "$(date +%s)" '
     def c($code): "\u001b[" + $code + "m";
     def age($ms): (($now - ($ms / 1000)) / 60 | floor) as $m
       | if $m < 60 then "\($m)m" elif $m < 2880 then "\($m / 60 | floor)h" else "\($m / 1440 | floor)d" end;
-    # The phase comes from wtl_agent_phases (wt-lib.sh), the rule of wt all and the mod too.
+    # The phase comes from jay_agent_phases (jay-lib.sh), the rule of jay all and the mod too.
     def phase: .phase // "idle";
     def glyph: {input: (c("1;33") + "!"), failed: (c("31") + "✗"), unread: (c("1;35") + "✓"),
       working: (c("2;32") + "●"), idle: (c("2") + "○")}[.] + c("0");
@@ -91,7 +91,7 @@ rows() {
     | def owner($cwd): first($paths[] | select($cwd == . or ($cwd | startswith(. + "/")))) // "";
       # An agent from a main checkout in a worktree it entered stays under its main checkout, and
       # .away is the folder it is in. .orch: main for the orchestrator of the repo (the oldest
-      # agent with the orchestrator prompt that belongs to the main checkout, see wtl_orch_ranks),
+      # agent with the orchestrator prompt that belongs to the main checkout, see jay_orch_ranks),
       # extra for another one there, else empty.
       ($wts | map(select(.main) | .path)) as $mains
     | ($wts | map({(.path): .branch}) | add // {}) as $branchof
@@ -191,14 +191,14 @@ rows() {
          "idle\tidle\t" + c("2") + "a shows " + ([(if $idle > 0 then "\($idle) idle repo" + (if $idle > 1 then "s" else "" end) else empty end),
                                      (if $idlemain > 0 then "\($idlemain) idle main" else empty end)] | join(", ")) + c("0")
        else empty end)
-  ' "$CACHE" | tee >(wc -l | tr -d ' ' >"${WT_SIDEBAR_COUNT:-/dev/null}") \
-    >(head -1 | cut -f3 >"${WT_SIDEBAR_SUM:-/dev/null}")
+  ' "$CACHE" | tee >(wc -l | tr -d ' ' >"${JAY_SIDEBAR_COUNT:-/dev/null}") \
+    >(head -1 | cut -f3 >"${JAY_SIDEBAR_SUM:-/dev/null}")
 }
 
 # Move the focus from the list $1 columns to the right (the hub's middle column is 1, review
 # and files are 2). `move-focus` moves the terminal's focus; `focus-pane-id` does not.
 focus_column() {
-  wtl_in_hub || return 0
+  jay_in_hub || return 0
   local i
   for ((i = 0; i < $1; i++)); do zellij action move-focus right >/dev/null 2>&1; done
 }
@@ -215,46 +215,46 @@ agent_json() {
 review_key() {
   (
     trap '' HUP
-    wtl_hub_wait_gone "${ZELLIJ_PANE_ID:-}"
+    jay_hub_wait_gone "${ZELLIJ_PANE_ID:-}"
     case ${1:-toggle} in
-      toggle) wtl_hub_locked wtl_hub_toggle_review ;;
-      show) [[ -f "$WT_HUB_HIDDEN" ]] && wtl_hub_locked wtl_hub_unhide_review --focus ;;
+      toggle) jay_hub_locked jay_hub_toggle_review ;;
+      show) [[ -f "$JAY_HIDDEN" ]] && jay_hub_locked jay_hub_unhide_review --focus ;;
     esac
   ) </dev/null >/dev/null 2>&1 &
 }
 
 # Pick row kind $1 with id $2. An agent always moves the focus to the middle
-# column (wtl_hub_show); a worktree with --focus (Enter) moves it to review. A repo row acts as
+# column (jay_hub_show); a worktree with --focus (Enter) moves it to review. A repo row acts as
 # its main checkout. An interactive agent runs in its own terminal, so in the hub the middle
 # column only says so, and review shows its turn chain (named after the session id); `o` goes
 # to its tab.
 pick_interactive() {
-  wtl_hub_show "$1" "$2" "$3" interactive && wtl_hub_target "$3" "${1:0:8}"
+  jay_hub_show "$1" "$2" "$3" interactive && jay_hub_target "$3" "${1:0:8}"
 }
 
 act() {
   local agent
   case $1 in
     ag) agent=$(agent_json "$2")
-        if wtl_in_hub && [[ -n "$agent" && "$(jq -r .kind <<<"$agent")" != background ]]; then
-          wtl_hub_locked pick_interactive "$2" "$(jq -r '.name // .sessionId[0:8]' <<<"$agent")" "$(jq -r .cwd <<<"$agent")"
+        if jay_in_hub && [[ -n "$agent" && "$(jq -r .kind <<<"$agent")" != background ]]; then
+          jay_hub_locked pick_interactive "$2" "$(jq -r '.name // .sessionId[0:8]' <<<"$agent")" "$(jq -r .cwd <<<"$agent")"
         else
-          WT_LIST_PICK=1 wt-go "$2" >/dev/null 2>&1
+          JAY_LIST_PICK=1 jay-go "$2" >/dev/null 2>&1
         fi ;;
-    wt|repo) if wtl_in_hub; then
-          wtl_hub_locked wtl_hub_target "$2"
+    wt|repo) if jay_in_hub; then
+          jay_hub_locked jay_hub_target "$2"
           # Enter goes to review, also when it is hidden (Ctrl g v).
           if [[ "${3:-}" == --focus ]]; then
-            if [[ -f "$WT_HUB_HIDDEN" ]] && wtl_hub_review_hidden >/dev/null; then
-              wtl_hub_locked wtl_hub_unhide_review --focus
+            if [[ -f "$JAY_HIDDEN" ]] && jay_hub_review_hidden >/dev/null; then
+              jay_hub_locked jay_hub_unhide_review --focus
             else
               focus_column 2
             fi
           fi
         else
-          wt-open "$2" >/dev/null 2>&1
+          jay-open "$2" >/dev/null 2>&1
         fi ;;
-    hub) WT_LIST_PICK=1 wt-go hub >/dev/null 2>&1 ;;
+    hub) JAY_LIST_PICK=1 jay-go hub >/dev/null 2>&1 ;;
   esac
   return 0
 }
@@ -269,19 +269,19 @@ path_of() {
 view() {
   local path
   if [[ "$1" == open && "$2" == ag && "$(agent_json "$3" | jq -r '.kind // ""')" == interactive ]]; then
-    wt-go "$3" >/dev/null 2>&1
+    jay-go "$3" >/dev/null 2>&1
     return 0
   fi
   path=$(path_of "$2" "$3")
   [[ -n "$path" ]] || return 0
   case $1 in
-    open) wt-open "$path" >/dev/null 2>&1 ;;
+    open) jay-open "$path" >/dev/null 2>&1 ;;
   esac
 }
 
 # Start an idle background agent from row kind $2 with id $3: $1 = here (in the row's worktree)
-# or worktree (a new worktree from the row's repo through `wt new`; asks for the branch). Here
-# in a main checkout, the agent is an orchestrator (see wtl_orchestrator_prompt); a repo has
+# or worktree (a new worktree from the row's repo through `jay new`; asks for the branch). Here
+# in a main checkout, the agent is an orchestrator (see jay_orchestrator_prompt); a repo has
 # one, so when it has one already, the hub shows that one. The new agent shows in the hub's
 # middle column, where you type its first prompt.
 new_agent() {
@@ -292,11 +292,11 @@ new_agent() {
   fi
   path=$(path_of "$kind" "$id")
   [[ -n "$path" ]] || return 0
-  top=$(wtl_toplevel "$path")
-  primary=$(wtl_primary "$top")
-  IFS=$'\t' read -r _ repo branch _ < <(wtl_describe "$top")
+  top=$(jay_toplevel "$path")
+  primary=$(jay_primary "$top")
+  IFS=$'\t' read -r _ repo branch _ < <(jay_describe "$top")
   if [[ "$mode" == here && "$top" == "$primary" ]]; then
-    orch=$(wtl_orchestrators "$top" | head -1)
+    orch=$(jay_orchestrators "$top" | head -1)
     if [[ -n "$orch" ]]; then
       IFS=$'\t' read -r _ agent name <<<"$orch"
       pause "$repo has an orchestrator: \"$name\" ($agent). A repo has only one, so n does not start a second one. The hub shows \"$name\" now.
@@ -306,12 +306,12 @@ c on its row gives it a fresh context."
       return 0
     fi
   fi
-  if ! wtl_trusted "$top"; then
-    key=$(wtl_trust_key "$top")
+  if ! jay_trusted "$top"; then
+    key=$(jay_trust_key "$top")
     confirm "Claude does not trust $repo yet, so no agent can start in it.
 
 Trust ${key/#$HOME/~} and all its worktrees? This is the same as yes in the trust prompt of claude: Claude then uses the settings, hooks and MCP servers of the repo." "y: trust" || return 0
-    if ! wtl_trust "$top"; then
+    if ! jay_trust "$top"; then
       pause "Could not change ~/.claude.json. Run claude in ${key/#$HOME/~} once and accept the trust prompt."
       return 0
     fi
@@ -322,16 +322,16 @@ Trust ${key/#$HOME/~} and all its worktrees? This is the same as yes in the trus
     read -r -e branch </dev/tty
     [[ -n "$branch" ]] || return 0
     say "Starting an agent in a new worktree $branch..."
-    out=$(cd "$primary" && wt-new "$branch" --agent 2>&1)
+    out=$(cd "$primary" && jay-new "$branch" --agent 2>&1)
   elif [[ "$top" == "$primary" ]]; then
     say "Starting an orchestrator in $repo (main checkout)..."
-    out=$(cd "$top" && claude --bg --name "$(wtl_tab_name "$repo" "$branch")" \
-      --append-system-prompt "$(wtl_orchestrator_prompt "$repo" "$top")" 2>&1)
+    out=$(cd "$top" && claude --bg --name "$(jay_tab_name "$repo" "$branch")" \
+      --append-system-prompt "$(jay_orchestrator_prompt "$repo" "$top")" 2>&1)
   else
     say "Starting an agent in $repo/${branch##*/}..."
-    out=$(cd "$top" && claude --bg --name "$(wtl_tab_name "$repo" "$branch")" 2>&1)
+    out=$(cd "$top" && claude --bg --name "$(jay_tab_name "$repo" "$branch")" 2>&1)
   fi
-  agent=$(wtl_bg_id "$out")
+  agent=$(jay_bg_id "$out")
   if [[ -z "$agent" ]]; then
     pause "Not started:
 
@@ -341,12 +341,12 @@ $out"
   show_started "$agent"
 }
 
-# Show background agent $1 (short id), just started, in the hub: wt-go fails until
+# Show background agent $1 (short id), just started, in the hub: jay-go fails until
 # `claude agents` lists it.
 show_started() {
   local i
   for i in $(seq 20); do
-    wt-go "$1" >/dev/null 2>&1 && return 0
+    jay-go "$1" >/dev/null 2>&1 && return 0
     sleep 0.5
   done
   pause "Started $1, but the hub cannot show it yet. Pick it in the list."
@@ -385,7 +385,7 @@ It ends in its own tab and goes on in the background with the same conversation.
     return 0
   fi
   out=$(cd "$cwd" && claude --bg --resume "$sid" 2>&1)
-  short=$(wtl_bg_id "$out")
+  short=$(jay_bg_id "$out")
   if [[ -z "$short" ]]; then
     pause "\"$name\" ended, but it did not start in the background:
 
@@ -398,9 +398,9 @@ claude --bg --resume $sid tries again."
 }
 
 # A fresh context for the orchestrator (◇) in row kind $1 with id $2, or for the hub Claude (the
-# "◆ hub" row), after a confirm and only when it is idle. claude-clear types /clear into it:
+# "◆ hub" row), after a confirm and only when it is idle. jay-clear types /clear into it:
 # Claude keeps the system prompt (the orchestrator or hub prompt), the name and the short id, so
-# the turn chain, WT_HUB_CLAUDE_FILE and the middle column stay right. Not for an orchestrator in
+# the turn chain, JAY_HUB_CLAUDE_FILE and the middle column stay right. Not for an orchestrator in
 # a worktree it entered: that worktree would stay its folder after the /clear.
 clear_context() {
   local kind=$1 id=$2 agents agent short name jobs away out
@@ -408,7 +408,7 @@ clear_context() {
   agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
   case $kind in
     hub)
-      short=$(wtl_hub_claude_id)
+      short=$(jay_hub_claude_id)
       agent=$(jq -c --arg i "$short" 'first(.[] | select(.id == $i and .state != "stopped")) // empty' <<<"$agents")
       if [[ -z "$short" || -z "$agent" ]]; then
         pause "The hub Claude does not run. A pick of \"◆ hub\" starts it, with a fresh context."
@@ -418,7 +418,7 @@ clear_context() {
       agent=$(jq -c --arg s "$id" 'first(.[] | select(.sessionId == $s)) // empty' <<<"$agents")
       [[ -n "$agent" ]] || return 0
       short=$(jq -r '.id // empty' <<<"$agent")
-      jobs=$(wtl_jobs "$agents")
+      jobs=$(jay_jobs "$agents")
       if [[ -z "$short" || "$(jq -r --arg i "$short" '.[$i].orch // false' <<<"$jobs")" != true ]]; then
         pause "$what"
         return 0
@@ -433,9 +433,9 @@ clear_context() {
       return 0 ;;
   esac
   name=$(jq -r '.name // .id' <<<"$agent")
-  # The phase rule of the list (wtl_agent_phases): unread and idle are idle. An agent whose state
+  # The phase rule of the list (jay_agent_phases): unread and idle are idle. An agent whose state
   # is working while its process is idle only waits for its workers, so it is idle too.
-  case $(wtl_agent_phases "[$agent]" "" | jq -r '.[0].phase') in
+  case $(jay_agent_phases "[$agent]" "" | jq -r '.[0].phase') in
     input) pause "\"$name\" waits for you: it asks something, or it waits for a permission. Answer it first."; return 0 ;;
     failed) pause "\"$name\" failed. Look at it first (Enter on its row)."; return 0 ;;
     working) pause "\"$name\" is working. Try again when it is idle."; return 0 ;;
@@ -444,7 +444,7 @@ clear_context() {
 
 The list types /clear into it. It starts a new conversation with the same system prompt, name and id. The old conversation stays in its transcript." "y: clear" || return 0
   say "Clearing the context of \"$name\"..."
-  out=$(claude-clear "$short" 2>&1) || pause "The context of \"$name\" did not change:
+  out=$(jay-clear "$short" 2>&1) || pause "The context of \"$name\" did not change:
 
 $out"
   return 0
@@ -503,7 +503,7 @@ ${RED}${G_ALERT}${OFF} merge would conflict
 ${DIM}${G_OK}${OFF} safe to remove
 ${RED}${G_MERGE}${OFF} conflicts or a rebase"
 footer() {
-  local flag=${WT_SIDEBAR_HELP:-/dev/null}
+  local flag=${JAY_SIDEBAR_HELP:-/dev/null}
   if [[ "${1:-}" == --toggle ]]; then
     if [[ -f "$flag" ]]; then rm -f "$flag"; else : >"$flag"; fi
   fi
@@ -552,7 +552,7 @@ remove() {
         pause "\"$name\" is an interactive session. Close it in its own tab, or b: make it a background agent."
         return 0
       fi
-      tree=$(wtl_jobs "$agents" | jq -r --arg id "$short" '.[$id].tree // empty')
+      tree=$(jay_jobs "$agents" | jq -r --arg id "$short" '.[$id].tree // empty')
       if [[ -n "$tree" && -d "$tree" ]]; then
         remove wt "$tree" "$short"
         return 0
@@ -573,8 +573,8 @@ $out" ;;
       here=$(agents_in "$agents" "$top" "${3:-}")
       agents_busy "$here" && return 0
       idle=$(awk -F'\t' '$1 == "idle" { print "  " $3 }' <<<"$here")
-      tasks=$(hub-run --worktree-tab "$top" --tasks 2>/dev/null)
-      tab=$(hub-run --worktree-tab "$top" --name 2>/dev/null)
+      tasks=$(jay-run --worktree-tab "$top" --tasks 2>/dev/null)
+      tab=$(jay-run --worktree-tab "$top" --name 2>/dev/null)
       confirm "Remove worktree ${branch:-$top}${idle:+ and its agents}?
 
 $top
@@ -586,15 +586,15 @@ Tasks that stop (its tab in the hub closes):
 $tasks
 }
 The branch is deleted only if it is merged. Uncommitted changes stop the removal." || return 0
-      if [[ "$(cut -f1 "$(wtl_hub_target_file review)" 2>/dev/null)" == "$top" ]]; then
-        wtl_hub_locked wtl_hub_show_review
-        pane=$(wtl_hub_locked wtl_hub_point review "" | cut -f1)
-        [[ -n "$pane" ]] && zellij -s "$WT_HUB_SESSION" action rename-pane -p "$pane" review >/dev/null 2>&1
+      if [[ "$(cut -f1 "$(jay_hub_target_file review)" 2>/dev/null)" == "$top" ]]; then
+        jay_hub_locked jay_hub_show_review
+        pane=$(jay_hub_locked jay_hub_point review "" | cut -f1)
+        [[ -n "$pane" ]] && zellij -s "$JAY_SESSION" action rename-pane -p "$pane" review >/dev/null 2>&1
       fi
       # The worktree goes first: `claude rm` keeps an agent while its worktree is on disk.
       if out=$(wt -C "$top" remove --foreground 2>&1); then
         rm_agents "$here"
-        [[ -n "$tab" ]] && hub-run --close-tab "$tab" >/dev/null 2>&1
+        [[ -n "$tab" ]] && jay-run --close-tab "$tab" >/dev/null 2>&1
       else
         pause "Not removed:
 
@@ -617,17 +617,17 @@ Their transcripts stay." || return 0
 
 # The agents in agents JSON $1 whose folder is $2 or in it, as what<TAB>id<TAB>name. what is open
 # (an interactive session: the list cannot remove it), busy (its phase is working or input, see
-# wtl_agent_phases: an agent that only waits for its workers is not busy), visit
-# (it entered the worktree, see wtl_jobs; also when it does not run now) or idle. Agent id $3
+# jay_agent_phases: an agent that only waits for its workers is not busy), visit
+# (it entered the worktree, see jay_jobs; also when it does not run now) or idle. Agent id $3
 # (optional) is idle when it is a visit: d on that agent takes its worktree with it.
 agents_in() {
-  jq -r --arg p "$2" --arg take "${3:-}" --argjson jobs "$(wtl_jobs "$1")" '
+  jq -r --arg p "$2" --arg take "${3:-}" --argjson jobs "$(jay_jobs "$1")" '
     def inside($d): $d == $p or ($d | startswith($p + "/"));
     .[] | select(.state != "stopped" and (inside(.cwd // "") or inside($jobs[.id // ""].tree // "")))
     | [(if .kind != "background" or .id == null then "open"
         elif .phase | IN("working", "input") then "busy"
         elif $jobs[.id].tree != null and .id != $take then "visit"
-        else "idle" end), (.id // ""), (.name // .id // .sessionId[0:8])] | @tsv' <<<"$(wtl_agent_phases "$1" "")"
+        else "idle" end), (.id // ""), (.name // .id // .sessionId[0:8])] | @tsv' <<<"$(jay_agent_phases "$1" "")"
 }
 
 # Return 0 after a note when agents TSV $1 (from agents_in) has an agent that the list must not
@@ -666,10 +666,10 @@ $failed"
 }
 
 # The dead agents in agents JSON $1, as id<TAB>name: background agents whose folder is gone (a
-# removed worktree) and that do not run now. An agent that entered the worktree (see wtl_jobs)
+# removed worktree) and that do not run now. An agent that entered the worktree (see jay_jobs)
 # is not dead: it came from another folder (an orchestrator, say).
 dead_agents() {
-  jq -r --argjson gone "$(gone_dirs "$1")" --argjson jobs "$(wtl_jobs "$1")" '.[]
+  jq -r --argjson gone "$(gone_dirs "$1")" --argjson jobs "$(jay_jobs "$1")" '.[]
     | select(.kind == "background" and .id != null and .state != "stopped"
         and (.state | IN("working", "blocked") | not) and (.status | IN("busy", "waiting") | not))
     | select($jobs[.id].tree == null)
@@ -682,19 +682,19 @@ dead_agents() {
 # the agent when that worktree is still on disk without a WorktreeRemove hook, or has work to
 # lose. The worktree can differ from the folder: an agent that moved on keeps its first folder.
 auto_prune() {
-  local stamp="$STATE/wt-hub-prune.stamp" id name out
+  local stamp="$STATE/prune.stamp" id name out
   [[ -n "$(find "$stamp" -mmin -10 2>/dev/null)" ]] && return 0
   touch "$stamp"
   while IFS=$'\t' read -r id name; do
     [[ -n "$id" ]] || continue
     out=$(claude rm "$id" 2>&1)
-    printf '%s %s (%s): %s\n' "$(date '+%F %T')" "$id" "$name" "$(head -1 <<<"$out")" >>"$STATE/wt-hub-prune.log"
+    printf '%s %s (%s): %s\n' "$(date '+%F %T')" "$id" "$name" "$(head -1 <<<"$out")" >>"$STATE/prune.log"
   done < <(dead_agents "$1")
-  # Then the turn chains of agents that are gone (see claude-turn-snapshot --prune), and old
-  # seen/ended marks (wtl_agent_phases): with both gone an agent is idle, and a seen mark goes
+  # Then the turn chains of agents that are gone (see jay-snapshot --prune), and old
+  # seen/ended marks (jay_agent_phases): with both gone an agent is idle, and a seen mark goes
   # first only when a newer turn made the agent unread already.
-  claude-turn-snapshot --prune >>"$STATE/wt-hub-prune.log" 2>&1
-  find "$WT_HUB_MARKS" -type f -mtime +14 -delete 2>/dev/null
+  jay-snapshot --prune >>"$STATE/prune.log" 2>&1
+  find "$JAY_MARKS/seen" "$JAY_MARKS/ended" -type f -mtime +14 -delete 2>/dev/null
   return 0
 }
 
@@ -728,52 +728,52 @@ case ${1:-} in
   --new) shift; new_agent "$@"; exit 0 ;;
   --bg) [[ "${2:-}" == ag ]] && to_background "$3"; exit 0 ;;
   --clear) shift; clear_context "$@"; exit 0 ;;
-  --files) wtl_hub_locked wtl_hub_show_files; exit 0 ;;
+  --files) jay_hub_locked jay_hub_show_files; exit 0 ;;
   --review) review_key "${2:-}"; exit 0 ;;
   --idle) if [[ -f "$HIDE_IDLE" ]]; then rm -f "$HIDE_IDLE"; else : >"$HIDE_IDLE"; fi; exit 0 ;;
   --footer) shift; footer "$@"; exit 0 ;;
   -h|--help) sed -n '2,20s/^# \{0,1\}//p' "$0"; exit 0 ;;
   # An option this version does not have (say a bind of a list started before an update) must
   # not start a second list.
-  -*) printf 'wt-sidebar: unknown option %s\n' "$1" >&2; exit 2 ;;
+  -*) printf 'jay-sidebar: unknown option %s\n' "$1" >&2; exit 2 ;;
 esac
 
 # The files of lists that were killed (their EXIT trap did not run): their pid is gone.
-for f in "$STATE"/wt-sidebar.*.*; do
+for f in "$STATE"/sidebar.*.*; do
   [[ -e "$f" || -S "$f" ]] || continue
-  pid=${f#"$STATE"/wt-sidebar.}; pid=${pid%%.*}
+  pid=${f#"$STATE"/sidebar.}; pid=${pid%%.*}
   [[ "$pid" =~ ^[0-9]+$ ]] && ! kill -0 "$pid" 2>/dev/null && rm -f "$f"
 done
 
-sock="$STATE/wt-sidebar.$$.sock"
-export WT_SIDEBAR_COUNT="$STATE/wt-sidebar.$$.count" WT_SIDEBAR_SUM="$STATE/wt-sidebar.$$.sum" \
-  WT_SIDEBAR_HELP="$STATE/wt-sidebar.$$.help" WT_SIDEBAR_RESTART="$STATE/wt-sidebar.$$.restart"
+sock="$STATE/sidebar.$$.sock"
+export JAY_SIDEBAR_COUNT="$STATE/sidebar.$$.count" JAY_SIDEBAR_SUM="$STATE/sidebar.$$.sum" \
+  JAY_SIDEBAR_HELP="$STATE/sidebar.$$.help" JAY_SIDEBAR_RESTART="$STATE/sidebar.$$.restart"
 post() { curl -s --max-time 2 --unix-socket "$sock" -X POST http://localhost -d "$1" >/dev/null 2>&1 || true; }
 
-# Send the agent counts (the list's first row) to the hub's bar (zjstatus, see wt-hub) when
+# Send the agent counts (the list's first row) to the hub's bar (zjstatus, see bin/jay) when
 # they change, and every 30 s for a bar that started again.
 last_sum=""
 send_sum() {
   local sum
-  sum=$(cat "$WT_SIDEBAR_SUM" 2>/dev/null)
+  sum=$(cat "$JAY_SIDEBAR_SUM" 2>/dev/null)
   [[ -n "$sum" ]] || return 0
   [[ "$sum" != "$last_sum" || "${1:-}" == --again ]] || return 0
   last_sum=$sum
   (zellij pipe "zjstatus::pipe::pipe_agents::$sum" >/dev/null 2>&1 &)
 }
 
-# The same for the tasks of the tasks tab. hub-run --tick also keeps a free shell in that tab.
+# The same for the tasks of the tasks tab. jay-run --tick also keeps a free shell in that tab.
 # An empty text clears the bar's part.
 last_tasks="-"
 send_tasks() {
   local tasks
-  tasks=$(hub-run --tick 2>/dev/null)
+  tasks=$(jay-run --tick 2>/dev/null)
   [[ "$tasks" != "$last_tasks" || "${1:-}" == --again ]] || return 0
   last_tasks=$tasks
   (zellij pipe "zjstatus::pipe::pipe_tasks::$tasks" >/dev/null 2>&1 &)
 }
 
-# Save the list's share of the hub's width when it changes (mouse drag, h/l), so `wt hub`
+# Save the list's share of the hub's width when it changes (mouse drag, h/l), so `jay`
 # starts it at that width.
 last_cols=""
 remember_width() {
@@ -786,59 +786,59 @@ remember_width() {
     | select($pane != null)
     | [.[] | select(.tab_id == $pane.tab_id and (.is_floating | not)) | .pane_x + .pane_columns] | max
     | ($pane.pane_columns * 100 / .) | round')
-  [[ -n "$share" ]] && printf '%s\n' "$share" >"$STATE/wt-hub-sidebar.pct"
+  [[ -n "$share" ]] && printf '%s\n' "$share" >"$STATE/sidebar.pct"
 }
 
 (
   tick=0
   while sleep 3; do
     tick=$((tick + 1))
-    wtl_in_hub && remember_width
-    before=$(cat "$WT_SIDEBAR_COUNT" 2>/dev/null)
-    post 'reload-sync(wt-sidebar --rows)'
+    jay_in_hub && remember_width
+    before=$(cat "$JAY_SIDEBAR_COUNT" 2>/dev/null)
+    post 'reload-sync(jay-sidebar --rows)'
     sleep 1
-    after=$(cat "$WT_SIDEBAR_COUNT" 2>/dev/null)
+    after=$(cat "$JAY_SIDEBAR_COUNT" 2>/dev/null)
     if [[ "$before" != "$after" ]] || ((tick % 10 == 0)); then post 'clear-screen'; fi
-    if wtl_in_hub; then
+    if jay_in_hub; then
       if ((tick % 10 == 0)); then send_sum --again; send_tasks --again; else send_sum; send_tasks; fi
       # The tasks tab's banner: the review's worktree, at the start and every 30 s (a pick sends
-      # it at once, see wtl_hub_target).
-      ((tick % 10 == 1)) && (hub-run --where >/dev/null 2>&1 &)
+      # it at once, see jay_hub_target).
+      ((tick % 10 == 1)) && (jay-run --where >/dev/null 2>&1 &)
       # A hidden review that came back with the floating panes (say Ctrl g p w) goes again.
-      [[ -f "$WT_HUB_HIDDEN" ]] && wtl_hub_rehide
+      [[ -f "$JAY_HIDDEN" ]] && jay_hub_rehide
     fi
   done
 ) &
 loop=$!
 cleanup() {
   kill $loop 2>/dev/null
-  rm -f "$sock" "$WT_SIDEBAR_COUNT" "$WT_SIDEBAR_SUM" "$WT_SIDEBAR_HELP" "$WT_SIDEBAR_RESTART"
+  rm -f "$sock" "$JAY_SIDEBAR_COUNT" "$JAY_SIDEBAR_SUM" "$JAY_SIDEBAR_HELP" "$JAY_SIDEBAR_RESTART"
 }
 trap cleanup EXIT
 
 rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=hidden --no-scrollbar \
   --delimiter=$'\t' --with-nth=3 --track --id-nth=2 --pointer='▌' --marker='' --gutter=' ' --highlight-line \
   --footer="$(footer)" --color=footer:-1,pointer:173,bg+:238 \
-  --bind '?:transform-footer(wt-sidebar --footer --toggle)' \
-  --bind 'd:execute(wt-sidebar --remove {1} {2})+reload-sync(wt-sidebar --rows)+clear-screen' \
-  --bind 'b:execute(wt-sidebar --bg {1} {2})+reload-sync(wt-sidebar --rows)+clear-screen' \
-  --bind 'c:execute(wt-sidebar --clear {1} {2})+reload-sync(wt-sidebar --rows)+clear-screen' \
-  --bind 'n:execute(wt-sidebar --new here {1} {2})+reload-sync(wt-sidebar --rows --fresh)+clear-screen' \
-  --bind 'N:execute(wt-sidebar --new worktree {1} {2})+reload-sync(wt-sidebar --rows --fresh)+clear-screen' \
-  --bind 'enter:execute-silent(wt-sidebar --act {1} {2} --focus)+reload-sync(wt-sidebar --rows)' \
-  --bind 'double-click:execute-silent(wt-sidebar --act {1} {2})+reload-sync(wt-sidebar --rows)' \
-  --bind 'left-click:execute-silent(wt-sidebar --act {1} {2})+reload-sync(wt-sidebar --rows)' \
-  --bind 'r:execute-silent(: >"$WT_SIDEBAR_RESTART")+abort' \
-  --bind 'o:execute-silent(wt-sidebar --view open {1} {2})' \
-  --bind 'a:execute-silent(wt-sidebar --idle)+reload-sync(wt-sidebar --rows)+clear-screen' \
-  --bind 'p:execute(wt-sidebar --prune)+reload-sync(wt-sidebar --rows)+clear-screen' \
+  --bind '?:transform-footer(jay-sidebar --footer --toggle)' \
+  --bind 'd:execute(jay-sidebar --remove {1} {2})+reload-sync(jay-sidebar --rows)+clear-screen' \
+  --bind 'b:execute(jay-sidebar --bg {1} {2})+reload-sync(jay-sidebar --rows)+clear-screen' \
+  --bind 'c:execute(jay-sidebar --clear {1} {2})+reload-sync(jay-sidebar --rows)+clear-screen' \
+  --bind 'n:execute(jay-sidebar --new here {1} {2})+reload-sync(jay-sidebar --rows --fresh)+clear-screen' \
+  --bind 'N:execute(jay-sidebar --new worktree {1} {2})+reload-sync(jay-sidebar --rows --fresh)+clear-screen' \
+  --bind 'enter:execute-silent(jay-sidebar --act {1} {2} --focus)+reload-sync(jay-sidebar --rows)' \
+  --bind 'double-click:execute-silent(jay-sidebar --act {1} {2})+reload-sync(jay-sidebar --rows)' \
+  --bind 'left-click:execute-silent(jay-sidebar --act {1} {2})+reload-sync(jay-sidebar --rows)' \
+  --bind 'r:execute-silent(: >"$JAY_SIDEBAR_RESTART")+abort' \
+  --bind 'o:execute-silent(jay-sidebar --view open {1} {2})' \
+  --bind 'a:execute-silent(jay-sidebar --idle)+reload-sync(jay-sidebar --rows)+clear-screen' \
+  --bind 'p:execute(jay-sidebar --prune)+reload-sync(jay-sidebar --rows)+clear-screen' \
   --bind 'h:execute-silent(zellij action resize -p "$ZELLIJ_PANE_ID" decrease right)' \
   --bind 'l:execute-silent(zellij action resize -p "$ZELLIJ_PANE_ID" increase right)' \
   --bind 'j:down,k:up,q:ignore,esc:ignore'
 
 # r: start again as the newest version of this script, with fresh git signs (same pid, so the
 # state files keep their names).
-if [[ -f "$WT_SIDEBAR_RESTART" ]]; then
+if [[ -f "$JAY_SIDEBAR_RESTART" ]]; then
   trap - EXIT
   cleanup
   clear

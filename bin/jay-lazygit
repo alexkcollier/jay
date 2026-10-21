@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# wt-hub-lazygit turns <chain id> | commits — lazygit as the hub's review (WT_REVIEW=lazygit in
-# ~/.config/wt-hub/config). Run it in the worktree; wt-hub-pane does.
+# jay-lazygit turns <chain id> | commits — lazygit as the hub's review (JAY_REVIEW=lazygit in
+# ~/.config/jay/config). Run it in the worktree; jay-pane does.
 # turns:   lazygit cannot open a hidden ref: it logs HEAD and lists refs/heads only. So it runs
-#          on a view repo, ~/.local/state/wt-hub/lazygit/views/<chain id>: a repo of its own that
+#          on a view repo, ~/.local/state/jay/lazygit/views/<chain id>: a repo of its own that
 #          borrows the worktree's objects (objects/info/alternates). Its branch `turns` is the
 #          chain head (checked out), `turns-base` is the base and a main branch (in the view's
 #          .git/lazygit.yml), so the turns show as unmerged and the history under them as merged.
@@ -18,40 +18,40 @@
 # commits: lazygit on the worktree itself, on its commits panel. lazygit refreshes on a new
 #          commit by itself.
 # Config:  CONFIG_DIR keeps lazygit's state (recent repos) out of yours; LG_CONFIG_FILE loads
-#          your config.yml, then the hub's (~/.config/wt-hub/lazygit/hub.yml, from
-#          config/lazygit) over it, then diff-$WT_REVIEW_DIFF.yml (the diff renderer) if set.
-# claude-turn-snapshot --prune removes the view with its chain.
-# --toggle (the hub's t in lazygit): switch turns ⇄ commits and stop lazygit; wt-hub-pane
+#          your config.yml, then the hub's (~/.config/jay/lazygit/hub.yml, from
+#          config/lazygit) over it, then diff-$JAY_REVIEW_DIFF.yml (the diff renderer) if set.
+# jay-snapshot --prune removes the view with its chain.
+# --toggle (the hub's t in lazygit): switch turns ⇄ commits and stop lazygit; jay-pane
 #          starts the other mode.
 set -uo pipefail
-# Exported: lazygit's e runs wt-sidebar, which acts on this session.
-export WT_HUB_SESSION=${ZELLIJ_SESSION_NAME:-${WT_HUB_SESSION:-hub}}
-source "$HOME/.local/lib/wt-lib.sh"
+# Exported: lazygit's e runs jay-sidebar, which acts on this session.
+export JAY_SESSION=${ZELLIJ_SESSION_NAME:-${JAY_SESSION:-${WT_HUB_SESSION:-jay}}}
+source "$HOME/.local/lib/jay-lib.sh"
 
 if [[ "${1:-}" == --toggle ]]; then
-  wtl_hub_toggle_mode
-  [[ -n "${WT_HUB_LG_PID:-}" ]] && kill -TERM "$WT_HUB_LG_PID"
+  jay_hub_toggle_mode
+  [[ -n "${JAY_LG_PID:-}" ]] && kill -TERM "$JAY_LG_PID"
   exit 0
 fi
 
 mode=${1:-turns} id=${2:-}
-root="$HOME/.local/state/wt-hub/lazygit"
+root="$JAY_STATE/lazygit"
 mkdir -p "$root"
 user_config="$(env -u CONFIG_DIR -u LG_CONFIG_FILE lazygit --print-config-dir 2>/dev/null)/config.yml"
-hub_config="$HOME/.config/wt-hub/lazygit/hub.yml"
+hub_config="$HOME/.config/jay/lazygit/hub.yml"
 if [[ ! -f "$hub_config" ]]; then
-  # wt-hub-pane clears the screen when this ends: wait until the message is read.
-  printf '\n  %s is missing: run ./install.sh in wt-hub.\n  Enter: try again.\n' "$hub_config"
+  # jay-pane clears the screen when this ends: wait until the message is read.
+  printf '\n  %s is missing: run ./install.sh in jay.\n  Enter: try again.\n' "$hub_config"
   read -r _
   exit 1
 fi
 configs=$hub_config
 [[ -f "$user_config" ]] && configs="$user_config,$hub_config"
-# The diff renderer: hub.yml has delta (hub) first; WT_REVIEW_DIFF=difft|plain loads
+# The diff renderer: hub.yml has delta (hub) first; JAY_REVIEW_DIFF=difft|plain loads
 # diff-<name>.yml over it, which puts that one first.
-diff_config="$HOME/.config/wt-hub/lazygit/diff-${WT_REVIEW_DIFF:-delta}.yml"
+diff_config="$HOME/.config/jay/lazygit/diff-${JAY_REVIEW_DIFF:-delta}.yml"
 [[ -f "$diff_config" ]] && configs+=",$diff_config"
-export CONFIG_DIR="$root/state" LG_CONFIG_FILE="$configs" WT_HUB_LG_PID=$$
+export CONFIG_DIR="$root/state" LG_CONFIG_FILE="$configs" JAY_LG_PID=$$
 mkdir -p "$CONFIG_DIR"
 
 if [[ "$mode" == commits || -z "$id" ]]; then
@@ -64,7 +64,7 @@ git_view() { GIT_DIR="$view/.git" GIT_WORK_TREE="$view" git "$@"; }
 # The commits panel's position, "<selected> <count>", from its frame ("─3 of 8─╯").
 position() {
   [[ -n "${ZELLIJ_PANE_ID:-}" ]] || return 1
-  zellij -s "$WT_HUB_SESSION" action dump-screen -p "terminal_$ZELLIJ_PANE_ID" 2>/dev/null \
+  zellij -s "$JAY_SESSION" action dump-screen -p "terminal_$ZELLIJ_PANE_ID" 2>/dev/null \
     | sed -nE 's/.*─([0-9]+) of ([0-9]+)─╯.*/\1 \2/p' | head -1
 }
 
@@ -81,7 +81,7 @@ sync_view() {
   head=$(tip) || return 1
   base=$(git rev-parse -q --verify "refs/wt-turns/$id/base") || return 1
   [[ "$(git_view rev-parse -q --verify refs/heads/turns 2>/dev/null)" == "$head" ]] && return 1
-  index="$view/.git/index.wt-hub"
+  index="$view/.git/index.jay"
   GIT_INDEX_FILE="$index" git_view read-tree "$head" || return 1
   GIT_INDEX_FILE="$index" git_view ls-files -z | GIT_INDEX_FILE="$index" git_view update-index -z --skip-worktree --stdin
   mv -f "$index" "$view/.git/index"
@@ -115,7 +115,7 @@ sync_view || true
       sleep 0.5
       read -r now total < <(position) || continue
       if ((total > count)); then
-        ((now == total - count + 1)) && zellij -s "$WT_HUB_SESSION" action write-chars -p "terminal_$ZELLIJ_PANE_ID" '<' >/dev/null 2>&1
+        ((now == total - count + 1)) && zellij -s "$JAY_SESSION" action write-chars -p "terminal_$ZELLIJ_PANE_ID" '<' >/dev/null 2>&1
         break
       fi
     done

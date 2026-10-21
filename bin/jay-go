@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# wt go <agent id | session id | name, or a part of a name | hub (the hub Claude)>
+# jay go <agent id | session id | name, or a part of a name | hub (the hub Claude)>
 # Bring a Claude session in front. While the hub runs, a background one opens in the
 # hub's agent pane (from anywhere, also from an agent) and the hub's Ghostty tab comes
 # to the front; with no hub, in a Ghostty tab running `claude attach`.
 # An interactive one: its own Ghostty tab (and zellij pane).
 set -euo pipefail
-source "$HOME/.local/lib/wt-lib.sh"
+source "$HOME/.local/lib/jay-lib.sh"
 
 [[ -n "${1:-}" && "$1" != -h && "$1" != --help ]] || { sed -n '2,5s/^# \{0,1\}//p' "$0"; exit 0; }
 
 query="$*"
 query=${query#[\"\']}; query=${query%[\"\']}
 # hub: the hub Claude (started when it has none).
-hubid=$(wtl_hub_claude_id)
+hubid=$(jay_hub_claude_id)
 if [[ "$query" == hub ]]; then
-  hubid=$(wtl_hub_claude) || { echo "Could not start the hub Claude." >&2; exit 1; }
+  hubid=$(jay_hub_claude) || { echo "Could not start the hub Claude." >&2; exit 1; }
   query=$hubid
 fi
 # Match order: id or session id (prefix), exact name, then a part of a name (any case).
@@ -42,28 +42,28 @@ sid=$(jq -r .sessionId <<<"$agent")
 cwd=$(jq -r .cwd <<<"$agent")
 pid=$(jq -r '.pid // empty' <<<"$agent")
 
-if [[ "$kind" == background ]] && { wtl_in_hub || wtl_hub_live; }; then
-  # The turn chain of a background agent is named after its id (see claude-turn-snapshot). The
+if [[ "$kind" == background ]] && { jay_in_hub || jay_hub_live; }; then
+  # The turn chain of a background agent is named after its id (see jay-snapshot). The
   # hub Claude works in no worktree: review stays on what it shows.
   hub_pick() {
-    wtl_hub_show "$id" "$(jq -r '.name // .id' <<<"$agent")" "$cwd" || return
-    [[ "$id" == "$hubid" ]] || wtl_hub_target "$cwd" "$id"
+    jay_hub_show "$id" "$(jq -r '.name // .id' <<<"$agent")" "$cwd" || return
+    [[ "$id" == "$hubid" ]] || jay_hub_target "$cwd" "$id"
   }
-  wtl_hub_locked hub_pick || { echo "Could not show $id in the hub." >&2; exit 1; }
+  jay_hub_locked hub_pick || { echo "Could not show $id in the hub." >&2; exit 1; }
   # The list's cursor follows (a list pick has it there already). Detached: called from a list
   # key (n), the list's fzf answers only after this script ends.
   row=$sid
   [[ "$id" == "$hubid" ]] && row=hub
-  [[ -n "${WT_LIST_PICK:-}" ]] || (wtl_list_follow "$row" &) >/dev/null 2>&1
-  if ! wtl_in_hub && tab=$(wtl_gh_tab_for_session "$WT_HUB_SESSION"); then
-    wtl_gh_select "$tab"
+  [[ -n "${JAY_LIST_PICK:-}" ]] || (jay_list_follow "$row" &) >/dev/null 2>&1
+  if ! jay_in_hub && tab=$(jay_gh_tab_for_session "$JAY_SESSION"); then
+    jay_gh_select "$tab"
   fi
   exit 0
 fi
 
-# Without the hub, the agent comes in front through a tab (Ghostty only, see wtl_gh_ok). The user
-# sees it there: not unread (wtl_agent_phases). In the hub, wtl_hub_show marks it.
-if ! wtl_gh_ok; then
+# Without the hub, the agent comes in front through a tab (Ghostty only, see jay_gh_ok). The user
+# sees it there: not unread (jay_agent_phases). In the hub, jay_hub_show marks it.
+if ! jay_gh_ok; then
   if [[ "$kind" == background ]]; then
     echo "Bringing $id in front needs the hub or Ghostty. Attach in a terminal: claude attach $id" >&2
   else
@@ -71,35 +71,35 @@ if ! wtl_gh_ok; then
   fi
   exit 1
 fi
-wtl_mark seen "${id:-$sid}"
+jay_mark seen "${id:-$sid}"
 
 if [[ "$kind" == background ]]; then
-  if tab=$(wtl_gh_tab_for_command "^claude attach $id"); then
-    wtl_gh_select "$tab"
+  if tab=$(jay_gh_tab_for_command "^claude attach $id"); then
+    jay_gh_select "$tab"
   else
-    wtl_gh_new_tab "$cwd" "claude attach $id" >/dev/null
+    jay_gh_new_tab "$cwd" "claude attach $id" >/dev/null
   fi
   exit 0
 fi
 
 tty=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
-if [[ -n "$tty" && "$tty" != "??" ]] && tab=$(wtl_gh_tab_for_tty "$tty"); then
-  wtl_gh_select "$tab"
+if [[ -n "$tty" && "$tty" != "??" ]] && tab=$(jay_gh_tab_for_tty "$tty"); then
+  jay_gh_select "$tab"
   exit 0
 fi
 
-top=$(wtl_toplevel "$cwd")
+top=$(jay_toplevel "$cwd")
 while IFS= read -r session; do
-  pane=$(wtl_panes_in "$session" "$top" '^claude' | head -1)
+  pane=$(jay_panes_in "$session" "$top" '^claude' | head -1)
   [[ -n "$pane" ]] || continue
-  if tab=$(wtl_gh_tab_for_session "$session"); then
-    wtl_gh_select "$tab"
+  if tab=$(jay_gh_tab_for_session "$session"); then
+    jay_gh_select "$tab"
   else
-    wtl_gh_new_tab "$top" "zellij attach $session" >/dev/null
+    jay_gh_new_tab "$top" "zellij attach $session" >/dev/null
   fi
-  wtl_focus_pane "$session" "$(jq -r .id <<<"$pane")" "$(jq -r .tab_name <<<"$pane")"
+  jay_focus_pane "$session" "$(jq -r .id <<<"$pane")" "$(jq -r .tab_name <<<"$pane")"
   exit 0
-done < <(wtl_live_sessions)
+done < <(jay_live_sessions)
 
 echo "Session $sid runs (pid $pid) but not in a Ghostty tab or zellij pane I can find." >&2
 exit 1

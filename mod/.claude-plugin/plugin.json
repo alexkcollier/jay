@@ -1,8 +1,8 @@
 {
-  "name": "wt-hub",
-  "version": "0.1.0",
+  "name": "jay",
+  "version": "0.2.0",
   "license": "MIT",
   "author": { "name": "Alex Collier" },
-  "description": "Worktree hub: a sidebar of every worktree and Claude agent across your repos, with toasts when an agent needs input or finishes, and /wt to create, open, reach and message them",
+  "description": "jay, the worktree hub: a sidebar of every worktree and Claude agent across your repos, with toasts when an agent needs input or finishes, and /jay to create, open, reach and message them",
   "types": "./types/index.d.ts"
 }
