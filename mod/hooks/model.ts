@@ -5,13 +5,16 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const text = (value: unknown) => (typeof value === 'string' ? value : '')
 
-// The rule of the list (wt-sidebar) and wt-all. An agent whose turn goes on (state working)
-// while its process is idle (status idle) waits: for a worker or a subagent it started, say.
-export function phaseOf(state: unknown, status: unknown): Phase {
+const PHASES: readonly Phase[] = ['input', 'failed', 'unread', 'working', 'idle']
+
+// The phase comes from `wt agents --json` (wtl_agent_phases in wt-lib.sh), the rule of the list
+// and wt all, which also knows what Alex saw (unread). Without it, this fallback: state working
+// with status idle (an agent that waits for its workers) is not working.
+export function phaseOf(state: unknown, status: unknown, phase?: unknown): Phase {
+  if (PHASES.includes(phase as Phase)) return phase as Phase
   if (state === 'failed') return 'failed'
   if (state === 'blocked' || status === 'waiting') return 'input'
-  if (state === 'working' && status === 'idle') return 'waits'
-  if (state === 'working' || ((state === null || state === undefined) && status === 'busy')) return 'working'
+  if ((state === 'working' && status !== 'idle') || ((state === null || state === undefined) && status === 'busy')) return 'working'
   return 'idle'
 }
 
@@ -35,7 +38,7 @@ export function parseAgents(json: string): AgentRow[] {
         kind: entry.kind === 'background' ? 'background' : 'interactive',
         name: text(entry.name) || sessionId.slice(0, 8),
         cwd,
-        phase: phaseOf(entry.state, entry.status),
+        phase: phaseOf(entry.state, entry.status, entry.phase),
         startedAt: typeof entry.startedAt === 'number' ? entry.startedAt : 0,
       } satisfies AgentRow,
     ]
@@ -103,7 +106,7 @@ export function transitions(
     if (agent.phase === was.phase) return []
     if (agent.phase === 'input') return event('input')
     if (agent.phase === 'failed') return event('failed')
-    if (agent.phase === 'idle' && (was.phase === 'working' || was.phase === 'waits')) return event('finished')
+    if ((agent.phase === 'unread' || agent.phase === 'idle') && was.phase === 'working') return event('finished')
     return []
   })
 }
@@ -115,7 +118,7 @@ export type Group = {
   rows: Array<{ worktree: WorktreeRow; agents: AgentRow[] }>
 }
 
-const PHASE_ORDER: Record<Phase, number> = { input: 0, failed: 1, working: 2, waits: 3, idle: 4 }
+const PHASE_ORDER: Record<Phase, number> = { input: 0, failed: 1, unread: 2, working: 3, idle: 4 }
 
 export function groupsOf(worktrees: readonly WorktreeRow[], agents: readonly AgentRow[]): Group[] {
   const byPath = new Map<string, AgentRow[]>()
@@ -162,17 +165,17 @@ export function summaryOf(agents: readonly AgentRow[], selfId: string) {
   const others = agents.filter(agent => agent.sessionId !== selfId)
   const count = (phase: Phase) => others.filter(agent => agent.phase === phase).length
   const parts = [
-    count('input') && `✋ ${count('input')} need input`,
+    count('input') && `! ${count('input')} input`,
     count('failed') && `✗ ${count('failed')} failed`,
+    count('unread') && `✓ ${count('unread')} unread`,
     count('working') && `● ${count('working')} working`,
-    count('waits') && `◌ ${count('waits')} waits`,
-    count('idle') && `${count('idle')} idle`,
+    count('idle') && `○ ${count('idle')} idle`,
   ].filter(Boolean)
   return parts.length > 0 ? parts.join(' · ') : 'No other agents'
 }
 
 export function glyphOf(phase: Phase) {
-  return { input: '✋', failed: '✗', working: '●', waits: '◌', idle: '○' }[phase]
+  return { input: '!', failed: '✗', unread: '✓', working: '●', idle: '○' }[phase]
 }
 
 export function ageOf(startedAt: number, now: number) {

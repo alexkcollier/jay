@@ -319,6 +319,71 @@ wtl_trust() {
   return $rc
 }
 
+# --- Agent phases: the one rule of the list, wt all, wt agents and the mod (`wt agents --json`) ---
+# input    blocked, or it asks (status waiting)
+# failed   state failed
+# unread   a turn ended after Alex last saw the agent
+# working  the process works (status busy); state working with status idle (it waits for its
+#          workers) is not working
+# idle     seen since its last turn, shown in the middle column now, or new (no first prompt)
+# The marks are empty files; their mtime is the time: $WT_HUB_MARKS/ended/<key> (a turn ended:
+# the Stop hook, claude-notify) and seen/<key> (the agent came into or left the middle column,
+# `wt go` showed it, or its own Ghostty tab was in front when its turn ended). <key> is the id
+# of a background agent (its job id), else the session id.
+WT_HUB_MARKS="$HOME/.local/state/wt-hub"
+
+# Set mark $1 (seen, ended) of agent key $2 to now. An empty key does nothing.
+wtl_mark() {
+  [[ -n "${2:-}" ]] || return 0
+  mkdir -p "$WT_HUB_MARKS/$1" 2>/dev/null && touch "$WT_HUB_MARKS/$1/$2" 2>/dev/null
+  return 0
+}
+
+# The key of session id $1, for a hook: the job id of a background agent, which stays when its
+# session id changes (a resume, /clear), when the job's state names this session.
+wtl_agent_key() {
+  local job=${CLAUDE_JOB_DIR:-}
+  if [[ -n "$job" ]] && jq -e --arg s "$1" '.sessionId == $s or .resumeSessionId == $s' "$job/state.json" >/dev/null 2>&1; then
+    basename "$job"
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
+# The marks as JSON: {seen: {key: time}, ended: {key: time}} (seconds, with fractions).
+wtl_agent_marks() {
+  { find "$WT_HUB_MARKS/seen" "$WT_HUB_MARKS/ended" -type f -exec stat -f '%N%t%Fm' {} + 2>/dev/null || true; } \
+    | jq -Rsc 'split("\n") | map(select(. != "") | split("\t") | {k: (.[0] | split("/")), t: (.[1] | tonumber)})
+      | reduce .[] as $m ({seen: {}, ended: {}}; .[$m.k[-2]][$m.k[-1]] = $m.t)'
+}
+
+# The background agents in agents JSON $1 that wait for their first prompt, as a JSON array of
+# ids. `claude agents` calls such a new idle agent "blocked", as it does an agent that asks you
+# something; its job state says "send a prompt to start".
+wtl_fresh_ids() {
+  local id jobs="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs"
+  jq -r '.[] | select(.kind == "background" and .state == "blocked") | .id // empty' <<<"$1" | while IFS= read -r id; do
+    [[ "$(jq -r '.needs // ""' "$jobs/$id/state.json" 2>/dev/null)" == "send a prompt to start" ]] && printf '%s\n' "$id"
+  done | jq -Rsc 'split("\n") | map(select(. != ""))'
+}
+
+# Agents JSON $1 (`claude agents --json --all`) with .phase on each agent (see above). $2: the
+# id shown in the middle column, when the caller has it (else wtl_hub_shown).
+wtl_agent_phases() {
+  local IFS=$' \t\n' shown
+  if (($# > 1)); then shown=$2; else shown=$(wtl_hub_shown); fi
+  jq -c --arg shown "$shown" --argjson fresh "$(wtl_fresh_ids "$1")" --argjson marks "$(wtl_agent_marks)" '
+    def at($m): [$marks[$m][.id // ""], $marks[$m][.sessionId // ""], 0] | map(. // 0) | max;
+    map(. + {phase: (
+      if .state == "failed" then "failed"
+      elif (.id // "") as $i | $fresh | index([$i]) then "idle"
+      elif .state == "blocked" or .status == "waiting" then "input"
+      elif (.state == "working" and .status != "idle") or (.state == null and .status == "busy") then "working"
+      elif $shown != "" and (.id // .sessionId) == $shown then "idle"
+      elif at("ended") > at("seen") then "unread"
+      else "idle" end)})' <<<"$1"
+}
+
 # --- Hub panes (zellij session "hub"): agent viewer, review ⇄ files ---
 # One pane in each column. The agent viewer (middle) and review (right) are layout panes; files
 # opens in place over review: zellij keeps review suspended and shows it again when files
@@ -406,7 +471,23 @@ wtl_hub_wait_shown() {
 wtl_hub_write_target() {
   local file
   file=$(wtl_hub_target_file "$1")
+  # Alex saw the agent that leaves the middle column and the one that comes (wtl_agent_phases).
+  if [[ "$1" == agent ]]; then
+    wtl_mark seen "$(cut -f1 "$file" 2>/dev/null)"
+    wtl_mark seen "${2%%$'\t'*}"
+  fi
   printf '%s\n' "$2" >"$file.$$" && mv "$file.$$" "$file"
+}
+
+# The id in the hub's middle column (the agent target) while its wt-hub-pane runs, else
+# nothing. No zellij call: wtl_agent_phases reads it every few seconds.
+wtl_hub_shown() {
+  local pane="" pid=""
+  IFS=$'\t' read -r pane pid 2>/dev/null <"$(wtl_hub_pane_file agent)"
+  if [[ -n "$pid" ]] && ps -o command= -p "$pid" 2>/dev/null | grep -q "wt-hub-pane agent"; then
+    cut -f1 "$(wtl_hub_target_file agent)" 2>/dev/null
+  fi
+  return 0
 }
 
 # Wait up to 2 s for the new wt-hub-pane of role $1 to start.

@@ -663,11 +663,18 @@ point.
 | `◆ hub` row (cyan) | the hub Claude, with its state sign |
 | `◇` cyan, before the name | an orchestrator: an agent in a main checkout, or one from there in a worktree it entered |
 | `→ feat` (dim, after the age) | the orchestrator is in that worktree now (`EnterWorktree`); it shows under its main checkout |
-| `!` yellow | agent needs input |
+| `!` bold yellow | agent needs input: it is blocked, or it asks you something |
 | `✗` red | agent failed |
-| `●` green | agent works (its process is busy) |
-| `◌` dim green | agent waits: its turn goes on, but its process is idle (it waits for a worker or subagent it started) |
-| `○` dim | agent is idle |
+| `✓` bold magenta | done, unread: a turn ended after you last saw the agent |
+| `●` green | agent works: its process is busy |
+| `○` dim | idle: you saw it since its last turn, it is in the middle column now, or it waits for its first prompt |
+
+The agents sort in that order. An agent whose turn goes on while its process is idle (state
+`working`, status `idle`: it waits for workers it started) does not work: it is unread or idle.
+You see an agent when it comes into or leaves the middle column, when `wt go` shows it, and
+when its turn ends while its own Ghostty tab is in front. The Stop hook (`claude-notify`)
+records when a turn ends. An agent with no turn since this record started is idle. The list,
+`wt all`, `wt agents` and the mod use one rule (`wtl_agent_phases` in `lib/wt-lib.sh`).
 | `bg 12m` (dim, after the name) | background agent; age (m, h, d) |
 | Octicon home (U+F46D), before the branch | the main checkout |
 | Octicon diff (U+F440), yellow | uncommitted changes |
@@ -695,10 +702,11 @@ All of these are in `~/.local/bin`. worktrunk runs `wt-<name>` for `wt <name>`, 
 | `wt new <branch\|pr:N> [-b base] [-t "task"] [-a] [-- prompt...]` | Make (or reuse) the worktree and store the task note. With a prompt, or `-a` for an idle one, start a background agent there. Without `-t`, the first line of the prompt (60 characters) is the task note. |
 | `wt-edit <file or folder>` | Open it in your editor, in its project. See [Open your editor](#open-your-editor). |
 | `wt open [branch\|path]` | Select the Ghostty tab of the worktree's zellij session (named `<repo>.<branch>`), or open a tab that attaches to it (made with your default layout when new). |
-| `wt all [-a]` | Worktrees of every repo, grouped by client, with agent counts (input, failed, busy, waits, idle; the signs of the list) and task notes. `-a`: also repos with only a main checkout and no agent. |
+| `wt all [-a]` | Worktrees of every repo, grouped by client, with agent counts (input, failed, unread, working, idle: the signs of the list) and task notes. `-a`: also repos with only a main checkout and no agent. |
 | `wt all --json` | One JSON object per worktree (the list's data; implies `-a`). |
 | `wt pick [-a]` | The same list in fzf, with git status and log in a preview. Enter: `wt open` on the row. Ctrl-A: `wt agents` for that worktree. |
 | `wt agents [path]` | Claude sessions (all, or one worktree) in fzf, the ones that need input first. Enter: `wt go`. |
+| `wt agents --json` | `claude agents --json --all` with each agent's `phase` (input, failed, unread, working, idle), for `wt all` and the mod. |
 | `wt setup [path]` | The worktrunk `pre-start` hook, when you turn it on (`./install.sh --with-setup`): in a new worktree, copy the ignored files (`.worktreeinclude` through `wt step copy-ignored`, else the ignored `.env*` files of the main checkout) and install the dependencies (pnpm, bun, yarn, npm or uv, from the lock file). It puts back a lock file that the install changed. Safe to run again. |
 | `wt task [text]` | worktrunk alias: set the worktree's task note, or show it. |
 | `claude-turn-snapshot --list [path]` | The turn chains of a worktree: id, age, last subject. |
@@ -749,6 +757,7 @@ In `~/.local/state/`:
 | `wt-worktrees.ndjson` | cache of `wt all --json` (refreshed after 30 s) |
 | `wt-sidebar.<pid>.sock`, `.count`, `.sum`, `.help`, `.restart` | a running list: its fzf socket, row count, agent counts, `?` state, `r` flag |
 | `wt-turns/<id>.worktree`, `<id>.prompt` | the worktree of each turn chain; the prompt of the current turn |
+| `wt-hub/ended/<id>`, `wt-hub/seen/<id>` | empty files; the time of each is when the agent's last turn ended (Stop hook) and when you last saw the agent (unread sign); removed after 14 days |
 | `wt-hub-prune.stamp` | time of the last automatic prune |
 | `wt-hub-prune.log` | each agent the list pruned, and each turn chain removed |
 | `claude-notify.log` | one line per notify hook call, and the output of notice clicks |
@@ -794,11 +803,12 @@ Settings: `~/.config/wt-hub/config` ([Settings](#settings)). Environment variabl
 ```
 bin/
   c                      Claude as a background agent, attached here
-  claude-notify          hook (Stop, Notification): macOS notice; a click runs wt go
+  claude-notify          hook (Stop, Notification): macOS notice; a click runs wt go; turn ends
+                         for the unread sign
   claude-turn-snapshot   hook (UserPromptSubmit, Stop): turn chains; --list, --prune
   hub-run                tasks in a tasks tab per worktree: start, ls, log, wait, stop, restart,
                          port; --switch (Ctrl g Tab), --tick, --bar, --hook, --exec (its panes)
-  wt-agents              wt agents: Claude sessions in fzf
+  wt-agents              wt agents: Claude sessions in fzf; --json with each agent's phase
   wt-all                 wt all: worktrees of every repo; --json for the list
   wt-pick -> wt-all      wt pick: the same in fzf, Enter opens
   wt-edit                open a file or folder in your editor, in its project

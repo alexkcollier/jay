@@ -13,7 +13,7 @@ input=$(cat)
 event=$(jq -r '.hook_event_name // ""' <<<"$input")
 cwd=$(jq -r '.cwd // ""' <<<"$input")
 sid=$(jq -r '.session_id // ""' <<<"$input")
-type=""
+type="" key=""
 
 case $event in
   Notification)
@@ -26,7 +26,9 @@ case $event in
     text=$(jq -r '.message // ""' <<<"$input")
     ;;
   Stop)
-    jq -e '(.background_tasks // []) | length > 0' <<<"$input" >/dev/null && exit 0
+    # The hub's unread sign (wtl_agent_phases): the agent's turn ended now.
+    key=$(wtl_agent_key "$sid")
+    wtl_mark ended "$key"
     icon="✓" headline="Turn finished"
     text=$(jq -r '.last_assistant_message // ""' <<<"$input" | awk '
       /^(result|needs input|failed):/ { flagged = $0 }
@@ -63,6 +65,12 @@ if wtl_gh_ok && [[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
     tty=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
     [[ -n "$tty" && "$tty" != "??" ]] && tabs=$(wtl_gh_tab_for_tty "$tty" || true)
   fi
+  # In its own tab Alex sees the agent end its turn: it is not unread. (In the hub, the agent
+  # in the middle column is seen; the list alone does not show the turn.)
+  if [[ -n "$selected" ]] && grep -qxF "$selected" <<<"$tabs"; then
+    [[ "$event" == Stop ]] && wtl_mark seen "$key"
+    exit 0
+  fi
   if wtl_hub_live && [[ "$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null \
     | jq -r 'first(.[] | select(.active) | .name) // "hub"' 2>/dev/null)" == hub ]]; then
     tabs+=$'\n'$(wtl_gh_tab_for_session "$WT_HUB_SESSION" || true)
@@ -71,6 +79,8 @@ if wtl_gh_ok && [[ "$(wtl_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
 fi
 
 [[ -n "$NOTIFIER" && -x "$NOTIFIER" ]] || exit 0
+# No notice while the agent has background tasks: the turn goes on when they end.
+[[ "$event" == Stop ]] && jq -e '(.background_tasks // []) | length > 0' <<<"$input" >/dev/null && exit 0
 IFS=$'\t' read -r client repo branch top < <(wtl_describe "${cwd:-$PWD}")
 task=$(wt -C "$top" config state vars get task 2>/dev/null)
 sound=()

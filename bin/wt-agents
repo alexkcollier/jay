@@ -1,19 +1,25 @@
 #!/usr/bin/env bash
 # wt agents [path]  Claude sessions (all repos, or one worktree) in fzf; needs-input first.
 # Enter: `wt go` — attach to a background agent, or select an interactive one's tab and pane.
+# wt agents --json  `claude agents --json --all` with each agent's .phase (input, failed, unread,
+#                   working, idle; see wtl_agent_phases), for wt all and the mod.
 set -euo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
+
+agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+agents=$(wtl_agent_phases "$agents")
+if [[ "${1:-}" == --json ]]; then
+  printf '%s\n' "$agents"
+  exit 0
+fi
 
 filter=${1:-}
 [[ -n "$filter" ]] && filter=$(wtl_toplevel "$filter")
 
-list=$(claude agents --json --all 2>/dev/null | jq -r --arg f "$filter" '
+list=$(jq -r --arg f "$filter" '
   .[] | select($f == "" or .cwd == $f or (.cwd | startswith($f + "/")))
-  | (if .state == "blocked" or .status == "waiting" then 0
-     elif .state == "working" and .status == "idle" then 2
-     elif .state == "working" or (.state == null and .status == "busy") then 1
-     elif .state == "failed" then 3 else 4 end) as $rank
-  | [$rank, (if $rank == 2 then "waits" else .state // .status end), .kind, (.id // ""), .sessionId, .cwd, (.name // "")] | @tsv' | sort -n)
+  | ({input: 0, failed: 1, unread: 2, working: 3}[.phase] // 4) as $rank
+  | [$rank, .phase, .kind, (.id // ""), .sessionId, .cwd, (.name // "")] | @tsv' <<<"$agents" | sort -n)
 
 [[ -n "$list" ]] || { echo "No Claude sessions${filter:+ in $filter}."; exit 0; }
 

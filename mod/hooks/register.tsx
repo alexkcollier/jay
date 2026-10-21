@@ -63,7 +63,9 @@ async function refreshWorktrees($: EngineInterface) {
 }
 
 async function refreshAgents($: EngineInterface) {
-  const { exitCode, stdout } = await run($, [env.claude || `${env.home}/.local/bin/claude`, 'agents', '--json', '--all'], 10000)
+  // With each agent's phase (the list's rule); `claude agents` alone when wt-agents fails.
+  let { exitCode, stdout } = await run($, [bin('wt-agents'), '--json'], 10000)
+  if (exitCode !== 0) ({ exitCode, stdout } = await run($, [env.claude || `${env.home}/.local/bin/claude`, 'agents', '--json', '--all'], 10000))
   if (exitCode !== 0) return
   const next = parseAgents(stdout)
   const before = await read($, agents)
@@ -229,7 +231,7 @@ export const register: Register = on => {
                 {mine.map(agent => (
                   <Button key={`go:${agent.sessionId}`} plain onPress={() => void go($, agent.sessionId)}>
                     {'  '}
-                    <Text color={agent.phase === 'input' ? 'warning' : agent.phase === 'failed' ? 'error' : agent.phase === 'working' ? 'success' : 'inactive'} dimColor={agent.phase === 'waits'}>
+                    <Text color={{ input: 'warning', failed: 'error', unread: 'suggestion', working: 'success', idle: 'inactive' }[agent.phase]} bold={agent.phase === 'input' || agent.phase === 'unread'}>
                       {glyphOf(agent.phase)}
                     </Text>{' '}
                     {agent.sessionId === me ? `${agent.name} (this)` : agent.name}{' '}

@@ -38,7 +38,7 @@ function host(on: On, agents: { current: RawAgent[] }) {
     const ok = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
     if (program === '/bin/sh' && String(e.argv[2] ?? '').includes('command -v claude')) return ok(`${HOME}\t`)
     if (program.endsWith('/wt-all')) return ok(worktreeLines)
-    if (program.endsWith('/claude')) return ok(JSON.stringify(agents.current))
+    if (program.endsWith('/wt-agents') || program.endsWith('/claude')) return ok(JSON.stringify(agents.current))
     return ok('')
   })
   on('ui.toast', (_$, e) => {
@@ -78,20 +78,20 @@ describe('model', () => {
     expect(phaseOf(null, 'waiting')).toBe('input')
     expect(phaseOf('working', 'busy')).toBe('working')
     expect(phaseOf(null, 'busy')).toBe('working')
-    expect(phaseOf('working', 'idle')).toBe('waits')
+    expect(phaseOf('working', 'idle')).toBe('idle')
     expect(phaseOf('blocked', 'idle')).toBe('input')
     expect(phaseOf('done', 'idle')).toBe('idle')
     expect(phaseOf('failed', 'idle')).toBe('failed')
   })
 
-  test('an agent whose turn goes on while its process is idle waits, quietly', () => {
+  test('the phase from wt agents --json wins: it knows what Alex saw', () => {
     const rows = parseWorktrees(worktreeLines)
     const busy = parseAgents(JSON.stringify([hub, worker('working')]))
-    const waits = parseAgents(JSON.stringify([hub, { ...worker('working'), status: 'idle' }]))
-    expect(waits.map(agent => agent.phase)).toEqual(['working', 'waits'])
-    expect(summaryOf(waits, 'hub-0000')).toBe('◌ 1 waits')
-    expect(transitions(busy, waits, rows, 'hub-0000', T0)).toEqual([])
-    expect(transitions(waits, parseAgents(JSON.stringify([hub, worker('done')])), rows, 'hub-0000', T0).map(event => event.kind)).toEqual(['finished'])
+    const unread = parseAgents(JSON.stringify([hub, { ...worker('working'), status: 'idle', phase: 'unread' }]))
+    expect(unread.map(agent => agent.phase)).toEqual(['working', 'unread'])
+    expect(summaryOf(unread, 'hub-0000')).toBe('✓ 1 unread')
+    expect(transitions(busy, unread, rows, 'hub-0000', T0).map(event => event.kind)).toEqual(['finished'])
+    expect(parseAgents(JSON.stringify([{ ...worker('done'), phase: 'bogus' }]))[0]?.phase).toBe('idle')
   })
 
   test('bad input parses to nothing instead of throwing', () => {
@@ -120,7 +120,7 @@ describe('model', () => {
     const groups = groupsOf(rows, parseAgents(JSON.stringify([worker('working')])))
     expect(groups.map(group => group.rows.map(row => row.worktree.branch))).toEqual([['feat/login']])
     expect(groups[0]?.rows[0]?.agents.map(agent => agent.shortId)).toEqual(['aaaa1111'])
-    expect(summaryOf(parseAgents(JSON.stringify([hub, worker('blocked')])), 'hub-0000')).toBe('✋ 1 need input')
+    expect(summaryOf(parseAgents(JSON.stringify([hub, worker('blocked')])), 'hub-0000')).toBe('! 1 input')
   })
 
   test('agents are found by id, exact name, or the one name that holds the query', () => {
@@ -162,7 +162,7 @@ test('the hub polls, toasts state changes, draws the sidebar and reaches agents'
   await clock.advance(3000)
   await clock.settle()
   expect(seen.toasts).toEqual(['✋ needs input: acme › shop · login'])
-  expect(seen.status()).toBe('✋ 1 need input')
+  expect(seen.status()).toBe('! 1 input')
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({
@@ -225,5 +225,5 @@ test('a headless session does not start the hub', async ($, on) => {
   const seen = host(on, { current: [hub] })
   await $.session.start({ cwd: SHOP, surface: null, isInteractive: false })
   expect(seen.status()).toBeUndefined()
-  expect(seen.calls.some(argv => argv[0]?.endsWith('/claude'))).toBe(false)
+  expect(seen.calls.some(argv => argv[0]?.endsWith('/claude') || argv[0]?.endsWith('/wt-agents'))).toBe(false)
 })

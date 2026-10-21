@@ -61,7 +61,8 @@ if [[ "$kind" == background ]] && { wtl_in_hub || wtl_hub_live; }; then
   exit 0
 fi
 
-# Without the hub, the agent comes in front through a tab (Ghostty only, see wtl_gh_ok).
+# Without the hub, the agent comes in front through a tab (Ghostty only, see wtl_gh_ok). Alex
+# sees it there: not unread (wtl_agent_phases). In the hub, wtl_hub_show marks it.
 if ! wtl_gh_ok; then
   if [[ "$kind" == background ]]; then
     echo "Bringing $id in front needs the hub or Ghostty. Attach in a terminal: claude attach $id" >&2
@@ -70,6 +71,7 @@ if ! wtl_gh_ok; then
   fi
   exit 1
 fi
+wtl_mark seen "${id:-$sid}"
 
 if [[ "$kind" == background ]]; then
   if tab=$(wtl_gh_tab_for_command "^claude attach $id"); then

@@ -37,7 +37,7 @@ remote_counts() {
   done
 }
 
-claude agents --json --all >"$tmp/agents.json" 2>/dev/null || echo '[]' >"$tmp/agents.json" &
+wt-agents --json >"$tmp/agents.json" 2>/dev/null || echo '[]' >"$tmp/agents.json" &
 i=0
 while IFS= read -r repo; do
   i=$((i + 1))
@@ -72,23 +72,13 @@ rows=$(
     . as $rows
     | ($rows | map(.path) | sort_by(length) | reverse) as $paths
     | def owner($cwd): first($paths[] | select($cwd == . or ($cwd | startswith(. + "/"))));
-      # The rule of the list (wt-sidebar) and the mod (model.ts): busy is "working" there. An
-      # agent whose turn goes on (state working) while its process is idle waits (for a worker).
-      def phase: if .state == "failed" then "failed"
-        elif .state == "blocked" or .status == "waiting" then "input"
-        elif .state == "working" and .status == "idle" then "waits"
-        elif .state == "working" or (.state == null and .status == "busy") then "busy"
-        else "idle" end;
-      ($agents[0] | map(select(.state != "stopped") | . + {wt: owner(.cwd), phase: phase})) as $ag
-    | map(. as $r | ($ag | map(select(.wt == $r.path) | .phase)) as $mine | $r + {
-        busy: ($mine | map(select(. == "busy")) | length),
-        input: ($mine | map(select(. == "input")) | length),
-        failed: ($mine | map(select(. == "failed")) | length),
-        waits: ($mine | map(select(. == "waits")) | length),
-        idle: ($mine | map(select(. == "idle")) | length)
-      })
+      # .phase from `wt agents --json` (wtl_agent_phases), the rule of the list and the mod.
+      ($agents[0] | map(select(.state != "stopped") | . + {wt: owner(.cwd)})) as $ag
+    | map(. as $r | ($ag | map(select(.wt == $r.path) | .phase // "idle")) as $mine
+        | $r + (["input", "failed", "unread", "working", "idle"]
+                | map(. as $p | {($p): ($mine | map(select(. == $p)) | length)}) | add))
     | group_by(.client + "/" + .repo)
-    | map(select($all or length > 1 or any(.[]; .busy + .input + .failed + .waits + .idle > 0)))
+    | map(select($all or length > 1 or any(.[]; .input + .failed + .unread + .working + .idle > 0)))
     | flatten
     | sort_by(.client, .repo, (.main | not), .branch)
     | .[]
@@ -97,8 +87,8 @@ rows=$(
       [ (.client | pad(10)), (.repo | pad(18)), (.branch | pad(44)), (.symbols | pad(6)),
         ([ (if .input > 0 then "\(.input) input" else empty end),
            (if .failed > 0 then "\(.failed) failed" else empty end),
-           (if .busy > 0 then "\(.busy) busy" else empty end),
-           (if .waits > 0 then "\(.waits) waits" else empty end),
+           (if .unread > 0 then "\(.unread) unread" else empty end),
+           (if .working > 0 then "\(.working) working" else empty end),
            (if .idle > 0 then "\(.idle) idle" else empty end) ] | join(" ") | pad(30)),
         .task, .path ] | @tsv) end'
 )
