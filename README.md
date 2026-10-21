@@ -679,6 +679,7 @@ Hooks and internal commands (not for hand use): `claude-notify` (Stop, Notificat
 bar's tasks), `hub-run --where` (the hub banner's worktree, at each pick), `hub-run --switch`
 (Ctrl g Tab), `hub-run --launcher` (Ctrl g r), `hub-run --worktree-tab <dir> --name|--tasks` and `hub-run --close-tab <name>`
 (`d` on a worktree), `hub-run --exec` (a pane that `hub-run` started), `wt-sidebar` (the list),
+`wt-sidebar --review toggle|show` (Ctrl g `v`, Ctrl g `3`), `wt-sidebar --files` (`e` in tuicr),
 `wt-hub-pane agent|review|files` (the panes), `wt-hub-keys` (tuicr's `t` and `e`).
 
 ### The mod (`/wt` in Claude Code)
@@ -775,7 +776,8 @@ bin/
   wt-new                 wt new: worktree, task note, background agent
   wt-open                wt open: the worktree's zellij session in a Ghostty tab
   wt-setup               optional worktrunk pre-start hook: ignored files, dependencies
-  wt-sidebar             the list (fzf): rows, keys, remove, prune, new agents
+  wt-sidebar             the list (fzf): rows, keys, remove, prune, new agents; --review
+                         (Ctrl g v, 3: hide or show review)
 lib/
   wt-lib.sh              shared helpers: zellij timeout, Ghostty tabs, hub panes and targets
 config/
