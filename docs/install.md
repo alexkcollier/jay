@@ -51,8 +51,11 @@ What `./install.sh --check` checks:
 - lazygit 0.66.0 or newer, only when `WT_REVIEW=lazygit`; else a note.
 - Claude Code 2.1.304 or newer, and the features of the hub in its help texts: `--bg`,
   `agents --json --all`, `attach`, `rm`, `logs`.
-- git, perl, curl and `/usr/bin/python3`.
-- terminal-notifier and Ghostty: notes when they are missing (both are optional).
+- git, perl, curl and `/usr/bin/python3`. Without the Xcode Command Line Tools, `/usr/bin/git`
+  and `/usr/bin/python3` only ask macOS to install them: the check can open that dialog. Run
+  `xcode-select --install` first.
+- terminal-notifier and Ghostty (in `/Applications` or `~/Applications`): notes when they are
+  missing (both are optional).
 - `~/.local/bin` on PATH.
 
 ## Terminals
