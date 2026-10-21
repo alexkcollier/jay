@@ -6,7 +6,7 @@
 #   refs/wt-turns/<id>/base   HEAD when the agent's first snapshot was taken
 #   refs/wt-turns/<id>/head   the latest snapshot; each snapshot's parent is the one before
 #   refs/wt-turns/<id>/live   while a turn runs: the turn so far, on top of head (PostToolUse
-#                             on Edit, Write, Bash..., at most once in 15 s); Stop removes it
+#                             on Edit, Write, Bash..., at most once in 5 s); Stop removes it
 # Review one turn with `tuicr -r <turn>~1..<turn>`, all of them with `tuicr -r base..head`.
 # Branch, index and files are never touched: it hashes the tree through a copy of the index.
 # --list [path]            list the turn chains of a worktree (default: this folder)
@@ -202,9 +202,10 @@ case $event in
     jq -r '.prompt // ""' <<<"$input" | tr '\n' ' ' | cut -c1-100 >"$prompt_file"
     ;;
   PostToolUse)
-    # During a turn (Edit, Write, Bash...): the live snapshot, at most once in 15 s.
+    # During a turn (Edit, Write, Bash...): the live snapshot, at most once in 5 s (a snapshot
+    # takes some 0.1 s in a repo of 8000 files).
     [[ "$tool" == EnterWorktree || "$tool" == ExitWorktree ]] && exit 0
-    [[ -f "$live_stamp" ]] && (($(date +%s) - $(stat -f %m "$live_stamp") < 15)) && exit 0
+    [[ -f "$live_stamp" ]] && (($(date +%s) - $(stat -f %m "$live_stamp") < 5)) && exit 0
     touch "$live_stamp"
     live "$(tree_of "$top")"
     ;;

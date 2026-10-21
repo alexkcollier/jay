@@ -369,7 +369,7 @@ each turn as a hidden commit chain per agent: `refs/wt-turns/<id>/base` and
 - A turn with no change adds no commit.
 - While a turn runs, `refs/wt-turns/<id>/live` holds the turn so far: a commit
   `turn, running · <prompt>` on top of the head. PostToolUse on `Edit`, `MultiEdit`, `Write`,
-  `NotebookEdit` and `Bash` replaces it, at most once in 15 s. Stop removes it. The chain keeps
+  `NotebookEdit` and `Bash` replaces it, at most once in 5 s. Stop removes it. The chain keeps
   one commit per turn.
 - A turn that ended without Stop (you stopped it) still gets its commit `turn · <prompt>`, at
   the next prompt.
