@@ -18,30 +18,37 @@ The versions are the ones the hub was tested with (2026-10-20); `./install.sh --
 the minimum versions. The hub is macOS only: it drives Ghostty tabs through AppleScript and
 reads the front app with `lsappinfo`.
 
-| Tool | Needed | Tested with | From | Used for |
+### Required
+
+| Tool | Tested with | From | Used for |
+|---|---|---|---|
+| macOS | 27.0.1 | | `osascript`, `lsappinfo`, `stat -f`, `cp -c` |
+| zellij | 0.45.1 | `brew install zellij` | the hub session; the scripts use 0.45 behavior (see [CLAUDE.md](../CLAUDE.md)) |
+| worktrunk (`wt`) | 0.80.0 | `brew install worktrunk` | worktrees, `wt list` data, task notes, `wt remove`; `wt <name>` runs `wt-<name>` from PATH |
+| fzf | 0.74.1 (0.74+) | `brew install fzf` | the list (`--footer`, `transform-footer`, `--listen`, `--id-nth`) |
+| jq | 1.7.1 | `brew install jq` (in `/usr/bin` on recent macOS) | all JSON |
+| tuicr | 0.27.0 | `brew install tuicr` | review |
+| yazi | 26.9.1 (26.x) | `brew install yazi` | files |
+| Claude Code | 2.1.306 (2.1.304+; built on 2.1.304) | `brew install --cask claude-code` | `claude --bg`, `claude attach`, `claude agents --json --all`, `claude rm`, `claude logs`, `claude --bg --resume`, hooks, the mod |
+| git | 2.54.0 (Apple) | Xcode Command Line Tools | worktrees, turn chains |
+| bash | 3.2.57 (`/bin/bash`) | macOS | every script (`#!/usr/bin/env bash` finds `/bin/bash`) |
+| python3 | 3.9.6 (`/usr/bin/python3`) | Xcode Command Line Tools | `wt-hub-keys`, `claude-clear` |
+| perl | 5.34.1 | macOS | the 5 s timeout around every zellij call |
+| lsof | macOS | macOS | the ports of the tasks (`hub-run`) |
+| curl | 8.7.1 | macOS | the list's fzf socket |
+
+### Optional
+
+| Tool | Without it | Tested with | From | Used for |
 |---|---|---|---|---|
-| macOS | required | 27.0.1 | | `osascript`, `lsappinfo`, `stat -f`, `cp -c` |
-| zellij | required | 0.45.1 | `brew install zellij` | the hub session; the scripts use 0.45 behavior (see [CLAUDE.md](../CLAUDE.md)) |
-| worktrunk (`wt`) | required | 0.80.0 | `brew install worktrunk` | worktrees, `wt list` data, task notes, `wt remove`; `wt <name>` runs `wt-<name>` from PATH |
-| fzf | required | 0.74.1 (0.74+) | `brew install fzf` | the list (`--footer`, `transform-footer`, `--listen`, `--id-nth`) |
-| jq | required | 1.7.1 | `brew install jq` (in `/usr/bin` on recent macOS) | all JSON |
-| tuicr | required | 0.27.0 | `brew install tuicr` | review |
-| yazi | required | 26.9.1 (26.x) | `brew install yazi` | files |
-| Claude Code | required | 2.1.306 (2.1.304+; built on 2.1.304) | `brew install --cask claude-code` | `claude --bg`, `claude attach`, `claude agents --json --all`, `claude rm`, `claude logs`, `claude --bg --resume`, hooks, the mod |
-| git | required | 2.54.0 (Apple) | Xcode Command Line Tools | worktrees, turn chains |
-| bash | required | 3.2.57 (`/bin/bash`) | macOS | every script (`#!/usr/bin/env bash` finds `/bin/bash`) |
-| python3 | required | 3.9.6 (`/usr/bin/python3`) | Xcode Command Line Tools | `wt-hub-keys`, `claude-clear` |
-| perl | required | 5.34.1 | macOS | the 5 s timeout around every zellij call |
-| lsof | required | macOS | macOS | the ports of the tasks (`hub-run`) |
-| curl | required | 8.7.1 | macOS | the list's fzf socket |
-| zjstatus | optional: without it, zellij's compact bar | 0.25.0 | `./install.sh` gets it from GitHub: `~/.local/share/wt-hub/zjstatus-v0.25.0.wasm` | the bar and the banners |
-| Nerd Font | optional: without it, the git signs show as boxes | | Ghostty's built-in font has the Nerd Font symbols; in another terminal, set a Nerd Font | the Octicons in the git signs |
-| Ghostty | optional: without it, no tab control ([Terminals](#terminals)) | 1.3.2 (1.3+) | `brew install --cask ghostty` | tabs through AppleScript: `wt hub`, `wt go`, `wt open`, `wt-edit`, notices |
-| terminal-notifier | optional: without it, no notices | 3.1.0 | `brew install terminal-notifier` | notices |
-| lazygit | optional: only for `WT_REVIEW=lazygit` | 0.66.2 (0.66+) | `brew install lazygit` | review with `WT_REVIEW=lazygit` |
-| delta | optional: needed for lazygit review (`WT_REVIEW_DIFF=delta`, the default) | 0.19.2 | `brew install git-delta` | the patch in lazygit review (`wt-hub-diff`) |
-| difftastic (`difft`) | optional: only for `WT_REVIEW_DIFF=difft` | 0.71.0 | `brew install difftastic` | the patch in lazygit review with `WT_REVIEW_DIFF=difft` |
-| Docker | optional: only for `docker compose` tasks | 29.8.2, Compose 5.5.1 | Docker Desktop | reads (never changes) the published ports of `docker compose` tasks for `hub-run ls` and the bar, and names the container in `hub-run port` |
+| zjstatus | zellij's compact bar, no banners | 0.25.0 | `./install.sh` gets it from GitHub: `~/.local/share/wt-hub/zjstatus-v0.25.0.wasm` | the bar and the banners |
+| Nerd Font | the git signs show as boxes | | Ghostty's built-in font has the Nerd Font symbols; in another terminal, set a Nerd Font | the Octicons in the git signs |
+| Ghostty | no tab control ([Terminals](#terminals)) | 1.3.2 (1.3+) | `brew install --cask ghostty` | tabs through AppleScript: `wt hub`, `wt go`, `wt open`, `wt-edit`, notices |
+| terminal-notifier | no notices | 3.1.0 | `brew install terminal-notifier` | notices |
+| lazygit | review with tuicr only | 0.66.2 (0.66+) | `brew install lazygit` | review with `WT_REVIEW=lazygit` |
+| delta | lazygit review has no patch (needed for `WT_REVIEW_DIFF=delta`, the default) | 0.19.2 | `brew install git-delta` | the patch in lazygit review (`wt-hub-diff`) |
+| difftastic (`difft`) | no syntax diff; only for `WT_REVIEW_DIFF=difft` | 0.71.0 | `brew install difftastic` | the patch in lazygit review with `WT_REVIEW_DIFF=difft` |
+| Docker | no ports for `docker compose` tasks | 29.8.2, Compose 5.5.1 | Docker Desktop | reads (never changes) the published ports of `docker compose` tasks for `hub-run ls` and the bar, and names the container in `hub-run port` |
 
 What `./install.sh --check` checks:
 

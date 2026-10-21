@@ -62,20 +62,23 @@ change to a worker, a background agent in a worktree of its own. See
   `./install.sh --check` checks the version and these commands.
 - **The tools that `install.sh` checks**:
 
-  | Tool | Install | |
+  | Required | Install |
+  |---|---|
+  | zellij 0.45.1+ | `brew install zellij` |
+  | worktrunk (`wt`) 0.80+ | `brew install worktrunk` |
+  | fzf 0.74+ | `brew install fzf` |
+  | jq 1.7+ | `brew install jq` |
+  | tuicr 0.27+ | `brew install tuicr` |
+  | yazi 26+ | `brew install yazi` |
+  | Claude Code 2.1.304+ | `brew install --cask claude-code` |
+  | git, python3 (`/usr/bin/python3`) | `xcode-select --install` |
+  | perl, curl | part of macOS |
+
+  | Optional | Install | Without it |
   |---|---|---|
-  | zellij 0.45.1+ | `brew install zellij` | required |
-  | worktrunk (`wt`) 0.80+ | `brew install worktrunk` | required |
-  | fzf 0.74+ | `brew install fzf` | required |
-  | jq 1.7+ | `brew install jq` | required |
-  | tuicr 0.27+ | `brew install tuicr` | required |
-  | yazi 26+ | `brew install yazi` | required |
-  | Claude Code 2.1.304+ | `brew install --cask claude-code` | required |
-  | git, python3 (`/usr/bin/python3`) | `xcode-select --install` | required |
-  | perl, curl | part of macOS | required |
-  | terminal-notifier | `brew install terminal-notifier` | optional: notices |
-  | Ghostty | `brew install --cask ghostty` | optional: tab control |
-  | lazygit 0.66+ | `brew install lazygit` | optional: review with lazygit |
+  | terminal-notifier | `brew install terminal-notifier` | no notices |
+  | Ghostty | `brew install --cask ghostty` | no tab control |
+  | lazygit 0.66+ | `brew install lazygit` | review with tuicr only |
 
   `./install.sh` also gets zjstatus (the bar) from GitHub, and needs `~/.local/bin` on PATH.
   All versions: [Requirements](docs/install.md#requirements).
