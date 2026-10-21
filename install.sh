@@ -132,7 +132,7 @@ check_tools() {
   else
     note "terminal-notifier not found: no macOS notices (brew install terminal-notifier)"
   fi
-  if [[ -d /Applications/Ghostty.app ]]; then
+  if [[ -d /Applications/Ghostty.app || -d "$HOME/Applications/Ghostty.app" ]]; then
     ok "Ghostty (tab control)"
   else
     note "Ghostty not found: the hub runs in any terminal, but without tab control (brew install --cask ghostty)"

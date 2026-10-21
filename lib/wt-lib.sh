@@ -25,8 +25,9 @@ WT_ROOTS=$_roots
 unset _roots _dirs _dir
 
 # A click on a notice runs `wt-go` through /bin/sh with launchd's PATH (/usr/bin:/bin:...),
-# which has no claude or zellij. Add their folders at the end, so a caller's own order wins.
-for _dir in "$HOME/.local/bin" /opt/homebrew/bin; do
+# which has no claude or zellij. Add their folders at the end, so a caller's own order wins
+# (Homebrew: /opt/homebrew/bin on Apple silicon, /usr/local/bin on Intel).
+for _dir in "$HOME/.local/bin" /opt/homebrew/bin /usr/local/bin; do
   case ":$PATH:" in *":$_dir:"*) ;; *) PATH="$PATH:$_dir" ;; esac
 done
 unset _dir
