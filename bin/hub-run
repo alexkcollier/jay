@@ -244,6 +244,25 @@ find_task() {
   jq -c '.[0]' <<<"$found"
 }
 
+# The id of the hub's tasks tab. A hub without one (started from an older layout, or its tasks
+# tab closed) gets it, with the bar (wt hub --print-tasks-tab); the view goes back to the tab it
+# was on.
+ensure_tab() {
+  local tabs tid back layout strip=() var
+  tabs=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null)
+  tid=$(jq -r --arg t "$TAB" 'first(.[] | select(.name == $t) | .tab_id) // empty' <<<"$tabs" 2>/dev/null)
+  [[ -n "$tid" ]] && { printf '%s\n' "$tid"; return 0; }
+  back=$(jq -r 'first(.[] | select(.active) | .name) // empty' <<<"$tabs" 2>/dev/null)
+  mkdir -p "$STATE_DIR"
+  layout="$STATE_DIR/tasks-tab.kdl"
+  "$HOME/.local/bin/wt-hub" --print-tasks-tab >"$layout" || return 1
+  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
+  env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-tab --layout "$layout" --name "$TAB" >/dev/null 2>&1
+  [[ -n "$back" ]] && zellij -s "$WT_HUB_SESSION" action go-to-tab-name "$back" >/dev/null 2>&1
+  tid=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null | jq -r --arg t "$TAB" 'first(.[] | select(.name == $t) | .tab_id) // empty')
+  [[ -n "$tid" ]] && printf '%s\n' "$tid"
+}
+
 # --- Commands ---
 
 cmd_start() {
@@ -278,12 +297,7 @@ cmd_start() {
   fi
   local strip=() var
   for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
-  tid=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null | jq -r --arg t "$TAB" 'first(.[] | select(.name == $t) | .tab_id) // empty')
-  if [[ -z "$tid" ]]; then
-    env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-tab --name "$TAB" --cwd "${WT_ROOTS%%:*}" >/dev/null 2>&1
-    tid=$(zellij -s "$WT_HUB_SESSION" action list-tabs -j 2>/dev/null | jq -r --arg t "$TAB" 'first(.[] | select(.name == $t) | .tab_id) // empty')
-    [[ -n "$tid" ]] || die "the hub has no $TAB tab, and a new one did not open"
-  fi
+  tid=$(ensure_tab) || die "the hub has no $TAB tab, and a new one did not open"
   pane=$(env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --tab-id "$tid" \
     --cwd "$PWD" --name "$name" --close-on-exit -- "$SELF" --exec "$line") || die "zellij did not open the pane"
   printf '%s: started in the hub'"'"'s %s tab (%s)\n' "$name" "$TAB" "$pane"
@@ -454,6 +468,7 @@ case ${1:-} in
   --exec) shift; run_pane "$*" ;;
   --bar) cmd_bar ;;
   --hook) cmd_hook ;;
+  --tab) hub_answers || die "the hub does not run"; ensure_tab >/dev/null || die "no $TAB tab" ;;
   ls) shift; cmd_ls "$@" ;;
   log) shift; cmd_log "$@" ;;
   wait) shift; cmd_wait "$@" ;;

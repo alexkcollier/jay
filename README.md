@@ -604,7 +604,8 @@ All of these are in `~/.local/bin`. worktrunk runs `wt-<name>` for `wt <name>`, 
 
 Hooks and internal commands (not for hand use): `claude-notify` (Stop, Notification),
 `claude-turn-snapshot` (UserPromptSubmit, Stop), `hub-run --hook` (SessionStart), `hub-run --bar`
-(the bar's tasks), `hub-run --exec` (a pane that `hub-run` started), `wt-sidebar` (the list),
+(the bar's tasks), `hub-run --exec` (a pane that `hub-run` started), `hub-run --tab` (adds the
+tasks tab, with its bar, to a hub that has none; `hub-run` does it too), `wt-sidebar` (the list),
 `wt-hub-pane agent|review|files` (the panes), `wt-hub-keys` (tuicr's `t` and `e`).
 
 ### The mod (`/wt` in Claude Code)

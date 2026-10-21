@@ -4,9 +4,10 @@
 # (hub-run). Goes to the hub's Ghostty tab when it has one, else opens the hub in this
 # terminal; a new tab only without a terminal or from inside another zellij session.
 # --here: in this terminal.  --tab: in a new tab.  --print-layout: the zellij layout it starts.
+# --print-tasks-tab: the layout of the tasks tab alone.
 set -euo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
-[[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,6s/^# \{0,1\}//p' "$0"; exit 0; }
+[[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,7s/^# \{0,1\}//p' "$0"; exit 0; }
 
 SESSION=$WT_HUB_SESSION
 root=${WT_ROOTS%%:*}
@@ -92,8 +93,25 @@ fresh_start() {
   wtl_hub_reset
 }
 
+# The tasks tab alone, with the bar: hub-run adds it to a hub that has none (one started from an
+# older layout, or one whose tasks tab was closed).
+tasks_tab_layout() {
+  cat <<KDL
+layout {
+    pane cwd="$root"
+    pane size=1 borderless=true {
+        $(bar)
+    }
+}
+KDL
+}
+
 if [[ "${1:-}" == --print-layout ]]; then
   write_layout
+  exit 0
+fi
+if [[ "${1:-}" == --print-tasks-tab ]]; then
+  tasks_tab_layout
   exit 0
 fi
 
