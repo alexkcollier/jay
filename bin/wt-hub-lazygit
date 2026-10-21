@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# wt-hub-lazygit turns <chain id> | commits — lazygit as the hub's review (prototype, WT_REVIEW=
-# lazygit in ~/.config/wt-hub/config). Run it in the worktree; wt-hub-pane does.
+# wt-hub-lazygit turns <chain id> | commits — lazygit as the hub's review (WT_REVIEW=lazygit in
+# ~/.config/wt-hub/config). Run it in the worktree; wt-hub-pane does.
 # turns:   lazygit cannot open a hidden ref: it logs HEAD and lists refs/heads only. So it runs
 #          on a view repo, ~/.local/state/wt-hub/lazygit/views/<chain id>: a repo of its own that
 #          borrows the worktree's objects (objects/info/alternates). Its branch `turns` is the
@@ -15,7 +15,9 @@
 # commits: lazygit on the worktree itself, on its commits panel. lazygit refreshes on a new
 #          commit by itself.
 # Config:  CONFIG_DIR keeps lazygit's state (recent repos) out of yours; LG_CONFIG_FILE loads
-#          your config.yml, then the hub's (config/lazygit/hub.yml) over it.
+#          your config.yml, then the hub's (~/.config/wt-hub/lazygit/hub.yml, from
+#          config/lazygit) over it.
+# claude-turn-snapshot --prune removes the view with its chain.
 # --toggle (the hub's t in lazygit): switch turns ⇄ commits and stop lazygit; wt-hub-pane
 #          starts the other mode.
 set -uo pipefail
@@ -33,8 +35,13 @@ mode=${1:-turns} id=${2:-}
 root="$HOME/.local/state/wt-hub/lazygit"
 mkdir -p "$root"
 user_config="$(env -u CONFIG_DIR -u LG_CONFIG_FILE lazygit --print-config-dir 2>/dev/null)/config.yml"
-hub_config="$HOME/.local/share/wt-hub/lazygit/hub.yml"
-[[ -f "$hub_config" ]] || hub_config="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)/config/lazygit/hub.yml"
+hub_config="$HOME/.config/wt-hub/lazygit/hub.yml"
+if [[ ! -f "$hub_config" ]]; then
+  # wt-hub-pane clears the screen when this ends: wait until the message is read.
+  printf '\n  %s is missing: run ./install.sh in wt-hub.\n  Enter: try again.\n' "$hub_config"
+  read -r _
+  exit 1
+fi
 configs=$hub_config
 [[ -f "$user_config" ]] && configs="$user_config,$hub_config"
 export CONFIG_DIR="$root/state" LG_CONFIG_FILE="$configs" WT_HUB_LG_PID=$$

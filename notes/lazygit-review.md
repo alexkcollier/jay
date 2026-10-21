@@ -3,6 +3,10 @@
 Date: 2026-10-21. Branch: `lazygit-review`. Versions: lazygit 0.66.2, tuicr 0.27.0,
 zellij 0.45.1, git 2.54.0.
 
+Status: lazygit is now an option (`WT_REVIEW=lazygit`), with the install steps, the prune and
+the README of the "Cost" list below. tuicr stays the default. The study text below is as
+written before that step.
+
 This study answers six questions: can lazygit be the review pane of the hub, in place of tuicr
 or next to it? The evidence is the lazygit 0.66.2 source (tag `v0.66.2`), commands, and tests
 in throwaway zellij sessions with a fake HOME. The test repo is `shop`, with a real turn chain

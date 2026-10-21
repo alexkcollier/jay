@@ -101,6 +101,7 @@ it off. Without tab control:
 | fzf | 0.74.1 (0.74+) | `brew install fzf` | the list (`--footer`, `transform-footer`, `--listen`, `--id-nth`) |
 | jq | 1.7.1 | `brew install jq` | all JSON |
 | tuicr | 0.27.0 | `brew install tuicr` | review |
+| lazygit | 0.66.2 (0.66+) | `brew install lazygit` (optional) | review with `WT_REVIEW=lazygit` |
 | yazi | 26.9.1 (26.x) | `brew install yazi` | files |
 | terminal-notifier | 3.1.0 | `brew install terminal-notifier` (optional) | notices |
 | Nerd Font | | Ghostty's built-in font has the Nerd Font symbols; in another terminal, set a Nerd Font | the Octicons in the git signs |
@@ -142,6 +143,7 @@ it off. Without tab control:
    | the scripts in `bin/` and `lib/wt-lib.sh` | `~/.local/bin`, `~/.local/lib` (copies; `--link`: symlinks) |
    | your settings, all at their defaults (see [Settings](#settings)) | `~/.config/wt-hub/config`, made when missing |
    | the hub's yazi keys | `~/.config/wt-hub/yazi` |
+   | the hub's lazygit settings (for `WT_REVIEW=lazygit`) | `~/.config/wt-hub/lazygit` |
    | tuicr's `q_quits = true` | `~/.config/tuicr/config.toml`, made when missing; else checked |
    | the hub's worktrunk settings | `~/.config/worktrunk/config.toml`, copied when missing; else the missing keys are listed |
    | the hooks (SessionStart, Stop, UserPromptSubmit, Notification) | added to `~/.claude/settings.json`, only the missing ones, after a backup |
@@ -190,6 +192,7 @@ not: the hooks in background agents and a notice click.
 | `WT_TERMINAL` | on when Ghostty runs | `ghostty`: tab control on; another value: off |
 | `WT_TASK_SHELL` | `$SHELL -i +m -c` (zsh, bash), else `$SHELL -l -c` | how a task runs its command line, which comes after these words |
 | `WT_LAUNCHER` | the built-in zsh launcher | a command for the launcher (Ctrl g `r`) in another shell; see [Tasks](#tasks-dev-servers) |
+| `WT_REVIEW` | `tuicr` | the review pane: `tuicr` (review comments) or `lazygit` (git actions); see [Review with lazygit](#review-with-lazygit) |
 
 `./install.sh --check` tells you when a `WT_ROOTS` folder does not exist.
 
@@ -384,6 +387,30 @@ a comment or a `:` or `/` prompt; it waits until tuicr is back in NORMAL or SELE
 When tuicr quits less than 2 s after its start, the pane says so and waits for Enter.
 
 The list's keys act in the list only. The list has no key for review's mode or for files.
+
+### Review with lazygit
+
+`WT_REVIEW=lazygit` in `~/.config/wt-hub/config` puts lazygit (0.66 or newer) in the review pane
+in place of tuicr. Start the hub again after you change it. The modes and `t`, `e`, `q` stay the
+same. lazygit has no review comments: use tuicr when you want to write comments for the agent.
+See `notes/lazygit-review.md` for the study.
+
+- **turns**: lazygit cannot open the hidden turn refs, so it runs on a view repo,
+  `~/.local/state/wt-hub/lazygit/views/<id>`: a repo of its own that reads your repo's objects.
+  Its branch `turns` is the chain head, `turns-base` the base. A turn is one row: a yellow `*`
+  marks the turns, a green `*` the history under them. A commit, branch or rebase there changes
+  only the view, never your repo. With no chain, lazygit opens on the worktree.
+- **commits**: lazygit on the worktree itself, with all its git actions (stage, commit, rebase).
+  An agent can work in the same worktree at the same time.
+
+New turns come in without a restart: the pane copies the chain head into the view every 2 s, and
+lazygit refreshes when the branch moves. Your place stays. When the newest turn was selected,
+the new turn is selected (the pane types `<`).
+
+lazygit reads your own `config.yml` (theme, diff renderer), then the hub's
+`~/.config/wt-hub/lazygit/hub.yml` over it: one tab group, list on top, no author or hash, and
+the hub's `t` and `e`. Its state (recent repos) goes to `~/.local/state/wt-hub/lazygit/state`,
+not into yours. `claude-turn-snapshot --prune` removes a view with its chain.
 
 ### Files
 
@@ -639,6 +666,25 @@ In a comment, a `:` or `/` prompt or a paste, they go to tuicr.
 
 tuicr's own `e` (exclude filter) is not available in the hub.
 
+### Review (lazygit, `WT_REVIEW=lazygit`)
+
+`t` and `e` are lazygit custom commands (`config/lazygit/hub.yml`): lazygit does not run them
+while you type in a prompt.
+
+| Key | Action |
+|---|---|
+| `t` | toggle turns ⇄ commits |
+| `e` | show files (yazi) over review |
+| `q` | back: lazygit starts again on the newest turn |
+| `Enter`, `Esc` | a turn's files, a file's diff; back |
+| `v`, then `j` / `k` | select a range: one diff for many turns |
+| `<` | newest turn |
+| `[`, `]` | the other tabs: Files (the worktree's changes, in commits mode), Local branches |
+| `+`, `_` | screen mode: the patch gets more or less of the pane |
+| `?` | lazygit's own key help |
+
+lazygit's own `t` (revert) and `e` (edit file) are not available in the hub; `o` opens a file.
+
 ### Files (yazi)
 
 From `config/yazi/keymap.toml` (hub only: `YAZI_CONFIG_HOME=~/.config/wt-hub/yazi`). The other
@@ -671,7 +717,7 @@ to locked mode.
 
 ### Pane titles
 
-The titles show the keys of the panes that tuicr and yazi fill:
+The titles show the keys of the panes that tuicr (or lazygit) and yazi fill:
 
 - review: `turns · <repo>   e files · t commits` (or `commits · <repo>   e files · t turns`)
 - files: `files · <repo>   e review · o open here · O editor tab · W open with`
@@ -803,6 +849,8 @@ In `~/.local/state/`:
 | `wt-worktrees.ndjson` | cache of `wt all --json` (refreshed after 30 s) |
 | `wt-sidebar.<pid>.sock`, `.count`, `.sum`, `.help`, `.restart` | a running list: its fzf socket, row count, agent counts, `?` state, `r` flag |
 | `wt-turns/<id>.worktree`, `<id>.prompt` | the worktree of each turn chain; the prompt of the current turn |
+| `wt-hub/lazygit/views/<id>` | the view repo of a turn chain for lazygit review (`WT_REVIEW=lazygit`) |
+| `wt-hub/lazygit/state/` | the state of the hub's lazygit (its recent repos) |
 | `wt-hub/ended/<id>`, `wt-hub/seen/<id>` | empty files; the time of each is when the agent's last turn ended (Stop hook; not while the agent has background tasks) and when you last saw the agent (unread sign); removed after 14 days |
 | `wt-hub-prune.stamp` | time of the last automatic prune |
 | `wt-hub-prune.log` | each agent the list pruned, and each turn chain removed |
@@ -862,6 +910,7 @@ bin/
   wt-go                  wt go: bring an agent in front (hub, tab or pane)
   wt-hub                 wt hub: start, attach or go to the hub; writes its layout
   wt-hub-keys            pty wrapper around tuicr: t (toggle mode), e (files)
+  wt-hub-lazygit         lazygit as review (WT_REVIEW=lazygit): a turn chain's view repo
   wt-hub-pane            a hub pane (agent | review | files) that follows its target
   wt-new                 wt new: worktree, task note, background agent
   wt-open                wt open: the worktree's zellij session in a Ghostty tab
@@ -873,6 +922,7 @@ lib/
                          the hub Claude and orchestrator prompts, job state (wtl_jobs)
 config/
   claude-settings-hooks.json   hooks to merge into ~/.claude/settings.json
+  lazygit/hub.yml              the hub's lazygit settings and keys (WT_REVIEW=lazygit)
   tuicr/config.toml            q_quits: q in review goes back
   worktrunk/config.toml        hub settings to copy into ~: worktree path <repo>.<branch>, Task column, task alias
   yazi/keymap.toml             hub-only yazi keys: e, O, W

@@ -1,6 +1,7 @@
-# lazygit settings for the hub's review pane (prototype, WT_REVIEW=lazygit). wt-hub-lazygit loads
-# your own config.yml first and this file over it (LG_CONFIG_FILE), so your theme and diff
-# renderer stay. Your own lazygit outside the hub does not read this file.
+# lazygit settings for the hub's review pane (WT_REVIEW=lazygit), installed as
+# ~/.config/wt-hub/lazygit/hub.yml. wt-hub-lazygit loads your own config.yml first and this file
+# over it (LG_CONFIG_FILE), so your theme and diff renderer stay. Your own lazygit outside the
+# hub does not read this file.
 gui:
   showRandomTip: false
   showCommandLog: false

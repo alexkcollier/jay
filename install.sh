@@ -6,6 +6,7 @@
 #                                    at once (for work on wt-hub itself)
 #   ~/.config/wt-hub/config          your settings (WT_ROOTS, ...), made when missing
 #   ~/.config/wt-hub/yazi            the hub's yazi keys
+#   ~/.config/wt-hub/lazygit         the hub's lazygit settings (review with WT_REVIEW=lazygit)
 #   ~/.config/tuicr/config.toml      made when missing (q_quits = true); else only checked
 #   ~/.config/worktrunk/config.toml  copied when missing (always a copy: client settings go
 #                                    there); else the hub's keys it lacks are listed
@@ -80,6 +81,12 @@ check_tools() {
   tool fzf 0.74.0 "brew install fzf"
   tool jq 1.7 "brew install jq"
   tool tuicr 0.27.0 "brew install tuicr"
+  # lazygit is the other review (WT_REVIEW=lazygit). 0.66 refreshes by itself on a new turn.
+  if [[ "$(HOME="$HOME" /bin/bash -c 'source "$1" && printf "%s" "${WT_REVIEW:-}"' _ "$repo/lib/wt-lib.sh")" == lazygit ]]; then
+    tool lazygit 0.66.0 "brew install lazygit (review: WT_REVIEW=lazygit)"
+  else
+    note "lazygit: optional, for WT_REVIEW=lazygit in $SETTINGS_FILE (0.66 or newer)"
+  fi
   tool yazi 26.0 "brew install yazi"
   tool claude "" "brew install --cask claude-code"
   tool git "" "xcode-select --install"
@@ -117,7 +124,7 @@ is_ours() {
   [[ $target == /* ]] || { is_ours "$(dirname "$dest")/$target"; return; }
   case $target in
     */bin/* | */lib/wt-lib.sh) [[ -f "${target%/*}/../lib/wt-lib.sh" ]] ;;
-    */config/yazi | */config/tuicr/config.toml | */mod) [[ -f "${target%/config/*}/lib/wt-lib.sh" || -f "${target%/mod}/lib/wt-lib.sh" ]] ;;
+    */config/yazi | */config/lazygit | */config/tuicr/config.toml | */mod) [[ -f "${target%/config/*}/lib/wt-lib.sh" || -f "${target%/mod}/lib/wt-lib.sh" ]] ;;
     *) return 1 ;;
   esac
 }
@@ -182,8 +189,9 @@ install_files() {
   done
   put "$repo/lib/wt-lib.sh" "$LIB/wt-lib.sh"
   put "$repo/config/yazi" "$HOME/.config/wt-hub/yazi"
+  put "$repo/config/lazygit" "$HOME/.config/wt-hub/lazygit"
   ((todo > before)) && return 0
-  f="$(ls "$repo"/bin | wc -l | tr -d ' ') scripts in $BIN, wt-lib.sh in $LIB, yazi keys in ~/.config/wt-hub/yazi"
+  f="$(ls "$repo"/bin | wc -l | tr -d ' ') scripts in $BIN, wt-lib.sh in $LIB, yazi keys and lazygit settings in ~/.config/wt-hub"
   if [[ $mode != check ]]; then
     did "$f"
   elif [[ -n "$elsewhere" ]]; then
@@ -273,6 +281,9 @@ install_settings() {
 # The launcher (Ctrl g r) for a shell other than zsh: a command that runs in the launcher pane,
 # in the worktree, and starts what you type with: hub-run --launch -- "<line>". See the README.
 # WT_LAUNCHER=bash --rcfile ~/.config/wt-hub/launcher.bash -i
+
+# The review pane: tuicr (default; review comments) or lazygit (0.66 or newer; git actions).
+# WT_REVIEW=tuicr
 CONF
       did "$SETTINGS_FILE (settings, all at their defaults)"
     fi
@@ -401,8 +412,9 @@ uninstall() {
     [[ $f == */lib/* ]] && dest="$LIB/wt-lib.sh" || dest="$BIN/${f##*/}"
     if [[ -e "$dest" || -L "$dest" ]] && is_ours "$dest"; then rm -f "$dest"; did "removed $dest"; fi
   done
-  dest="$HOME/.config/wt-hub/yazi"
-  if [[ -e "$dest" || -L "$dest" ]] && is_ours "$dest"; then rm -rf "$dest"; did "removed $dest"; fi
+  for dest in "$HOME/.config/wt-hub/yazi" "$HOME/.config/wt-hub/lazygit"; do
+    if [[ -e "$dest" || -L "$dest" ]] && is_ours "$dest"; then rm -rf "$dest"; did "removed $dest"; fi
+  done
   dest="$HOME/.config/tuicr/config.toml"
   if [[ -e "$dest" || -L "$dest" ]] && is_ours "$dest"; then rm -f "$dest"; did "removed $dest"; fi
   if claude plugin marketplace list 2>/dev/null | grep -q alex-wt-hub; then

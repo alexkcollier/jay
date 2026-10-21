@@ -9,7 +9,8 @@
 # --list [path]            list the turn chains of a worktree (default: this folder)
 # --prune [--dry-run]      remove the chains of agents that `claude agents --all` no longer
 #                          lists, when their worktree is gone or their last turn is older than
-#                          7 days (an ended interactive session keeps its turns for a week).
+#                          7 days (an ended interactive session keeps its turns for a week),
+#                          and their lazygit views (wt-hub-lazygit).
 set -uo pipefail
 
 if [[ "${1:-}" == --prune ]]; then
@@ -33,6 +34,8 @@ if [[ "${1:-}" == --prune ]]; then
       git -C "$1" update-ref -d "refs/wt-turns/$2/base" 2>/dev/null
     fi
     rm -f "$state/$2".*
+    # The chain's view repo for lazygit (wt-hub-lazygit), if any.
+    rm -rf "$HOME/.local/state/wt-hub/lazygit/views/$2"
     printf '%s turn chain %s removed (%s)\n' "$(date '+%F %T')" "$2" "$3"
   }
   seen=""
