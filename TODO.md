@@ -87,7 +87,8 @@ Alex's to-do list, in his words (2026-10-19):
   pick replaces the tab's empty shells in place with a shell in the picked worktree, and the
   list's tick opens a new free shell when a command takes the last one. Facts: `new-pane
   --in-place` without a command ignores `--cwd` (with a command it works); `new-pane --tab-id`
-  into the tab a client looks at does not move that client's focus.
+  into the tab a client looks at does not move that client's focus. Then (Alex: "banner needs
+  to be on both tabs"): the hub tab has the banner too (`◆ HUB › worktrees`).
 
 ## Other open items
 

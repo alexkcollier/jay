@@ -47,6 +47,8 @@ Install with `./install.sh` ([Install](#install)). Open items and known faults:
   [The hub Claude](#the-hub-claude)); the "◆ hub" row in the list brings it back.
 - **Review** (right). tuicr on the picked agent's turns (one commit per turn), or on the branch's
   commits. **Files** (yazi in the same worktree) opens over review and closes back to it.
+- **Banner** (top, zjstatus, blue). `◆ HUB › worktrees` (or `› tasks` on the tasks tab), the
+  picked worktree, and `Ctrl g Tab` to the other tab.
 - **Bar** (bottom, zjstatus). `◆ hub`, the agent counts from the list, the tasks (`● web:5174`),
   the zellij mode when it is not locked, the tabs and the time.
 - **Tasks tab** (second tab, Ctrl g Tab). Shell panes for dev servers, watchers and
@@ -360,8 +362,9 @@ to `~/.local/state/claude-notify.log`.
 
 The hub's second tab, "tasks", is for long-running commands: `pnpm dev`, watchers,
 `docker compose up`. Ctrl g Tab goes there and back (or click the tab in the bar). Each pane in
-the tab is a task. You and the agents see the same panes. A blue banner at the top of the tab
-says `◆ HUB › tasks`, with the picked worktree and the key back.
+the tab is a task. You and the agents see the same panes. A blue banner at the top of each tab
+says which tab of the hub it is (`◆ HUB › worktrees`, `◆ HUB › tasks`), with the picked worktree
+and the key to the other tab.
 
 - **By hand**: type the command in a shell of the tab, as in any terminal. The tab always has a
   free shell in the worktree that you picked in the hub:

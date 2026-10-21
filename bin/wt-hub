@@ -47,16 +47,16 @@ plugin location="file:$ZJSTATUS" {
 KDL
 }
 
-# The banner at the top of the tasks tab, so that the tab says it is the hub's: "◆ HUB › tasks",
-# the picked worktree (sent at each pick, see wtl_hub_target and wt-sidebar) and the key back.
-# Without zjstatus, none.
+# The banner at the top of each tab, so that each tab says it is the hub's: "◆ HUB › <what the
+# tab is>" ($1), the picked worktree (sent at each pick, see wtl_hub_target and wt-sidebar) and
+# the key to the other tab ($2). Without zjstatus, none.
 banner() {
   [[ -f "$ZJSTATUS" ]] || return 0
   cat <<KDL
 pane size=1 borderless=true {
             plugin location="file:$ZJSTATUS" {
-                format_left   "#[fg=#1F1F28,bg=#7E9CD8,bold] ◆ HUB › tasks #[fg=#1F1F28,bg=#7E9CD8]  {pipe_where}"
-                format_right  "#[fg=#1F1F28,bg=#7E9CD8] Ctrl g Tab: back to the hub "
+                format_left   "#[fg=#1F1F28,bg=#7E9CD8,bold] ◆ HUB › $1 #[fg=#1F1F28,bg=#7E9CD8]  {pipe_where}"
+                format_right  "#[fg=#1F1F28,bg=#7E9CD8] Ctrl g Tab: $2 "
                 format_space  "#[bg=#7E9CD8]"
                 pipe_where_format     "#[fg=#1F1F28,bg=#7E9CD8]{output}"
                 pipe_where_rendermode "static"
@@ -80,6 +80,7 @@ layout {
         }
     }
     tab name="hub" focus=true {
+        $(banner worktrees tasks)
         pane split_direction="vertical" {
             pane size="$list%" name="worktrees" command="$HOME/.local/bin/wt-sidebar"
             pane size="$middle%" name="hub" focus=true command="$HOME/.local/bin/wt-hub-pane" {
@@ -91,7 +92,7 @@ layout {
         }
     }
     tab name="tasks" {
-        $(banner)
+        $(banner tasks "back to the hub")
         pane cwd="$root"
     }
 }
@@ -117,7 +118,7 @@ fresh_start() {
 tasks_tab_layout() {
   cat <<KDL
 layout {
-    $(banner)
+    $(banner tasks "back to the hub")
     pane cwd="$root"
     pane size=1 borderless=true {
         $(bar)
