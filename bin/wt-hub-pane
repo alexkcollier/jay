@@ -157,6 +157,15 @@ run() {
     review)
       IFS=$'\t' read -r path session <<<"$1"
       cd "$path" || return
+      # Prototype: lazygit (WT_REVIEW=lazygit). Its `t` toggles the mode itself and stops it.
+      if [[ "${WT_REVIEW:-tuicr}" == lazygit ]]; then
+        if [[ "$(wtl_hub_mode)" == commits ]]; then
+          "$HOME/.local/bin/wt-hub-lazygit" commits
+        else
+          "$HOME/.local/bin/wt-hub-lazygit" turns "$(chain "$session")"
+        fi
+        return
+      fi
       # wt-hub-keys exits 99 for `t` (toggle turns ⇄ commits).
       if [[ "$(wtl_hub_mode)" == commits ]]; then
         base=$(branch_base)

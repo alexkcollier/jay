@@ -1,0 +1,45 @@
+# lazygit settings for the hub's review pane (prototype, WT_REVIEW=lazygit). wt-hub-lazygit loads
+# your own config.yml first and this file over it (LG_CONFIG_FILE), so your theme and diff
+# renderer stay. Your own lazygit outside the hub does not read this file.
+gui:
+  showRandomTip: false
+  showCommandLog: false
+  showPanelJumps: false
+  showBottomLine: false
+  # One tab group: the right column is narrow. Commits first, so `lazygit log` opens on it.
+  sidePanels:
+    - [commits, files, branches]
+  portraitMode: always
+  screenMode: half
+  enlargedSideViewLocation: top
+  # The rows are narrow: no author and no hash (the patch shows both).
+  commitAuthorShortLength: 0
+  commitAuthorLongLength: 0
+  commitHashLength: 0
+disableStartupPopups: true
+promptToReturnFromSubprocess: false
+update:
+  method: never
+git:
+  autoFetch: false
+  log:
+    # A turn chain has no merges; the graph takes two columns.
+    showGraph: never
+keybinding:
+  universal:
+    # e: files (the hub's key, below); lazygit's own open in editor stays on o.
+    edit: <disabled>
+  commits:
+    # t: turns or commits (the hub's key, below).
+    revertCommit: <disabled>
+customCommands:
+  - key: t
+    context: global
+    description: "hub: turns or commits"
+    command: "$HOME/.local/bin/wt-hub-lazygit --toggle"
+    output: none
+  - key: e
+    context: global
+    description: "hub: files (yazi)"
+    command: "$HOME/.local/bin/wt-sidebar --files"
+    output: none
