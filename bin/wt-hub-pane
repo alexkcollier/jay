@@ -12,11 +12,12 @@
 #         title starts with the mode.
 #         turns: the agent's turn chain (refs/wt-turns/<agent id or session8>), else the newest
 #         chain in the worktree, else tuicr's own target picker. A chain opens on its last
-#         turn; `(` shows all turns.
+#         turn, or on the running turn (live) while the agent works; `(` shows all turns.
 #         commits: the branch's own commits (since it left main), else tuicr's picker.
 #         q in tuicr starts it again (back to the picker or the last turn). e shows files.
 #         A new turn (or commit) starts tuicr again by itself, on the newest turn; also over
-#         the picker, when the first turn comes.
+#         the picker, when the first turn (or running turn) comes. A running turn that moves
+#         does not: q shows its newest state.
 #         WT_REVIEW=lazygit: lazygit in the same two modes instead (wt-hub-lazygit). It follows
 #         new turns without a restart; its t and e are its own custom commands.
 # files:  yazi in the worktree. It covers review; e or q quits yazi and review comes back
@@ -54,17 +55,28 @@ wait_change() {
   return 0
 }
 
+# The turn chain of agent $1 (id or session id), else the newest chain of this worktree: one
+# with a turn (head) or a running turn (live).
 chain() {
   local session=${1:0:8} candidate here
   if [[ -n "$session" ]]; then
-    git rev-parse -q --verify "refs/wt-turns/$session/head" >/dev/null && printf '%s\n' "$session"
+    tip "$session" >/dev/null && printf '%s\n' "$session"
     return
   fi
   here=$(pwd -P)
-  git for-each-ref --sort=-committerdate --format='%(refname)' 'refs/wt-turns/*/head' \
-    | sed -E 's#^refs/wt-turns/([^/]+)/head$#\1#' | while read -r candidate; do
+  git for-each-ref --sort=-committerdate --format='%(refname)' 'refs/wt-turns/*/head' 'refs/wt-turns/*/live' \
+    | sed -E 's#^refs/wt-turns/([^/]+)/(head|live)$#\1#' | while read -r candidate; do
       [[ "$(cat "$HOME/.local/state/wt-turns/$candidate.worktree" 2>/dev/null)" -ef "$here" ]] && { printf '%s\n' "$candidate"; break; }
     done
+}
+
+# The newest commit of chain $1: the running turn (live), else the last turn (head).
+tip() {
+  local r
+  for r in live head; do
+    git rev-parse -q --verify "refs/wt-turns/$1/$r" >/dev/null && { printf 'refs/wt-turns/%s/%s\n' "$1" "$r"; return 0; }
+  done
+  return 1
 }
 
 # tuicr opens a turn chain with all turns selected and has no option to start on the newest;
@@ -87,12 +99,15 @@ select_last_turn() {
 }
 
 # What review follows in turns mode: the agent's chain head ($1, an agent id or session id), or
-# for a worktree pick the newest chain of the worktree and its head. It changes also when the
-# chain comes after review opened (an agent's first turn).
+# for a worktree pick the newest chain of the worktree and its head. A running turn (live) moves
+# often, so only its start counts, and only on a chain with no head yet: when the chain comes
+# after review opened (an agent's first turn), it opens over tuicr's picker.
 turns_state() {
-  local id=${1:0:8}
+  local id=${1:0:8} head
   [[ -n "$id" ]] || id=$(chain "")
-  printf '%s %s\n' "$id" "$(git rev-parse -q --verify "refs/wt-turns/$id/head")"
+  head=$(git rev-parse -q --verify "refs/wt-turns/$id/head")
+  [[ -z "$head" ]] && git rev-parse -q --verify "refs/wt-turns/$id/live" >/dev/null && head=live
+  printf '%s %s\n' "$id" "$head"
 }
 
 # New turns come in by themselves: when the output of "$@" changes (turns_state: a turn's
@@ -154,7 +169,7 @@ leave_agent_view() {
 
 # Run the role's program for target line $1 in the foreground.
 run() {
-  local id path session base kind name rc
+  local id path session base kind name rc last=""
   case $role in
     agent)
       IFS=$'\t' read -r id path kind name <<<"$1"
@@ -191,10 +206,11 @@ run() {
         return
       fi
       id=$(chain "$session")
-      if [[ -n "$id" ]] && (($(git rev-list --count "refs/wt-turns/$id/base..refs/wt-turns/$id/head") > 1)); then
+      [[ -n "$id" ]] && last=$(tip "$id")
+      if [[ -n "$id" ]] && (($(git rev-list --count "refs/wt-turns/$id/base..$last") > 1)); then
         select_last_turn "$1" &
       fi
-      review_range "${id:+refs/wt-turns/$id/base..refs/wt-turns/$id/head}" turns_state "$session" ;;
+      review_range "${id:+refs/wt-turns/$id/base..$last}" turns_state "$session" ;;
     files)
       cd "$1" || return
       YAZI_CONFIG_HOME="$HOME/.config/wt-hub/yazi" yazi "$1" ;;

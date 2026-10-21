@@ -367,6 +367,12 @@ each turn as a hidden commit chain per agent: `refs/wt-turns/<id>/base` and
 - Each UserPromptSubmit adds a commit `between turns · edits made outside the agent` when you
   changed files between two turns.
 - A turn with no change adds no commit.
+- While a turn runs, `refs/wt-turns/<id>/live` holds the turn so far: a commit
+  `turn, running · <prompt>` on top of the head. PostToolUse on `Edit`, `MultiEdit`, `Write`,
+  `NotebookEdit` and `Bash` replaces it, at most once in 15 s. Stop removes it. The chain keeps
+  one commit per turn.
+- A turn that ended without Stop (you stopped it) still gets its commit `turn · <prompt>`, at
+  the next prompt.
 - An agent that goes into another worktree of the repo (`EnterWorktree`, `ExitWorktree`) keeps
   its chain. After the tool (PostToolUse), the turn's changes so far get a commit
   `turn, in <old folder> · <prompt>`, then a commit `worktree · <new folder>` takes the files of
@@ -380,14 +386,16 @@ stays for the next picks (`~/.local/state/wt-hub-review.mode`).
 
 - **turns**: the picked agent's chain. A worktree pick opens the newest chain of that worktree.
   With no chain, tuicr's own picker opens. A chain opens on its newest turn (the pane types `(`
-  into tuicr). Press `(` to see all turns.
+  into tuicr). While the agent works, that is the running turn. Press `(` to see all turns.
 - **commits**: the branch's own commits, from its merge-base with `origin/HEAD` (else `main`,
   else `master`) up to `HEAD`. A branch with no commits of its own opens tuicr's picker.
 
 New turns come in by themselves. The pane looks at the chain head every 2 s (commits mode: at
 `HEAD`). When it moves, tuicr starts again on the newest turn. It does not do this while you type
 a comment or a `:` or `/` prompt; it waits until tuicr is back in NORMAL or SELECT mode. This
-also works over tuicr's picker: when an agent's first turn comes, its chain opens.
+also works over tuicr's picker: when an agent's first turn (or running turn) comes, its chain
+opens. A running turn that changes does not start tuicr again, so you keep your place: `q`
+shows its newest state, and the end of the turn starts tuicr again.
 
 `q` in tuicr means "back": tuicr starts again at its start (the picker, or the newest turn).
 When tuicr quits less than 2 s after its start, the pane says so and waits for Enter.
@@ -854,7 +862,7 @@ In `~/.local/state/`:
 | `wt-hub-sidebar.hide-idle` | there while `a` hides idle rows |
 | `wt-worktrees.ndjson` | cache of `wt all --json` (refreshed after 30 s) |
 | `wt-sidebar.<pid>.sock`, `.count`, `.sum`, `.help`, `.restart` | a running list: its fzf socket, row count, agent counts, `?` state, `r` flag |
-| `wt-turns/<id>.worktree`, `<id>.prompt` | the worktree of each turn chain; the prompt of the current turn |
+| `wt-turns/<id>.worktree`, `<id>.prompt`, `<id>.live` | the worktree of each turn chain; the prompt of the current turn; the time of the last live snapshot |
 | `wt-hub/lazygit/views/<id>` | the view repo of a turn chain for lazygit review (`WT_REVIEW=lazygit`) |
 | `wt-hub/lazygit/state/` | the state of the hub's lazygit (its recent repos) |
 | `wt-hub/ended/<id>`, `wt-hub/seen/<id>` | empty files; the time of each is when the agent's last turn ended (Stop hook; not while the agent has background tasks) and when you last saw the agent (unread sign); removed after 14 days |
@@ -869,7 +877,7 @@ In `~/.local/state/`:
 
 Elsewhere:
 
-- `refs/wt-turns/<id>/{base,head}` in each repo: the turn chains.
+- `refs/wt-turns/<id>/{base,head,live}` in each repo: the turn chains.
 - The task note: worktrunk's state variable `task` (`wt task`, `wt new -t`).
 - `~/.local/share/wt-hub/`: `zjstatus-v0.25.0.wasm` (the bar), `mod/` (the mod, with
   `--with-mod`), `installed.txt` (the files `install.sh` installed).
@@ -893,9 +901,8 @@ Settings: `~/.config/wt-hub/config` ([Settings](#settings)). Environment variabl
   `wt go`.
 - **`o`, `wt open` or `O` in files does nothing**: tab control is off (not Ghostty). Run the
   command in a terminal to see the hint, or set `WT_TERMINAL=ghostty`.
-- **Review shows tuicr's picker**: the agent has no turn chain yet (no finished turn with a
-  change), or the branch has no commits of its own (commits mode). The chain opens by itself
-  at the end of the agent's first turn.
+- **Review shows tuicr's picker**: the agent has no turn chain yet (no change yet), or the branch has no commits of its own (commits mode). The chain opens by itself
+  at the agent's first change (its running turn).
 - **The middle column shows an old agent or an error**: pick the agent again, or press Enter in
   the middle column.
 

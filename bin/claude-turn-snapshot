@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# claude-turn-snapshot — Claude Code hook (UserPromptSubmit, Stop, PostToolUse on EnterWorktree
-# and ExitWorktree) that records the worktree as a hidden commit chain per agent, one commit per
-# agent turn. <id> is a background agent's short id (it stays after a resume or /clear), else
-# the first 8 characters of the session id:
+# claude-turn-snapshot — Claude Code hook (UserPromptSubmit, Stop, PostToolUse) that records the
+# worktree as a hidden commit chain per agent, one commit per agent turn. <id> is a background
+# agent's short id (it stays after a resume or /clear), else the first 8 characters of the
+# session id:
 #   refs/wt-turns/<id>/base   HEAD when the agent's first snapshot was taken
 #   refs/wt-turns/<id>/head   the latest snapshot; each snapshot's parent is the one before
+#   refs/wt-turns/<id>/live   while a turn runs: the turn so far, on top of head (PostToolUse
+#                             on Edit, Write, Bash..., at most once in 15 s); Stop removes it
 # Review one turn with `tuicr -r <turn>~1..<turn>`, all of them with `tuicr -r base..head`.
 # Branch, index and files are never touched: it hashes the tree through a copy of the index.
 # --list [path]            list the turn chains of a worktree (default: this folder)
@@ -31,6 +33,7 @@ if [[ "${1:-}" == --prune ]]; then
       return
     fi
     if [[ -n "$1" ]]; then
+      git -C "$1" update-ref -d "refs/wt-turns/$2/live" 2>/dev/null
       git -C "$1" update-ref -d "refs/wt-turns/$2/head" 2>/dev/null
       git -C "$1" update-ref -d "refs/wt-turns/$2/base" 2>/dev/null
     fi
@@ -40,6 +43,7 @@ if [[ "${1:-}" == --prune ]]; then
     printf '%s turn chain %s removed (%s)\n' "$(date '+%F %T')" "$2" "$3"
   }
   seen=""
+  # Each chain (also one with a base only) with the time of its newest ref.
   for repo in $(jq -r 'select(.main == true) | .path' "$cache" | sort -u); do
     while IFS=$'\t' read -r id when; do
       [[ -n "$id" ]] || continue
@@ -51,8 +55,8 @@ if [[ "${1:-}" == --prune ]]; then
       elif ((now - when > week)); then
         remove "$repo" "$id" "last turn over 7 days ago"
       fi
-    done < <(git -C "$repo" for-each-ref --format='%(refname:lstrip=2)%09%(committerdate:unix)' 'refs/wt-turns/*/head' 2>/dev/null \
-      | sed 's#/head\t#\t#')
+    done < <(git -C "$repo" for-each-ref --format='%(refname:lstrip=2)%09%(committerdate:unix)' 'refs/wt-turns/' 2>/dev/null \
+      | awk -F'\t' '{ split($1, p, "/"); if ($2 > t[p[1]]) t[p[1]] = $2 } END { for (i in t) printf "%s\t%s\n", i, t[i] }')
   done
   # State files of sessions that never got a chain (no turn yet), on the same terms.
   for file in "$state"/*.worktree; do
@@ -70,9 +74,17 @@ fi
 
 if [[ "${1:-}" == --list ]]; then
   top=$(git -C "${2:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
-  git -C "$top" for-each-ref --format='%(refname)' 'refs/wt-turns/*/head' | while read -r ref; do
-    s=${ref#refs/wt-turns/}; s=${s%/head}
-    printf '%s\t%s\n' "$s" "$(git -C "$top" log -1 --format='%ar · %s' "$ref")"
+  git -C "$top" for-each-ref --format='%(refname)' 'refs/wt-turns/*/base' | while read -r ref; do
+    s=${ref#refs/wt-turns/}; s=${s%/base}
+    tip=""
+    for r in live head; do
+      git -C "$top" rev-parse -q --verify "refs/wt-turns/$s/$r" >/dev/null && { tip="refs/wt-turns/$s/$r"; break; }
+    done
+    if [[ -n "$tip" ]]; then
+      printf '%s\t%s\n' "$s" "$(git -C "$top" log -1 --format='%ar · %s' "$tip")"
+    else
+      printf '%s\t(no turn yet)\n' "$s"
+    fi
   done
   exit 0
 fi
@@ -81,6 +93,7 @@ input=$(cat)
 event=$(jq -r '.hook_event_name // ""' <<<"$input")
 cwd=$(jq -r '.cwd // ""' <<<"$input")
 sid=$(jq -r '.session_id // ""' <<<"$input")
+tool=$(jq -r '.tool_name // ""' <<<"$input")
 [[ -n "$cwd" && -n "$sid" ]] || exit 0
 top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
 
@@ -95,8 +108,10 @@ state="$HOME/.local/state/wt-turns"
 mkdir -p "$state"
 prompt_file="$state/$short.prompt"
 worktree_file="$state/$short.worktree"
+live_stamp="$state/$short.live"
 head_ref="refs/wt-turns/$short/head"
 base_ref="refs/wt-turns/$short/base"
+live_ref="refs/wt-turns/$short/live"
 
 # The tree of worktree $1's files, hashed through a copy of its index.
 tree_of() {
@@ -125,14 +140,41 @@ add() {
   git -C "$top" update-ref "$head_ref" "$commit"
 }
 
+# The running turn with tree $1: a commit on the chain's head (or base) that only the live ref
+# names, replaced at each snapshot. The head moves only at the end of the turn.
+live() {
+  local tree=$1 parent commit
+  [[ -n "$tree" ]] || return 0
+  parent=$(git -C "$top" rev-parse -q --verify "$head_ref") \
+    || parent=$(git -C "$top" rev-parse -q --verify "$base_ref") || return 0
+  if [[ "$tree" == "$(git -C "$top" rev-parse "$parent^{tree}")" ]]; then
+    git -C "$top" update-ref -d "$live_ref" 2>/dev/null
+    return 0
+  fi
+  [[ "$tree" == "$(git -C "$top" rev-parse -q --verify "$live_ref^{tree}")" \
+    && "$parent" == "$(git -C "$top" rev-parse -q --verify "$live_ref^")" ]] && return 0
+  commit=$(printf 'turn, running · %s\n' "$(cat "$prompt_file" 2>/dev/null)" | git -C "$top" commit-tree "$tree" -p "$parent") || return 0
+  git -C "$top" update-ref "$live_ref" "$commit"
+}
+
+# The end of the running turn (Stop, a move, a prompt): the live ref goes.
+end_live() {
+  git -C "$top" update-ref -d "$live_ref" 2>/dev/null
+  rm -f "$live_stamp"
+}
+
 # An agent that goes into another worktree of the repo (EnterWorktree, ExitWorktree) keeps its
 # chain. A commit `worktree · <folder>` gives the chain the files of the new worktree, so that the
 # next turn shows only its own changes, not the difference between the two worktrees. Right after
 # the tool (PostToolUse), the changes of the turn in the old worktree get a commit first. A move
 # found later (no PostToolUse hook) takes the new worktree's files at the prompt, its HEAD at Stop.
+# A snapshot during the turn (the other PostToolUse tools) never makes this decision.
 was=$(cat "$worktree_file" 2>/dev/null)
-if [[ -n "$was" && ! "$was" -ef "$top" ]] && git -C "$top" rev-parse -q --verify "$base_ref" >/dev/null; then
+if [[ "$event" == PostToolUse && "$tool" != EnterWorktree && "$tool" != ExitWorktree ]]; then
+  [[ -n "$was" && "$was" -ef "$top" ]] || exit 0
+elif [[ -n "$was" && ! "$was" -ef "$top" ]] && git -C "$top" rev-parse -q --verify "$base_ref" >/dev/null; then
   prompt=$(cat "$prompt_file" 2>/dev/null)
+  end_live
   if [[ "$event" == PostToolUse && -d "$was" ]] \
     && [[ "$(git -C "$was" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" == "$(git -C "$top" rev-parse --path-format=absolute --git-common-dir)" ]]; then
     add "$(tree_of "$was")" "turn, in ${was##*/} · ${prompt:-(no prompt)}"
@@ -148,8 +190,23 @@ fi
 
 case $event in
   UserPromptSubmit)
+    # A live ref here: the turn before ended without Stop (you stopped it). Its changes are a
+    # turn of their own, not edits made outside the agent.
+    if git -C "$top" rev-parse -q --verify "$live_ref" >/dev/null; then
+      prompt=$(cat "$prompt_file" 2>/dev/null)
+      add "$(tree_of "$top")" "turn · ${prompt:-(no prompt)}" "The turn ended without Stop (stopped)."
+    else
+      add "$(tree_of "$top")" "between turns · edits made outside the agent"
+    fi
+    end_live
     jq -r '.prompt // ""' <<<"$input" | tr '\n' ' ' | cut -c1-100 >"$prompt_file"
-    add "$(tree_of "$top")" "between turns · edits made outside the agent"
+    ;;
+  PostToolUse)
+    # During a turn (Edit, Write, Bash...): the live snapshot, at most once in 15 s.
+    [[ "$tool" == EnterWorktree || "$tool" == ExitWorktree ]] && exit 0
+    [[ -f "$live_stamp" ]] && (($(date +%s) - $(stat -f %m "$live_stamp") < 15)) && exit 0
+    touch "$live_stamp"
+    live "$(tree_of "$top")"
     ;;
   Stop)
     prompt=$(cat "$prompt_file" 2>/dev/null)
@@ -158,6 +215,7 @@ case $event in
       NF && !first { first = $0 }
       END { print (flagged != "" ? flagged : first) }' | cut -c1-200)
     add "$(tree_of "$top")" "turn · ${prompt:-(no prompt)}" "$result"
+    end_live
     ;;
 esac
 exit 0
