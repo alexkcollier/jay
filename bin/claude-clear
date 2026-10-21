@@ -1,0 +1,132 @@
+#!/usr/bin/python3 -I
+# claude-clear <id> — a fresh context for background agent <id> (short id): type /clear into it
+# through a hidden `claude attach`. Claude keeps the session's system prompt (its
+# --append-system-prompt), name, short id and process; only the session id changes, so the turn
+# chain, the hub Claude's id file and a `claude attach` that shows the agent stay right.
+# Only an idle agent (status idle, not working): /clear typed into a question or a permission
+# prompt would answer it. Exit 0 when the session id changed, 1 when it did not, 2 for usage,
+# 3 when the agent is missing or not idle.
+#
+# Facts found by test (Claude Code 2.1.306): all attach clients share one input box, and the
+# agent's screen takes the size of the client that joined last and keeps it after that client
+# leaves. So Ctrl+U (four times: once for each line of a draft) empties the box first, and the
+# hidden client takes the size of a client that is attached already (the hub's middle column).
+import fcntl, json, os, pty, re, select, signal, struct, subprocess, sys, termios, time
+
+USAGE = "usage: claude-clear <id>"
+
+
+def agent(short):
+    try:
+        out = subprocess.run(["claude", "agents", "--json", "--all"], capture_output=True,
+                             text=True, timeout=20).stdout
+        return next((a for a in json.loads(out) if a.get("id") == short), None)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+
+def client_size(short):
+    """rows, cols of the tty of a `claude attach <short>` that runs now, else 40, 120."""
+    try:
+        ps = subprocess.run(["ps", "-axo", "tty=,command="], capture_output=True, text=True).stdout
+    except OSError:
+        ps = ""
+    pat = re.compile(r"^(\S+)\s+(\S*/)?claude attach " + re.escape(short) + r"\s*$")
+    for line in ps.splitlines():
+        m = pat.match(line.strip())
+        if not m or m.group(1) in ("??", "-"):
+            continue
+        try:
+            fd = os.open("/dev/" + m.group(1), os.O_RDONLY | os.O_NOCTTY | os.O_NONBLOCK)
+            try:
+                rows, cols = struct.unpack("HHHH", fcntl.ioctl(fd, termios.TIOCGWINSZ, b"\0" * 8))[:2]
+            finally:
+                os.close(fd)
+            if rows and cols:
+                return rows, cols
+        except OSError:
+            continue
+    return 40, 120
+
+
+def main():
+    if len(sys.argv) != 2 or sys.argv[1] in ("-h", "--help"):
+        print(USAGE, file=sys.stderr)
+        return 2
+    short = sys.argv[1]
+    a = agent(short)
+    if a is None or a.get("kind") != "background":
+        print(f"No background agent {short}.", file=sys.stderr)
+        return 3
+    if a.get("state") == "working" or a.get("status") != "idle":
+        print(f"{a.get('name') or short} is working or waits for you. Try again when it is idle.", file=sys.stderr)
+        return 3
+    old = a.get("sessionId")
+    rows, cols = client_size(short)
+    # An inherited CLAUDE_CODE_CHILD_SESSION (a caller in an agent) changes how Claude runs.
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "ANTHROPIC"))}
+    pid, fd = pty.fork()
+    if pid == 0:
+        fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+        try:
+            os.execvpe("claude", ["claude", "attach", short], env)
+        finally:
+            os._exit(127)
+
+    def pump(sec, quiet=None):
+        """Read the client's output for sec seconds; with quiet, stop after that many seconds
+        without output (once some came)."""
+        end, last, seen = time.time() + sec, time.time(), False
+        while time.time() < end:
+            r, _, _ = select.select([fd], [], [], 0.1)
+            if r:
+                try:
+                    if os.read(fd, 65536):
+                        last, seen = time.time(), True
+                except OSError:
+                    return False
+            elif quiet and seen and time.time() - last >= quiet:
+                break
+        return True
+
+    def typ(data, gap=0.03):
+        for ch in data:
+            os.write(fd, ch)
+            time.sleep(gap)
+
+    rc = 1
+    try:
+        if pump(10, quiet=1.0):
+            typ([b"\x15"] * 4, gap=0.05)
+            pump(0.3)
+            typ([c.encode() for c in "/clear"])
+            pump(0.5)
+            os.write(fd, b"\r")
+            end = time.time() + 20
+            while time.time() < end:
+                pump(1)
+                now = agent(short)
+                if now and now.get("sessionId") and now.get("sessionId") != old:
+                    print(f"{short}: new session {now['sessionId']}")
+                    rc = 0
+                    break
+        if rc:
+            print(f"{short}: the session id did not change after /clear.", file=sys.stderr)
+    finally:
+        try:
+            os.write(fd, b"\x1a")  # Ctrl+Z: leave the agent; it keeps running
+            pump(1)
+        except OSError:
+            pass
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                if os.waitpid(pid, os.WNOHANG)[0]:
+                    break
+                os.kill(pid, sig)
+                time.sleep(0.5)
+            except (OSError, ChildProcessError):
+                break
+    return rc
+
+
+sys.exit(main())

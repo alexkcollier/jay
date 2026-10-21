@@ -4,7 +4,9 @@
 # its turns) and files (yazi, when shown) switch to it; a worktree → review and files switch to
 # it; "◆ hub" → the hub Claude (a background agent, started when it has none) in the middle
 # column. An agent takes the focus to the middle; Enter on a worktree takes it to review.
-# n/N: new agent here (on a main checkout: an orchestrator, ◇) / in a new worktree
+# n/N: new agent here (on a main checkout: the repo's orchestrator, ◇; when the repo has one,
+# the hub shows it) / in a new worktree
+# c: a fresh context (/clear) for an orchestrator or the hub Claude (asks first; idle only)
 # o: own Ghostty tab. Keys act in the list only: review's mode (t) and files (e) are keys of the
 # review pane.
 # d: remove the agent, or the worktree with its idle agents (asks first)
@@ -53,11 +55,12 @@ rows() {
   elif ((age > 30)); then
     (refresh_worktrees &) >/dev/null 2>&1
   fi
-  local agents shown=""
+  local agents jobs shown=""
   # The agent in the hub's middle column, marked with ▸ beside it.
   wtl_hub_role agent >/dev/null && shown=$(cut -f1 "$(wtl_hub_target_file agent)" 2>/dev/null)
   agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
   agents=$(wtl_agent_phases "$agents" "$shown") || agents='[]'
+  jobs=$(wtl_jobs "$agents")
   (auto_prune "$agents" &) >/dev/null 2>&1
   local hideidle=false width
   [[ -f "$HIDE_IDLE" ]] && hideidle=true
@@ -66,7 +69,7 @@ rows() {
   width=$((${width:-40} - 1))
   jq -rs --argjson agents "$agents" --arg shown "$shown" --arg hubid "$(wtl_hub_claude_id)" \
     --argjson hideidle "$hideidle" --arg roots "$WT_ROOTS" --argjson gone "$(gone_dirs "$agents")" \
-    --argjson visit "$(visitors "$agents")" \
+    --argjson jobs "$jobs" --argjson orchs "$(wtl_orch_ranks "$agents" "$jobs")" \
     --argjson gl "$(jq -nc --arg diff "$G_DIFF" --arg up "$G_UP" --arg alert "$G_ALERT" --arg ok "$G_OK" \
       --arg merge "$G_MERGE" --arg push "$G_PUSH" --arg pull "$G_PULL" --arg home "$G_HOME" '$ARGS.named')" \
     --argjson width "$width" --argjson now "$(date +%s)" '
@@ -80,22 +83,27 @@ rows() {
     def narrow: [8986,8987,9001,9002,9193,9194,9195,9196,9200,9203,9725,9726,9748,9749,9800,9801,9802,9803,9804,9805,9806,9807,9808,9809,9810,9811,9855,9875,9889,9898,9899,9917,9918,9924,9925,9934,9940,9962,9970,9971,9973,9978,9981,9989,9994,9995,10024,10060,10062,10067,10068,10069,10071,10133,10134,10135,10160,10175,11035,11036,11088,11093,11904,11905,11906,11907,11908,11909,11910,11911,11912,11913,11914,11915,11916,11917,11918,11919,11920,11921,11922,11923,11924,11925,11926,11927,11928,11929,11931,11932,11933,11934,11935,11936,11937,11938,11939,11940,11941,11942,11943,11944,11945,11946,11947,11948,11949,11950,11951,11952,11953,11954,11955,11956,11957,11958,11959,11960,11961,11962,11963,11964,11965,11966,11967,11968,11969,11970,11971,11972,11973,11974,11975,11976,11977,11978,11979,11980,11981,11982,11983,11984,11985,11986,11987,11988,11989,11990,11991,11992,11993,11994,11995,11996,11997,11998,11999,12000,12001,12002,12003,12004,12005,12006,12007,12008,12009,12010,12011,12012,12013,12014,12015,12016,12017,12018,12019,12032,12033,12034,12035,12036,12037,12038,12039,12040,12041,12042,12043,12044,12045,12046,12047,12048,12049,12050,12051,12052,12053,12054,12055,12056,12057,12058,12059,12060,12061,12062,12063,12064,12065,12066,12067,12068,12069,12070,12071,12072,12073,12074,12075,12076,12077,12078,12079,12080,12081,12082,12083,12084,12085,12086,12087,12088,12089,12090,12091,12092,12093,12094,12095,12096,12097,12098,12099,12100,12101,12102,12103,12104,12105,12106,12107,12108,12109,12110,12111,12112,12113,12114,12115,12116,12117,12118,12119,12120,12121,12122,12123,12124,12125,12126,12127,12128,12129,12130,12131,12132,12133,12134,12135,12136,12137,12138,12139,12140,12141,12142,12143,12144,12145,12146,12147,12148,12149,12150,12151,12152,12153,12154,12155,12156,12157,12158,12159,12160,12161,12162,12163,12164,12165,12166,12167,12168,12169,12170,12171,12172,12173,12174,12175,12176,12177,12178,12179,12180,12181,12182,12183,12184,12185,12186,12187,12188,12189,12190,12191,12192,12193,12194,12195,12196,12197,12198,12199,12200,12201,12202,12203,12204,12205,12206,12207,12208,12209,12210,12211,12212,12213,12214,12215,12216,12217,12218,12219,12220,12221,12222,12223,12224,12225,12226,12227,12228,12229,12230,12231,12232,12233,12234,12235,12236,12237,12238,12239,12240,12241,12242,12243,12244,12245,12272,12273,12274,12275,12276,12277,12278,12279,12280,12281,12282,12283] as $wide | explode | map(select(. < 4352 or (. > 4447 and . < 11904) or (. > 42191 and . < 44032) or (. > 55203 and . < 63744) or (. > 64255 and . < 65040) or (. > 65049 and . < 65072) or (. > 65135 and . < 65280) or (. > 65376 and . < 65504) or (. > 65510 and . < 126976)) | select(. != 65039) | select(. as $c | $wide | index([$c]) | not)) | implode;
     def rank: {input: 0, failed: 1, unread: 2, working: 3, idle: 4}[.];
     def shown: $shown != "" and (.id // .sessionId) == $shown;
-    # An orchestrator (see $mains below) has ◇ before its name.
-    def title: (if .orch then c("36") + "◇ " + c("0") else "" end)
+    # An orchestrator (see $mains below) has a cyan ◇ before its name, an extra one a yellow ◇.
+    def title: ({main: (c("36") + "◇ " + c("0")), extra: (c("33") + "◇ " + c("0"))}[.orch] // "")
       + (if shown then c("1;36") + (.name | narrow) + c("0") else (.name | narrow) end);
     . as $wts
     | ($wts | map(.path) | sort_by(length) | reverse) as $paths
     | def owner($cwd): first($paths[] | select($cwd == . or ($cwd | startswith(. + "/")))) // "";
-      # An orchestrator: an agent in a main checkout (set below), or one from there in a worktree
-      # it entered. That one stays under its main checkout, and .away is the folder it is in.
+      # An agent from a main checkout in a worktree it entered stays under its main checkout, and
+      # .away is the folder it is in. .orch: main for the orchestrator of the repo (the oldest
+      # agent with the orchestrator prompt that belongs to the main checkout, see wtl_orch_ranks),
+      # extra for another one there, else empty.
       ($wts | map(select(.main) | .path)) as $mains
     | ($wts | map({(.path): .branch}) | add // {}) as $branchof
     | ($agents | map(select(.state != "stopped")
-        | ($visit[.id // ""].home // "") as $from
+        | ($jobs[.id // ""].home // "") as $from
         | ($mains | index([$from]) != null) as $o
         | (.cwd as $d | $gone | any(. == $d)) as $g
+        | $orchs[.sessionId] as $r
         | . + {gone: ($g and ($o | not)), wt: (if $o then $from elif $g then "" else owner(.cwd) end),
-               away: (if $o then $visit[.id].tree else "" end), phase: phase, orch: $o})) as $all
+               away: (if $o then $jobs[.id].tree else "" end), phase: phase,
+               orch: (if $r == null or ($mains | index([$r.home]) == null) then ""
+                      elif $r.rank == 0 then "main" else "extra" end)})) as $all
     # The hub Claude has its own row at the top ("◆ hub"), not one in its folder.
     | (first($all[] | select(.id == $hubid)) // null) as $hubag
     | ($all | map(select(.id != $hubid))) as $ag
@@ -110,7 +118,7 @@ rows() {
     # are dim, and hidden with $hideidle (key a).
     | ($roots | split(":") | map(rtrimstr("/"))) as $rootdirs
     | def byrank: sort_by((.phase | rank), -(.startedAt // 0));
-      ($wts | map(. as $w | . + {agents: ($ag | map(select(.wt == $w.path) | .orch = (.orch or $w.main)) | byrank)}
+      ($wts | map(. as $w | . + {agents: ($ag | map(select(.wt == $w.path)) | byrank)}
                  | . + {idle: (.main and (.agents | length == 0))})
         | group_by(.client + "/" + .repo | ascii_downcase)
         | map(first(.[] | select(.main)) as $main | ($main.path // "//none") as $m
@@ -273,10 +281,11 @@ view() {
 
 # Start an idle background agent from row kind $2 with id $3: $1 = here (in the row's worktree)
 # or worktree (a new worktree from the row's repo through `wt new`; asks for the branch). Here
-# in a main checkout, the agent is an orchestrator (see wtl_orchestrator_prompt). The new agent
-# shows in the hub's middle column, where you type its first prompt.
+# in a main checkout, the agent is an orchestrator (see wtl_orchestrator_prompt); a repo has
+# one, so when it has one already, the hub shows that one. The new agent shows in the hub's
+# middle column, where you type its first prompt.
 new_agent() {
-  local mode=$1 kind=$2 id=$3 path top primary repo branch key out agent i
+  local mode=$1 kind=$2 id=$3 path top primary repo branch key out agent orch name i
   if [[ "$kind" == hdr || ("$mode" == here && "$kind" == repo) ]]; then
     pause "n starts an agent in a worktree: pick a worktree row. N on a repo or worktree row makes a new worktree of that repo."
     return 0
@@ -286,6 +295,17 @@ new_agent() {
   top=$(wtl_toplevel "$path")
   primary=$(wtl_primary "$top")
   IFS=$'\t' read -r _ repo branch _ < <(wtl_describe "$top")
+  if [[ "$mode" == here && "$top" == "$primary" ]]; then
+    orch=$(wtl_orchestrators "$top" | head -1)
+    if [[ -n "$orch" ]]; then
+      IFS=$'\t' read -r _ agent name <<<"$orch"
+      pause "$repo has an orchestrator: \"$name\" ($agent). A repo has only one, so n does not start a second one. The hub shows \"$name\" now.
+
+c on its row gives it a fresh context."
+      show_started "$agent"
+      return 0
+    fi
+  fi
   if ! wtl_trusted "$top"; then
     key=$(wtl_trust_key "$top")
     confirm "Claude does not trust $repo yet, so no agent can start in it.
@@ -377,6 +397,56 @@ claude --bg --resume $sid tries again."
   show_started "$short"
 }
 
+# A fresh context for the orchestrator (◇) in row kind $1 with id $2, or for the hub Claude (the
+# "◆ hub" row), after a confirm and only when it is idle. claude-clear types /clear into it:
+# Claude keeps the system prompt (the orchestrator or hub prompt), the name and the short id, so
+# the turn chain, WT_HUB_CLAUDE_FILE and the middle column stay right. Not for an orchestrator in
+# a worktree it entered: that worktree would stay its folder after the /clear.
+clear_context() {
+  local kind=$1 id=$2 agents agent short name jobs away out
+  local what="c gives a fresh context to an orchestrator (◇) or to the hub Claude (◆ hub). For another agent, type /clear in it."
+  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  case $kind in
+    hub)
+      short=$(wtl_hub_claude_id)
+      agent=$(jq -c --arg i "$short" 'first(.[] | select(.id == $i and .state != "stopped")) // empty' <<<"$agents")
+      if [[ -z "$short" || -z "$agent" ]]; then
+        pause "The hub Claude does not run. A pick of \"◆ hub\" starts it, with a fresh context."
+        return 0
+      fi ;;
+    ag)
+      agent=$(jq -c --arg s "$id" 'first(.[] | select(.sessionId == $s)) // empty' <<<"$agents")
+      [[ -n "$agent" ]] || return 0
+      short=$(jq -r '.id // empty' <<<"$agent")
+      jobs=$(wtl_jobs "$agents")
+      if [[ -z "$short" || "$(jq -r --arg i "$short" '.[$i].orch // false' <<<"$jobs")" != true ]]; then
+        pause "$what"
+        return 0
+      fi
+      away=$(jq -r --arg i "$short" '.[$i].tree // ""' <<<"$jobs")
+      if [[ -n "$away" ]]; then
+        pause "\"$(jq -r '.name // .id' <<<"$agent")\" is in a worktree it entered: ${away/#$HOME/~}. Tell it to leave it first (ExitWorktree), then press c again."
+        return 0
+      fi ;;
+    *)
+      pause "$what"
+      return 0 ;;
+  esac
+  name=$(jq -r '.name // .id' <<<"$agent")
+  if [[ "$(jq -r '.state // ""' <<<"$agent")" == working || "$(jq -r '.status // ""' <<<"$agent")" != idle ]]; then
+    pause "\"$name\" is working or waits for you. Try again when it is idle."
+    return 0
+  fi
+  confirm "Give \"$name\" ($short) a fresh context?
+
+The list types /clear into it. It starts a new conversation with the same system prompt, name and id. The old conversation stays in its transcript." "y: clear" || return 0
+  say "Clearing the context of \"$name\"..."
+  out=$(claude-clear "$short" 2>&1) || pause "The context of \"$name\" did not change:
+
+$out"
+  return 0
+}
+
 # The key hints under the list, keys in the headings' orange and labels in the plain text color
 # (--color=footer:-1; fzf's own footer color is a dim blue-gray): short ones grouped, and with ?
 # the full list, one key per line. Lines stay under 30 columns (the list is about 32 wide).
@@ -397,6 +467,7 @@ ${KEY}N${OFF}      new worktree + agent
 ${KEY}o${OFF}      own Ghostty tab
 ${KEY}d${OFF}      remove agent/worktree
 ${KEY}b${OFF}      session to background
+${KEY}c${OFF}      fresh context (◇, hub)
 ${KEY}a${OFF}      hide/show idle repos
 ${KEY}p${OFF}      prune dead agents
 ${KEY}r${OFF}      reload this agent list
@@ -418,7 +489,8 @@ ${DGRN}●${OFF} agent works
 ${DIM}○${OFF} idle: seen, or new
 ${ROW}▸${OFF} agent in the middle pane
 ${ROW}◆ hub${OFF} row: the hub Claude
-${CYN}◇${OFF} orchestrator (agent on main)
+${CYN}◇${OFF} orchestrator of the repo
+${YEL}◇${OFF} second orchestrator (d it)
 ${G_HOME} main checkout
 ${YEL}${G_DIFF}${OFF} uncommitted changes
 ${CYN}${G_PUSH}1${OFF} commits to push (remote)
@@ -477,7 +549,7 @@ remove() {
         pause "\"$name\" is an interactive session. Close it in its own tab, or b: make it a background agent."
         return 0
       fi
-      tree=$(visitors "$agents" | jq -r --arg id "$short" '.[$id].tree // empty')
+      tree=$(wtl_jobs "$agents" | jq -r --arg id "$short" '.[$id].tree // empty')
       if [[ -n "$tree" && -d "$tree" ]]; then
         remove wt "$tree" "$short"
         return 0
@@ -540,33 +612,17 @@ Their transcripts stay." || return 0
   return 0
 }
 
-# The background agents in agents JSON $1 that are in a worktree they entered (EnterWorktree),
-# as a JSON object id: {home, tree}, the folder they came from and the worktree. While they
-# are in it, Claude keeps both in the job's state.json (cwd, worktreePath). Such an agent does
-# not go with the worktree; from a main checkout, it is an orchestrator. `claude agents` gives
-# the home as the folder of one that does not run now.
-visitors() {
-  local IFS=$' \t\n' id files=()
-  for id in $(jq -r '.[] | select(.kind == "background") | .id // empty' <<<"$1"); do
-    [[ -f "$HOME/.claude/jobs/$id/state.json" ]] && files+=("$HOME/.claude/jobs/$id/state.json")
-  done
-  ((${#files[@]})) || { echo '{}'; return 0; }
-  jq -nc '[inputs | select(.worktreePath != null)
-      | {(input_filename | split("/")[-2]): {home: (.cwd // .originCwd // ""), tree: .worktreePath}}] | add // {}' \
-    "${files[@]}" 2>/dev/null || echo '{}'
-}
-
 # The agents in agents JSON $1 whose folder is $2 or in it, as what<TAB>id<TAB>name. what is open
 # (an interactive session: the list cannot remove it), busy (it works or waits for input), visit
-# (it entered the worktree, see visitors; also when it does not run now) or idle. Agent id $3
+# (it entered the worktree, see wtl_jobs; also when it does not run now) or idle. Agent id $3
 # (optional) is idle when it is a visit: d on that agent takes its worktree with it.
 agents_in() {
-  jq -r --arg p "$2" --arg take "${3:-}" --argjson visit "$(visitors "$1")" '
+  jq -r --arg p "$2" --arg take "${3:-}" --argjson jobs "$(wtl_jobs "$1")" '
     def inside($d): $d == $p or ($d | startswith($p + "/"));
-    .[] | select(.state != "stopped" and (inside(.cwd // "") or inside($visit[.id // ""].tree // "")))
+    .[] | select(.state != "stopped" and (inside(.cwd // "") or inside($jobs[.id // ""].tree // "")))
     | [(if .kind != "background" or .id == null then "open"
         elif (.state | IN("working", "blocked")) or (.status | IN("busy", "waiting")) then "busy"
-        elif $visit[.id] != null and .id != $take then "visit"
+        elif $jobs[.id].tree != null and .id != $take then "visit"
         else "idle" end), (.id // ""), (.name // .id // .sessionId[0:8])] | @tsv' <<<"$1"
 }
 
@@ -606,13 +662,13 @@ $failed"
 }
 
 # The dead agents in agents JSON $1, as id<TAB>name: background agents whose folder is gone (a
-# removed worktree) and that do not run now. An agent that entered the worktree (see visitors)
+# removed worktree) and that do not run now. An agent that entered the worktree (see wtl_jobs)
 # is not dead: it came from another folder (an orchestrator, say).
 dead_agents() {
-  jq -r --argjson gone "$(gone_dirs "$1")" --argjson visit "$(visitors "$1")" '.[]
+  jq -r --argjson gone "$(gone_dirs "$1")" --argjson jobs "$(wtl_jobs "$1")" '.[]
     | select(.kind == "background" and .id != null and .state != "stopped"
         and (.state | IN("working", "blocked") | not) and (.status | IN("busy", "waiting") | not))
-    | select($visit[.id] == null)
+    | select($jobs[.id].tree == null)
     | (.cwd // "") as $d | select($gone | index([$d]))
     | [.id, (.name // .id)] | @tsv' <<<"$1"
 }
@@ -667,11 +723,12 @@ case ${1:-} in
   --remove) shift; remove "$@"; exit 0 ;;
   --new) shift; new_agent "$@"; exit 0 ;;
   --bg) [[ "${2:-}" == ag ]] && to_background "$3"; exit 0 ;;
+  --clear) shift; clear_context "$@"; exit 0 ;;
   --files) wtl_hub_locked wtl_hub_show_files; exit 0 ;;
   --review) review_key "${2:-}"; exit 0 ;;
   --idle) if [[ -f "$HIDE_IDLE" ]]; then rm -f "$HIDE_IDLE"; else : >"$HIDE_IDLE"; fi; exit 0 ;;
   --footer) shift; footer "$@"; exit 0 ;;
-  -h|--help) sed -n '2,16s/^# \{0,1\}//p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,20s/^# \{0,1\}//p' "$0"; exit 0 ;;
   # An option this version does not have (say a bind of a list started before an update) must
   # not start a second list.
   -*) printf 'wt-sidebar: unknown option %s\n' "$1" >&2; exit 2 ;;
@@ -761,6 +818,7 @@ rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=
   --bind '?:transform-footer(wt-sidebar --footer --toggle)' \
   --bind 'd:execute(wt-sidebar --remove {1} {2})+reload-sync(wt-sidebar --rows)+clear-screen' \
   --bind 'b:execute(wt-sidebar --bg {1} {2})+reload-sync(wt-sidebar --rows)+clear-screen' \
+  --bind 'c:execute(wt-sidebar --clear {1} {2})+reload-sync(wt-sidebar --rows)+clear-screen' \
   --bind 'n:execute(wt-sidebar --new here {1} {2})+reload-sync(wt-sidebar --rows --fresh)+clear-screen' \
   --bind 'N:execute(wt-sidebar --new worktree {1} {2})+reload-sync(wt-sidebar --rows --fresh)+clear-screen' \
   --bind 'enter:execute-silent(wt-sidebar --act {1} {2} --focus)+reload-sync(wt-sidebar --rows)' \

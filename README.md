@@ -107,7 +107,7 @@ it off. Without tab control:
 | Claude Code | 2.1.304 | `brew install --cask claude-code` | `claude --bg`, `claude attach`, `claude agents --json --all`, `claude rm`, `claude --bg --resume`, hooks, the mod |
 | git | 2.54.0 (Apple) | Xcode Command Line Tools | worktrees, turn chains |
 | bash | 3.2.57 (`/bin/bash`) | macOS | every script (`#!/usr/bin/env bash` finds `/bin/bash`) |
-| python3 | 3.9.6 (`/usr/bin/python3`) | Xcode Command Line Tools | `wt-hub-keys` |
+| python3 | 3.9.6 (`/usr/bin/python3`) | Xcode Command Line Tools | `wt-hub-keys`, `claude-clear` |
 | perl | 5.34.1 | macOS | the 5 s timeout around every zellij call |
 | lsof | macOS | macOS | the ports of the tasks (`hub-run`) |
 | Docker | 29.8.2, Compose 5.5.1 | Docker Desktop (optional) | the ports of `docker compose` tasks, `hub-run port` |
@@ -233,7 +233,8 @@ chain stays. Its tab goes back to the shell.
 From the list:
 
 - `n` on a worktree or agent row: a new idle background agent in that worktree. On a main
-  checkout, the agent is an orchestrator (see [Orchestrators](#orchestrators)).
+  checkout, the agent is the repo's orchestrator (see [Orchestrators](#orchestrators)). When
+  the repo has one already, the hub shows that one.
 - `N` on a repo, worktree or agent row: the list asks for a branch, makes a new worktree of that
   repo (`wt new <branch> --agent`) and starts an idle agent in it.
 
@@ -289,29 +290,66 @@ folders), with a short system prompt about the hub's commands (`wtl_hub_claude_p
   the list, or `wt go hub` from anywhere, shows it again.
 - It is started the first time the hub needs it. Its id is in `~/.local/state/wt-hub-claude`.
   It is like any background agent: it keeps running when you leave it, and a stopped one opens
-  again on a pick. To start a new one, `/clear` in it, or `claude rm <id>` (the next pick starts
-  a new hub Claude).
+  again on a pick.
+- It knows the orchestrators (`wt agents --orchestrators`). It sends work for a repo to the
+  orchestrator of that repo (SendMessage). For a repo without one, it starts workers itself
+  (`wt new`), or it tells you to press `n` on the repo's main checkout row.
+- `c` on the "◆ hub" row gives it a fresh context (see [Fresh context](#fresh-context)). To
+  start a new hub Claude, `claude rm <id>`: the next pick starts a new one.
 
 ### Orchestrators
 
-An agent in a repo's main checkout is the orchestrator of that repo, as the hub Claude is for
-all repos. It plans, reads, reviews and answers questions, and it gives each change to a worker:
-a background agent in a new worktree (`wt new <branch> -t <task> -- <prompt>`). So no work
-piles up on main, and agents do not move between worktrees. The list marks an orchestrator with
-a cyan `◇` before its name.
+An orchestrator is a background agent in a repo's main checkout that has the orchestrator
+prompt (`wtl_orchestrator_prompt` in `lib/wt-lib.sh`). It is the orchestrator of that repo, as
+the hub Claude is for all repos. It plans, reads, reviews and answers questions, and it gives
+each change to a worker: a background agent in a new worktree (`wt new <branch> -t <task> --
+<prompt>`). So no work piles up on main, and agents do not move between worktrees. The list
+marks an orchestrator with a cyan `◇` before its name.
 
-- `n` on a main checkout row starts one, with a short system prompt about this
-  (`wtl_orchestrator_prompt` in `lib/wt-lib.sh`). The prompt only steers the agent: Claude's own
-  rule still stops a background agent from editing in the main checkout, and the agent can go
-  into a worktree (`EnterWorktree`) when you tell it to make a change itself.
+- `n` on a main checkout row starts one, with the prompt. The prompt only steers the agent:
+  Claude's own rule still stops a background agent from editing in the main checkout, and the
+  agent can go into a worktree (`EnterWorktree`) when you tell it to make a change itself.
+- A repo has one orchestrator. When it has one, `n` on its main checkout does not start a
+  second one: the list says so, and the hub shows the orchestrator.
+- The list reads the prompt in the job's `state.json`: `respawnFlags` keeps the options that a
+  background agent started with. The orchestrator of a repo is the oldest live agent with the
+  prompt in its main checkout. A stopped agent does not count.
+- A second agent with the prompt in the same main checkout gets a yellow `◇`. Only a start
+  outside the list makes one, for example a copy from `claude --bg --resume` with new options.
+  The hub Claude does not send work to it. Remove it with `d`.
+- An agent in the main checkout without the prompt (`c`, `claude --bg`, an interactive
+  `claude`) is a plain agent: it gets no `◇`, the hub Claude does not send work to it, and `n`
+  still starts an orchestrator.
+- Why this rule: the `◇` follows the prompt, so an agent with a `◇` always acts as an
+  orchestrator. The oldest one keeps the `◇`, so the sign does not move to a new agent. The
+  list, `n` and the hub Claude (`wt agents --orchestrators`) use the same rule, so they find the
+  same agent.
 - An agent from another folder that went into a worktree with `EnterWorktree` (Claude keeps that
   in the job's `state.json`) does not belong to the worktree: `d` on the worktree stops until it
   leaves (`ExitWorktree`), and the prune does not remove it. `d` on the agent itself removes
   the worktree and then the agent, with the same checks as `d` on the worktree: `claude rm`
-  keeps such an agent while its worktree is on disk. One from a main checkout stays
-  under the main checkout with its `◇`, and `→ <branch>` after its age names the worktree it
-  is in. Its pick shows that worktree in review.
-- Agents started in another way (`c`, `claude --bg`) get no prompt, but on main they get the `◇`.
+  keeps such an agent while its worktree is on disk. One from a main checkout stays under the
+  main checkout (with its `◇` when it is the orchestrator), and `→ <branch>` after its age
+  names the worktree it is in. Its pick shows that worktree in review.
+- `c` on its row gives an orchestrator a fresh context (see [Fresh context](#fresh-context)).
+
+### Fresh context
+
+`c` on an orchestrator row (cyan or yellow `◇`) or on the "◆ hub" row clears the agent's
+context. After a confirm, the list types `/clear` into the agent through a hidden
+`claude attach` (`claude-clear`). The agent then starts a new conversation with the same system
+prompt, name and short id, in the same process. Only its session id changes. So its turn chain,
+`~/.local/state/wt-hub-claude` and the middle column stay correct. The old conversation stays
+in its transcript.
+
+- The agent must be idle. `/clear` typed into a question or a permission prompt would answer
+  it. When the agent works or waits for you, the list says so and does nothing.
+- An orchestrator in a worktree that it entered: tell it to leave the worktree first
+  (`ExitWorktree`).
+- All `claude attach` clients of an agent share one input box. `claude-clear` deletes a draft
+  in it first (Ctrl+U). The hidden client takes the size of a client that is attached already
+  (the middle column), because the agent's screen takes the size of the last client.
+- For another agent, type `/clear` in the agent.
 
 ### Review by turn
 
@@ -558,11 +596,12 @@ no quit key.
 |---|---|
 | Enter | open the row; the focus moves (agent: middle column; worktree: review) |
 | click, double-click | open the row; an agent moves the focus, a worktree keeps it in the list |
-| `n` | new idle background agent in this row's worktree (an orchestrator on a main checkout) |
+| `n` | new idle background agent in this row's worktree (on a main checkout: the repo's orchestrator; when it has one, the hub shows it) |
 | `N` | new worktree of this row's repo (asks the branch) + idle agent |
 | `o` | the row's own Ghostty tab: an interactive agent's tab, else the worktree's zellij session (`wt open`) |
 | `d` | remove the agent, or the worktree with its idle agents (asks first) |
 | `b` | an idle interactive session goes on as a background agent (asks first) |
+| `c` | an idle orchestrator (`◇`) or the hub Claude (`◆ hub` row) gets a fresh context: `/clear`, same prompt, name and id (asks first) |
 | `a` | hide / show idle repos and main checkouts |
 | `p` | prune dead agents now (asks first) |
 | `r` | reload the list (fresh git signs; starts the newest `wt-sidebar`) |
@@ -661,8 +700,9 @@ point.
 |---|---|
 | `▸` (bold cyan, agent name cyan) | the agent in the middle column |
 | `◆ hub` row (cyan) | the hub Claude, with its state sign |
-| `◇` cyan, before the name | an orchestrator: an agent in a main checkout, or one from there in a worktree it entered |
-| `→ feat` (dim, after the age) | the orchestrator is in that worktree now (`EnterWorktree`); it shows under its main checkout |
+| `◇` cyan, before the name | the repo's orchestrator: the oldest agent with the orchestrator prompt in its main checkout (also when it is in a worktree it entered) |
+| `◇` yellow, before the name | a second agent with the orchestrator prompt in the same main checkout; remove it (`d`) |
+| `→ feat` (dim, after the age) | the agent from the main checkout is in that worktree now (`EnterWorktree`); it shows under its main checkout |
 | `!` bold yellow | agent needs input: it is blocked, or it asks you something |
 | `✗` red | agent failed |
 | `✓` bold magenta | done, unread: a turn ended after you last saw the agent |
@@ -707,6 +747,8 @@ All of these are in `~/.local/bin`. worktrunk runs `wt-<name>` for `wt <name>`, 
 | `wt pick [-a]` | The same list in fzf, with git status and log in a preview. Enter: `wt open` on the row. Ctrl-A: `wt agents` for that worktree. |
 | `wt agents [path]` | Claude sessions (all, or one worktree) in fzf, the ones that need input first. Enter: `wt go`. |
 | `wt agents --json` | `claude agents --json --all` with each agent's `phase` (input, failed, unread, working, idle), for `wt all` and the mod. |
+| `wt agents --orchestrators [main checkout]` | The orchestrator of each repo, one line each: main checkout, id, name (see [Orchestrators](#orchestrators)). |
+| `claude-clear <id>` | Type `/clear` into idle background agent `<id>` through a hidden `claude attach` (`c` in the list). Exit 0 when its session id changed. See [Fresh context](#fresh-context). |
 | `wt setup [path]` | The worktrunk `pre-start` hook, when you turn it on (`./install.sh --with-setup`): in a new worktree, copy the ignored files (`.worktreeinclude` through `wt step copy-ignored`, else the ignored `.env*` files of the main checkout) and install the dependencies (pnpm, bun, yarn, npm or uv, from the lock file). It puts back a lock file that the install changed. Safe to run again. |
 | `wt task [text]` | worktrunk alias: set the worktree's task note, or show it. |
 | `claude-turn-snapshot --list [path]` | The turn chains of a worktree: id, age, last subject. |
@@ -719,6 +761,7 @@ names, the extra consoles, then the bar's tasks), `hub-run --where` (the hub ban
 (Ctrl g Tab), `hub-run --launcher` (Ctrl g r), `hub-run --worktree-tab <dir> --name|--tasks` and `hub-run --close-tab <name>`
 (`d` on a worktree), `hub-run --exec` (a pane that `hub-run` started), `wt-sidebar` (the list),
 `wt-sidebar --review toggle|show` (Ctrl g `v`, Ctrl g `3`), `wt-sidebar --files` (`e` in tuicr),
+`wt-sidebar --clear <kind> <id>` (`c`),
 `wt-hub-pane agent|review|files` (the panes), `wt-hub-keys` (tuicr's `t` and `e`).
 
 ### The mod (`/wt` in Claude Code)
@@ -803,6 +846,7 @@ Settings: `~/.config/wt-hub/config` ([Settings](#settings)). Environment variabl
 ```
 bin/
   c                      Claude as a background agent, attached here
+  claude-clear           /clear into an idle background agent (c in the list)
   claude-notify          hook (Stop, Notification): macOS notice; a click runs wt go; turn ends
                          for the unread sign
   claude-turn-snapshot   hook (UserPromptSubmit, Stop): turn chains; --list, --prune
@@ -822,7 +866,8 @@ bin/
   wt-sidebar             the list (fzf): rows, keys, remove, prune, new agents; --review
                          (Ctrl g v, 3: hide or show review)
 lib/
-  wt-lib.sh              shared helpers: zellij timeout, Ghostty tabs, hub panes and targets
+  wt-lib.sh              shared helpers: zellij timeout, Ghostty tabs, hub panes and targets,
+                         the hub Claude and orchestrator prompts, job state (wtl_jobs)
 config/
   claude-settings-hooks.json   hooks to merge into ~/.claude/settings.json
   tuicr/config.toml            q_quits: q in review goes back

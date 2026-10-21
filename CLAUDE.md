@@ -42,6 +42,10 @@ the yazi keys and the tuicr config are symlinks into it, so an edit is live at o
   `claude rm` keeps an agent while its recorded worktree is on disk (no WorktreeRemove hook
   here) or has unpushed work; its transcript stays. `claude --bg --resume <session-id>` continues
   an ended interactive session in the background with the same ids.
+- Claude: `/clear` in a background session keeps its `--append-system-prompt` (respawnFlags),
+  name, short id and process; only the session id changes. All `claude attach` clients of a
+  session share one input box (Ctrl+U clears a line of a draft), and the session's screen takes
+  the size of the client that joined last, also after that client leaves (`bin/claude-clear`).
 - Test Claude sessions in a pty with every CLAUDE*/ANTHROPIC* variable unset: an inherited
   `CLAUDE_CODE_CHILD_SESSION` turns off the transcript and hides the session from `claude agents`.
 - Mod: `cd mod && claude plugin test . && claude plugin validate .`; it loads from its folder,

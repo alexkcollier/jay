@@ -585,6 +585,10 @@ $WT_ROOTS (a folder per client, then the repo; worktrees are siblings named <rep
   user to press n on one of its worktrees in the list, or N on its repo row (both ask to trust
   the repo), or to run \`c\` in it.
 - Send a prompt to a running agent: the ListAgents and SendMessage tools.
+- Orchestrators: a repo can have one, an agent in its main checkout with an orchestrator prompt
+  (◇ in the list). \`wt agents --orchestrators\` lists them (main checkout, id, name). Send work
+  for such a repo to its orchestrator (SendMessage). For a repo without one, start workers
+  yourself with \`wt new\`, or tell the user that n on the repo's main checkout row starts one.
 - Show an agent in the middle column: \`wt go <id or name>\`; \`wt go hub\` comes back to you.
 - Dev servers and other long-running commands: the hub's "tasks" tab (\`hub-run ls --json\`,
   \`hub-run log <task>\`, \`hub-run -n <name> -w -- <command>\`), not a background Bash call.
@@ -597,8 +601,13 @@ EOF
 # --- Orchestrators: an agent in a repo's main checkout plans and starts workers, one in a worktree
 # for each change, so that work does not pile up on main and agents do not move between
 # worktrees. The list starts one with this prompt (n on a main checkout) and marks it with ◇.
+# Claude keeps the prompt in the job's state.json (respawnFlags); its first words
+# ($WT_ORCH_MARK) tell an orchestrator from another agent in the main checkout.
 
-# Added to the system prompt of an orchestrator of repo $1 in main checkout $2.
+WT_ORCH_MARK="You are the orchestrator"
+
+# Added to the system prompt of an orchestrator of repo $1 in main checkout $2. It must start
+# with $WT_ORCH_MARK.
 wtl_orchestrator_prompt() {
   cat <<EOF
 You are the orchestrator of the repo $1, in its main checkout $2, in a worktree hub: a list of
@@ -619,6 +628,52 @@ a worker. Keep the main checkout free of work.
 - Read the workers' worktrees in place; do not edit files in them. Never merge, and never remove
   worktrees or agents (\`wt merge\`, \`wt remove\`, \`claude rm\`), unless the user asks.
 EOF
+}
+
+# What the job state.json files tell about the background agents in agents JSON $1 (from
+# `claude agents --json --all`), as a JSON object id: {home, tree, orch}. For an agent in a
+# worktree it entered (EnterWorktree): home is the folder it came from, tree the worktree; else
+# both are null. While it is in that worktree, Claude keeps both in state.json (cwd,
+# worktreePath), and `claude agents` gives the home as the folder of one that does not run now.
+# Such an agent does not go with the worktree. orch: the agent has the orchestrator prompt. An
+# interactive session has no job, so no entry.
+wtl_jobs() {
+  local IFS=$' \t\n' id dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs" files=()
+  for id in $(jq -r '.[] | select(.kind == "background") | .id // empty' <<<"$1"); do
+    [[ -f "$dir/$id/state.json" ]] && files+=("$dir/$id/state.json")
+  done
+  ((${#files[@]})) || { echo '{}'; return 0; }
+  jq -nc --arg mark "$WT_ORCH_MARK" '[inputs | {(input_filename | split("/")[-2]): {
+      home: (if .worktreePath != null then .cwd // .originCwd // "" else null end),
+      tree: .worktreePath,
+      orch: (.respawnFlags // [] | any(.[]; type == "string" and startswith($mark)))}}] | add // {}' \
+    "${files[@]}" 2>/dev/null || echo '{}'
+}
+
+# The agents with the orchestrator prompt in agents JSON $1 (jobs JSON $2, from wtl_jobs), as a
+# JSON object session id: {id, name, home, rank}. home is the folder the agent belongs to (the
+# one it came from, when it is in a worktree it entered). One orchestrator for each repo: rank 0
+# is the oldest in its home, the orchestrator; rank 1 and up are extra ones (a resumed copy, say).
+# A stopped agent does not count. The callers check that home is a main checkout.
+wtl_orch_ranks() {
+  jq -c --argjson jobs "$2" '
+    [.[] | select(.kind == "background" and .state != "stopped" and ($jobs[.id // ""].orch // false))
+      | {sid: .sessionId, id, name: (.name // .id), home: ($jobs[.id].home // .cwd), t: (.startedAt // 0)}]
+    | group_by(.home) | map(sort_by(.t) | to_entries[] | {(.value.sid): ((.value | del(.sid, .t)) + {rank: .key})})
+    | add // {}' <<<"$1"
+}
+
+# The orchestrator of each main checkout, one line each: main checkout<TAB>id<TAB>name.
+# Optional $1: only the one of that main checkout.
+wtl_orchestrators() {
+  local agents home id name
+  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  while IFS=$'\t' read -r home id name; do
+    [[ -n "$home" && ( -z "${1:-}" || "$home" == "$1" ) ]] || continue
+    [[ "$(wtl_primary "$home")" == "$home" ]] && printf '%s\t%s\t%s\n' "$home" "$id" "$name"
+  done < <(wtl_orch_ranks "$agents" "$(wtl_jobs "$agents")" \
+    | jq -r 'to_entries[] | .value | select(.rank == 0) | [.home, .id, .name] | @tsv')
+  return 0
 }
 
 # The short id of the hub Claude. When there is none (never started, or `claude rm` removed it),

@@ -88,7 +88,7 @@ check_tools() {
   if [[ -x /usr/bin/python3 ]] && /usr/bin/python3 -c '' 2>/dev/null; then
     ok "python3 $(/usr/bin/python3 --version 2>&1 | cut -d' ' -f2) (/usr/bin/python3)"
   else
-    need "/usr/bin/python3 not found (wt-hub-keys needs it): xcode-select --install"
+    need "/usr/bin/python3 not found (wt-hub-keys and claude-clear need it): xcode-select --install"
   fi
   if command -v terminal-notifier >/dev/null 2>&1; then
     ok "terminal-notifier (notices)"
