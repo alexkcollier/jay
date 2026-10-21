@@ -6,6 +6,16 @@
 set -uo pipefail
 source "$HOME/.local/lib/wt-lib.sh"
 
+# `claude --bg` has no trust prompt: ask here, as plain `claude` would.
+if ! wtl_trusted "$PWD"; then
+  key=$(wtl_trust_key "$PWD")
+  printf 'Claude does not trust %s yet. Trust it and all its worktrees? [y/N] ' "${key/#$HOME/~}"
+  read -rn1 answer
+  printf '\n'
+  [[ "$answer" == y ]] || exit 1
+  wtl_trust "$PWD" || { echo "Could not change ~/.claude.json." >&2; exit 1; }
+fi
+
 out=$(claude --bg "$@" 2>&1)
 id=$(wtl_bg_id "$out")
 if [[ -z "$id" ]]; then

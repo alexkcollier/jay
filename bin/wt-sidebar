@@ -249,7 +249,7 @@ view() {
 # or worktree (a new worktree from the row's repo through `wt new`; asks for the branch). The
 # new agent shows in the hub's middle column, where you type its first prompt.
 new_agent() {
-  local mode=$1 kind=$2 id=$3 path top primary repo branch out agent i
+  local mode=$1 kind=$2 id=$3 path top primary repo branch key out agent i
   if [[ "$kind" == hdr || ("$mode" == here && "$kind" == repo) ]]; then
     pause "n starts an agent in a worktree: pick a worktree row. N on a repo or worktree row makes a new worktree of that repo."
     return 0
@@ -259,6 +259,16 @@ new_agent() {
   top=$(wtl_toplevel "$path")
   primary=$(wtl_primary "$top")
   IFS=$'\t' read -r _ repo branch _ < <(wtl_describe "$top")
+  if ! wtl_trusted "$top"; then
+    key=$(wtl_trust_key "$top")
+    confirm "Claude does not trust $repo yet, so no agent can start in it.
+
+Trust ${key/#$HOME/~} and all its worktrees? This is the same as yes in the trust prompt of claude: Claude then uses the settings, hooks and MCP servers of the repo." "y: trust" || return 0
+    if ! wtl_trust "$top"; then
+      pause "Could not change ~/.claude.json. Run claude in ${key/#$HOME/~} once and accept the trust prompt."
+      return 0
+    fi
+  fi
   if [[ "$mode" == worktree ]]; then
     say "New worktree and agent in $repo."
     printf 'Branch, empty to cancel: '

@@ -275,6 +275,50 @@ wtl_bg_id() {
   grep -oE 'backgrounded · [0-9a-f]{8}' <<<"$1" | grep -oE '[0-9a-f]{8}$' | tail -1
 }
 
+# --- Folder trust: `claude --bg` does not start in a repo that was never trusted ---
+# Claude keeps the trust in ~/.claude.json (projects.<path>.hasTrustDialogAccepted), under the
+# path of the repo's main checkout: all its worktrees share it. A trusted parent folder of the
+# repo does not count. Plain `claude` asks with its trust prompt; `claude --bg` only fails.
+
+# The path Claude keeps the trust of folder $1 under: the main checkout of its repo.
+wtl_trust_key() {
+  local top primary
+  top=$(wtl_toplevel "$1")
+  primary=$(wtl_primary "$top")
+  (cd "${primary:-$top}" 2>/dev/null && pwd -P)
+}
+
+# Folder $1 is trusted. When ~/.claude.json cannot be read, it is: `claude --bg` then decides.
+wtl_trusted() {
+  local key cfg="$HOME/.claude.json"
+  key=$(wtl_trust_key "$1")
+  [[ -n "$key" && -r "$cfg" ]] || return 0
+  jq -e --arg k "$key" '.projects[$k].hasTrustDialogAccepted == true' "$cfg" >/dev/null 2>&1 \
+    || [[ $? -gt 1 ]]
+}
+
+# Trust folder $1 as the trust prompt of `claude` does. Under Claude's own config lock (the
+# folder ~/.claude.json.lock; Claude takes a lock over 10 s old as stale), and written through
+# a copy, so running sessions never read half a file.
+wtl_trust() {
+  local key cfg="$HOME/.claude.json" lock tmp i got=false rc=0
+  key=$(wtl_trust_key "$1")
+  [[ -n "$key" && -f "$cfg" ]] || return 1
+  lock="$cfg.lock"
+  for i in $(seq 50); do
+    mkdir "$lock" 2>/dev/null && { got=true; break; }
+    sleep 0.1
+  done
+  [[ "$got" == true ]] || return 1
+  tmp=$(mktemp "$cfg.wt-hub.XXXXXX") \
+    && jq --arg k "$key" '.projects[$k] = ((.projects[$k] // {}) + {hasTrustDialogAccepted: true})' \
+      "$cfg" >"$tmp" \
+    && [[ -s "$tmp" ]] && mv "$tmp" "$cfg" || rc=1
+  rm -f "$tmp"
+  rmdir "$lock" 2>/dev/null
+  return $rc
+}
+
 # --- Hub panes (zellij session "hub"): agent viewer, review ⇄ files ---
 # One pane in each column. The agent viewer (middle) and review (right) are layout panes; files
 # opens in place over review: zellij keeps review suspended and shows it again when files
@@ -454,6 +498,9 @@ $WT_ROOTS (a folder per client, then the repo; worktrees are siblings named <rep
 - New worktree with an agent: in the repo's main checkout, \`wt new <branch> -t "<task>" -- <prompt>\`
   (-a: an idle agent). New agent in a worktree that exists: \`cd <worktree> && claude --bg
   --name "<repo>/<branch>" "<prompt>"\`. Start agents only when the user asks or agrees.
+  "Workspace not trusted": Claude never ran in that repo. Do not change ~/.claude.json; tell the
+  user to press n on one of its worktrees in the list, or N on its repo row (both ask to trust
+  the repo), or to run \`c\` in it.
 - Send a prompt to a running agent: the ListAgents and SendMessage tools.
 - Show an agent in the middle column: \`wt go <id or name>\`; \`wt go hub\` comes back to you.
 - Dev servers and other long-running commands: the hub's "tasks" tab (\`hub-run ls --json\`,

@@ -234,6 +234,11 @@ started by the list are named `<repo>/<branch>`.
 
 From a shell: `wt new <branch> -- <prompt>` makes the worktree and starts the agent with a prompt.
 
+`claude --bg` has no trust prompt: in a repo where Claude never ran, it fails with "Workspace not
+trusted". Claude keeps the trust per repo, under its main checkout, for all its worktrees; a
+trusted parent folder does not count. So `n`, `N` and `c` ask first, in one key (`y`), and write
+the trust into `~/.claude.json` as the trust prompt of `claude` would. `wt new` does not ask.
+
 ### Pick agents and worktrees
 
 Click a row or press Enter on it.
