@@ -44,7 +44,7 @@ for arg in "$@"; do
   esac
 done
 
-todo=0
+todo=0 formulas="" casks=""
 ok() { printf '  ok    %s\n' "$*"; }
 did() { printf '  done  %s\n' "$*"; }
 note() { printf '  note  %s\n' "$*"; }
@@ -63,6 +63,11 @@ tool() {
   local name=$1 min=$2 how=$3 path version
   path=$(PATH="$HOME/.local/share/mise/shims:$PATH" command -v "$name" 2>/dev/null) || {
     need "$name not found: $how"
+    # For one brew command at the end.
+    case $how in
+      "brew install --cask "*) how=${how#brew install --cask }; casks+=" ${how%% *}" ;;
+      "brew install "*) how=${how#brew install }; formulas+=" ${how%% *}" ;;
+    esac
     return 0
   }
   # A program that fails or prints no version (a broken shim) must not stop the script.
@@ -112,7 +117,7 @@ check_tools() {
   fi
   tool yazi 26.0 "brew install yazi"
   # The hub was built on Claude Code 2.1.304. It needs background agents and their commands.
-  tool claude 2.1.304 "brew install --cask claude-code, or claude update"
+  tool claude 2.1.304 "brew install --cask claude-code (an older one: claude update)"
   check_claude
   tool git "" "xcode-select --install"
   tool perl "" "part of macOS"
@@ -482,4 +487,9 @@ if ((todo == 0)); then
   echo "  Ready. Start the hub with: wt hub"
 else
   echo "  $todo TODO item(s) above. Then start the hub with: wt hub"
+  if [[ -n "$formulas$casks" ]]; then
+    echo "  The missing tools in one go:"
+    [[ -z "$formulas" ]] || echo "    brew install$formulas"
+    [[ -z "$casks" ]] || echo "    brew install --cask$casks"
+  fi
 fi

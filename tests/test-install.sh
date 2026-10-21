@@ -43,6 +43,7 @@ eq "install.sh ends" 0 $?
 has "a file of the user's is a TODO" "wt-go exists and is not from wt-hub" "$out"
 eq "a file of the user's stays" mine "$(cat "$HOME/.local/bin/wt-go")"
 has "install.sh: a missing tool is a TODO with its brew command" "fzf not found: brew install fzf" "$out"
+has "install.sh: one brew command for the missing tools" "brew install fzf tuicr yazi" "$out"
 has "install.sh: the zjstatus download fails offline" "zjstatus download failed" "$out"
 ok "the scripts are copies" test -f "$HOME/.local/bin/wt-sidebar" -a ! -L "$HOME/.local/bin/wt-sidebar"
 ok "wt-pick is there" test -e "$HOME/.local/bin/wt-pick"
