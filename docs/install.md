@@ -41,7 +41,7 @@ reads the front app with `lsappinfo`.
 | lazygit | optional: only for `WT_REVIEW=lazygit` | 0.66.2 (0.66+) | `brew install lazygit` | review with `WT_REVIEW=lazygit` |
 | delta | optional: needed for lazygit review (`WT_REVIEW_DIFF=delta`, the default) | 0.19.2 | `brew install git-delta` | the patch in lazygit review (`wt-hub-diff`) |
 | difftastic (`difft`) | optional: only for `WT_REVIEW_DIFF=difft` | 0.71.0 | `brew install difftastic` | the patch in lazygit review with `WT_REVIEW_DIFF=difft` |
-| Docker | optional: only for `docker compose` tasks | 29.8.2, Compose 5.5.1 | Docker Desktop | the ports of `docker compose` tasks, `hub-run port` |
+| Docker | optional: only for `docker compose` tasks | 29.8.2, Compose 5.5.1 | Docker Desktop | reads (never changes) the published ports of `docker compose` tasks for `hub-run ls` and the bar, and names the container in `hub-run port` |
 
 What `./install.sh --check` checks:
 
