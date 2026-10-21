@@ -76,6 +76,26 @@ tool() {
   fi
 }
 
+# The Claude Code features of the hub, from the help texts: background agents (--bg), attach,
+# agents --json --all, rm, logs. Plugins (the mod) and hooks are older than these.
+check_claude() {
+  local path out missing=""
+  path=$(PATH="$HOME/.local/share/mise/shims:$PATH" command -v claude 2>/dev/null) || return 0
+  out=$("$path" --help 2>&1) || true
+  [[ "$out" == *--bg* ]] || missing+=" --bg"
+  out=$("$path" agents --help 2>&1) || true
+  [[ "$out" == *--json* && "$out" == *--all* ]] || missing+=" 'agents --json --all'"
+  for cmd in attach rm logs; do
+    out=$("$path" "$cmd" --help 2>&1) || true
+    [[ "$out" == *"claude $cmd"* ]] || missing+=" $cmd"
+  done
+  if [[ -n "$missing" ]]; then
+    need "claude lacks what the hub needs:$missing (claude update)"
+  else
+    ok "claude has background agents (--bg, attach, agents --json --all, rm, logs)"
+  fi
+}
+
 check_tools() {
   head_ "Tools"
   [[ "$(uname -s)" == Darwin ]] || need "macOS only (Ghostty AppleScript, lsappinfo, BSD tools)"
@@ -91,7 +111,9 @@ check_tools() {
     note "lazygit: optional, for WT_REVIEW=lazygit in $SETTINGS_FILE (0.66 or newer)"
   fi
   tool yazi 26.0 "brew install yazi"
-  tool claude "" "brew install --cask claude-code"
+  # The hub was built on Claude Code 2.1.304. It needs background agents and their commands.
+  tool claude 2.1.304 "brew install --cask claude-code, or claude update"
+  check_claude
   tool git "" "xcode-select --install"
   tool perl "" "part of macOS"
   tool curl "" "part of macOS"
