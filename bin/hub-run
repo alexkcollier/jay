@@ -72,13 +72,16 @@ run_pane() {
   fi
   mkdir -p "$STATE_DIR"
   trap ':' INT
+  # pane-<id>.exit too: the launcher (quick_end) looks for it by pane.
+  local byp="$STATE_DIR/pane-${ZELLIJ_PANE_ID:-none}.exit"
   while :; do
-    rm -f "$STATE_DIR/$$.exit" "$STATE_DIR/$$.again"
+    rm -f "$STATE_DIR/$$.exit" "$STATE_DIR/$$.again" "$byp"
     printf '\e[2m$ %s\e[0m\n' "$cmd"
     "${sh[@]}" "$cmd"
     rc=$?
     [[ -f "$STATE_DIR/$$.again" ]] && { printf '\n'; continue; }
     printf '%s\n' "$rc" >"$STATE_DIR/$$.exit"
+    printf '%s\n' "$rc" >"$byp"
     printf '\n\e[2mexited (%s) · Enter: run again · q: close\e[0m\n' "$rc"
     # bash 3.2's read -t returns 1 on a time-out, as on end of input: read single keys, and
     # look for a restart each second.
@@ -86,7 +89,7 @@ run_pane() {
       line=""
       read -r -s -n 1 -t 1 line; r=$?
       ((r == 0)) && [[ -z "$line" ]] && break
-      [[ "$line" == q ]] && { rm -f "$STATE_DIR/$$.exit"; exit "$rc"; }
+      [[ "$line" == q ]] && { rm -f "$STATE_DIR/$$.exit" "$byp"; exit "$rc"; }
       [[ -f "$STATE_DIR/$$.again" ]] && break
     done
   done
@@ -228,7 +231,7 @@ tasks_json() {
   done <<<"$raw"
   # Exit files of panes that are gone.
   local f pid
-  for f in "$STATE_DIR"/*.exit; do
+  for f in "$STATE_DIR"/[0-9]*.exit; do
     [[ -f "$f" ]] || continue
     pid=${f##*/}; pid=${pid%.exit}
     kill -0 "$pid" 2>/dev/null || rm -f "$f"
@@ -339,7 +342,7 @@ cmd_launcher() {
     read -r -e -p '❯ ' line || exit 0
     [[ -n "${line//[[:space:]]/}" ]] || exit 0
     history -s "$line"; history -w "$HISTFILE" 2>/dev/null
-    "$SELF" -- "$line" >/dev/null || { read -r -s -n 1 -p 'Press a key.' _; }
+    "$SELF" --launch -- "$line" || { read -r -s -n 1 -p 'Press a key.' _; }
     exit 0
   fi
   # zsh reads its startup files from ZDOTDIR: ours load yours ($HOME), then the .zshrc adds the
@@ -362,7 +365,7 @@ _wt_hub_launch() {
   zle .accept-line
 }
 _wt_hub_run() {
-  "$HOME/.local/bin/hub-run" -- "$WT_HUB_LINE" >/dev/null || read -sk1 '?Press a key.'
+  "$HOME/.local/bin/hub-run" --launch -- "$WT_HUB_LINE" || read -sk1 '?Press a key.'
   exit
 }
 _wt_hub_nohist() { [[ $1 != ' _wt_hub_run'* && $1 != ' exit'* ]]; }
@@ -400,11 +403,12 @@ cmd_close_tab() {
 # --- Commands ---
 
 cmd_start() {
-  local name="" wait=0 secs=120 line tid pane
+  local name="" wait=0 secs=120 launch=0 line tid pane
   while (($#)); do
     case $1 in
       -n) name=${2:-}; shift 2 || die "-n needs a name" ;;
       -w) wait=1; shift ;;
+      --launch) launch=1; shift ;;
       -t) secs=${2:-}; shift 2 || die "-t needs seconds" ;;
       --) shift; break ;;
       -*) die "unknown option $1 (hub-run -h)" ;;
@@ -434,6 +438,7 @@ cmd_start() {
   tid=$(ensure_tab "$PWD") || die "the hub did not open a tab for $(tab_name "$PWD")"
   pane=$(env ${strip[@]+"${strip[@]}"} zellij -s "$WT_HUB_SESSION" action new-pane --tab-id "$tid" \
     --cwd "$PWD" --name "$name" --close-on-exit -- "$SELF" --exec "$line") || die "zellij did not open the pane"
+  ((launch)) && { quick_end "$pane"; return; }
   printf '%s: started in the hub, tab %s (%s)\n' "$name" "$(tab_name "$PWD")" "$pane"
   if ((wait)); then
     sleep 1
@@ -441,6 +446,41 @@ cmd_start() {
   else
     printf 'hub-run log %s · hub-run wait %s\n' "$pane" "$pane"
   fi
+}
+
+# The launcher's start (hub-run --launch): a command that ends within 2 s (ls, docker compose up
+# -d) needs no pane. Then its pane closes and its output shows in the launcher, which grows to
+# fit it, until a key; a command that still runs keeps its pane, and the launcher closes.
+quick_end() {
+  local pane=$1 file out rc i h
+  file="$STATE_DIR/pane-${pane#terminal_}.exit"
+  for i in $(seq 20); do
+    sleep 0.1
+    [[ -f "$file" ]] || continue
+    rc=$(cat "$file")
+    rm -f "$file"
+    # The pane's text without hub-run's "$ <command>" line at the top and its "exited" lines.
+    out=$(zellij -s "$WT_HUB_SESSION" action dump-screen -p "$pane" --full 2>/dev/null \
+      | awk 'NR == 1 && /^\$ / { next } { a[++n] = $0 } END {
+          while (n > 0 && (a[n] ~ /^[[:space:]]*$/ || a[n] ~ /^exited \(/)) n--
+          for (i = 1; i <= n; i++) print a[i] }')
+    zellij -s "$WT_HUB_SESSION" action close-pane --pane-id "$pane" >/dev/null 2>&1
+    if [[ -t 1 && -n "${ZELLIJ_PANE_ID:-}" ]]; then
+      h=$(($(printf '%s\n' "$out" | wc -l) + 3))
+      ((h > 30)) && h=30
+      zellij action change-floating-pane-coordinates -p "terminal_$ZELLIJ_PANE_ID" --height "$h" >/dev/null 2>&1
+      sleep 0.1
+      clear
+      [[ -n "$out" ]] && printf '%s\n' "$out"
+      printf '\e[2mexit %s · any key: close\e[0m' "$rc"
+      read -r -s -n 1 _ </dev/tty
+    else
+      [[ -n "$out" ]] && printf '%s\n' "$out"
+      printf 'exit %s\n' "$rc"
+    fi
+    return 0
+  done
+  return 0
 }
 
 cmd_ls() {

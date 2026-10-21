@@ -271,7 +271,7 @@ install_settings() {
 # WT_TASK_SHELL=/bin/zsh -i +m -c
 
 # The launcher (Ctrl g r) for a shell other than zsh: a command that runs in the launcher pane,
-# in the worktree, and starts what you type with: hub-run -- "<line>". See the README.
+# in the worktree, and starts what you type with: hub-run --launch -- "<line>". See the README.
 # WT_LAUNCHER=bash --rcfile ~/.config/wt-hub/launcher.bash -i
 CONF
       did "$SETTINGS_FILE (settings, all at their defaults)"

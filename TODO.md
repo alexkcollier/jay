@@ -108,6 +108,10 @@ Alex's to-do list, in his words (2026-10-19):
   default"): the launcher is 4 rows by 60 %, its title says where; tasks run with `$SHELL -i +m
   -c` (aliases: 2 with -lc, 237 with -i; +m keeps Ctrl-C on the whole command);
   `WT_TASK_SHELL` and `WT_LAUNCHER` settings, with a tested bash 3.2 launcher in the README.
+  Then (Alex: "commands that exit immediately like ls, docker:up? can we avoid creating panes
+  for them?"): zellij cannot move a process to another pane, so `hub-run --launch` starts the
+  task, waits up to 2 s for `pane-<id>.exit`, and when it ends, closes its pane and shows its
+  output in the launcher (grown to fit) until a key.
 
 ## Other open items
 

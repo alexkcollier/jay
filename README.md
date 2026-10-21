@@ -384,7 +384,9 @@ hub tab, `◆ HUB › tasks <its worktree>` on a tasks tab, with where Ctrl g Ta
   own zsh, with your `.zshrc`: completion, history, autosuggestions and the prompt work as in a
   terminal. Enter starts the line with `hub-run` in that worktree's tasks tab (its own pane, a
   name in the bar, run again and restart), puts it in your history, and closes the launcher;
-  you stay where you are. An empty line or Ctrl-C closes it. Other shells: see below.
+  you stay where you are. A command that ends within 2 s (`ls`, `docker compose up -d`) needs
+  no pane: its pane closes, and the launcher grows to show its output and exit code until a
+  key. An empty line or Ctrl-C closes the launcher. Other shells: see below.
 - **By hand**: type the command in a shell of the tab, as in any terminal. A tab always has a
   free shell in its worktree: when a command takes the last one, the hub opens a new one (within
   3 s), without moving your focus. More panes: Ctrl g `p` `n` (zellij's pane mode; the new pane
@@ -410,7 +412,8 @@ aliases and `mise activate` apply; `+m`: no job control, so Ctrl-C reaches all o
 
 **Other shells**: the launcher is built in for zsh; another shell gets a plain prompt (line
 editing and its own history). For your own shell, set `WT_LAUNCHER` to a command that runs in
-the launcher pane (in the worktree) and starts what you type with `hub-run -- "<line>"`. For
+the launcher pane (in the worktree) and starts what you type with `hub-run --launch -- "<line>"`
+(`--launch`: a command that ends within 2 s shows its output in the launcher, no pane). For
 example bash (also macOS `/bin/bash` 3.2), in `~/.config/wt-hub/config`:
 `WT_LAUNCHER=BASH_SILENCE_DEPRECATION_WARNING=1 /bin/bash --rcfile ~/.config/wt-hub/launcher.bash -i`,
 with this `~/.config/wt-hub/launcher.bash`:
@@ -420,7 +423,7 @@ with this `~/.config/wt-hub/launcher.bash`:
 _wt_hub_run() {   # Enter puts its name before the line; the line comes back from the history
   local line
   line=$(HISTTIMEFORMAT= history 1 | sed -E 's/^ *[0-9]+ +_wt_hub_run //')
-  hub-run -- "$line" >/dev/null || read -rsn1 -p 'Press a key.'
+  hub-run --launch -- "$line" || read -rsn1 -p 'Press a key.'
   exit
 }
 bind '"\C-m": "\C-a_wt_hub_run \C-j"'
