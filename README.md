@@ -665,7 +665,8 @@ point.
 | `→ feat` (dim, after the age) | the orchestrator is in that worktree now (`EnterWorktree`); it shows under its main checkout |
 | `!` yellow | agent needs input |
 | `✗` red | agent failed |
-| `●` green | agent works |
+| `●` green | agent works (its process is busy) |
+| `◌` dim green | agent waits: its turn goes on, but its process is idle (it waits for a worker or subagent it started) |
 | `○` dim | agent is idle |
 | `bg 12m` (dim, after the name) | background agent; age (m, h, d) |
 | Octicon home (U+F46D), before the branch | the main checkout |
@@ -694,7 +695,7 @@ All of these are in `~/.local/bin`. worktrunk runs `wt-<name>` for `wt <name>`, 
 | `wt new <branch\|pr:N> [-b base] [-t "task"] [-a] [-- prompt...]` | Make (or reuse) the worktree and store the task note. With a prompt, or `-a` for an idle one, start a background agent there. Without `-t`, the first line of the prompt (60 characters) is the task note. |
 | `wt-edit <file or folder>` | Open it in your editor, in its project. See [Open your editor](#open-your-editor). |
 | `wt open [branch\|path]` | Select the Ghostty tab of the worktree's zellij session (named `<repo>.<branch>`), or open a tab that attaches to it (made with your default layout when new). |
-| `wt all [-a]` | Worktrees of every repo, grouped by client, with agent counts and task notes. `-a`: also repos with only a main checkout and no agent. |
+| `wt all [-a]` | Worktrees of every repo, grouped by client, with agent counts (input, failed, busy, waits, idle; the signs of the list) and task notes. `-a`: also repos with only a main checkout and no agent. |
 | `wt all --json` | One JSON object per worktree (the list's data; implies `-a`). |
 | `wt pick [-a]` | The same list in fzf, with git status and log in a preview. Enter: `wt open` on the row. Ctrl-A: `wt agents` for that worktree. |
 | `wt agents [path]` | Claude sessions (all, or one worktree) in fzf, the ones that need input first. Enter: `wt go`. |

@@ -72,14 +72,23 @@ rows=$(
     . as $rows
     | ($rows | map(.path) | sort_by(length) | reverse) as $paths
     | def owner($cwd): first($paths[] | select($cwd == . or ($cwd | startswith(. + "/"))));
-      ($agents[0] | map(. + {wt: owner(.cwd)})) as $ag
-    | map(. as $r | ($ag | map(select(.wt == $r.path))) as $mine | $r + {
-        busy: ($mine | map(select(.state == "working" or (.state == null and .status == "busy"))) | length),
-        input: ($mine | map(select(.state == "blocked" or .status == "waiting")) | length),
-        idle: ($mine | map(select(.state == "done" or (.state == null and .status == "idle"))) | length)
+      # The rule of the list (wt-sidebar) and the mod (model.ts): busy is "working" there. An
+      # agent whose turn goes on (state working) while its process is idle waits (for a worker).
+      def phase: if .state == "failed" then "failed"
+        elif .state == "blocked" or .status == "waiting" then "input"
+        elif .state == "working" and .status == "idle" then "waits"
+        elif .state == "working" or (.state == null and .status == "busy") then "busy"
+        else "idle" end;
+      ($agents[0] | map(select(.state != "stopped") | . + {wt: owner(.cwd), phase: phase})) as $ag
+    | map(. as $r | ($ag | map(select(.wt == $r.path) | .phase)) as $mine | $r + {
+        busy: ($mine | map(select(. == "busy")) | length),
+        input: ($mine | map(select(. == "input")) | length),
+        failed: ($mine | map(select(. == "failed")) | length),
+        waits: ($mine | map(select(. == "waits")) | length),
+        idle: ($mine | map(select(. == "idle")) | length)
       })
     | group_by(.client + "/" + .repo)
-    | map(select($all or length > 1 or any(.[]; .busy + .input + .idle > 0)))
+    | map(select($all or length > 1 or any(.[]; .busy + .input + .failed + .waits + .idle > 0)))
     | flatten
     | sort_by(.client, .repo, (.main | not), .branch)
     | .[]
@@ -87,8 +96,10 @@ rows=$(
     | if $json then . else (def pad($n): (. + (" " * $n))[:$n];
       [ (.client | pad(10)), (.repo | pad(18)), (.branch | pad(44)), (.symbols | pad(6)),
         ([ (if .input > 0 then "\(.input) input" else empty end),
+           (if .failed > 0 then "\(.failed) failed" else empty end),
            (if .busy > 0 then "\(.busy) busy" else empty end),
-           (if .idle > 0 then "\(.idle) idle" else empty end) ] | join(" ") | pad(22)),
+           (if .waits > 0 then "\(.waits) waits" else empty end),
+           (if .idle > 0 then "\(.idle) idle" else empty end) ] | join(" ") | pad(30)),
         .task, .path ] | @tsv) end'
 )
 

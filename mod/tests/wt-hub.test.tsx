@@ -78,8 +78,20 @@ describe('model', () => {
     expect(phaseOf(null, 'waiting')).toBe('input')
     expect(phaseOf('working', 'busy')).toBe('working')
     expect(phaseOf(null, 'busy')).toBe('working')
+    expect(phaseOf('working', 'idle')).toBe('waits')
+    expect(phaseOf('blocked', 'idle')).toBe('input')
     expect(phaseOf('done', 'idle')).toBe('idle')
     expect(phaseOf('failed', 'idle')).toBe('failed')
+  })
+
+  test('an agent whose turn goes on while its process is idle waits, quietly', () => {
+    const rows = parseWorktrees(worktreeLines)
+    const busy = parseAgents(JSON.stringify([hub, worker('working')]))
+    const waits = parseAgents(JSON.stringify([hub, { ...worker('working'), status: 'idle' }]))
+    expect(waits.map(agent => agent.phase)).toEqual(['working', 'waits'])
+    expect(summaryOf(waits, 'hub-0000')).toBe('◌ 1 waits')
+    expect(transitions(busy, waits, rows, 'hub-0000', T0)).toEqual([])
+    expect(transitions(waits, parseAgents(JSON.stringify([hub, worker('done')])), rows, 'hub-0000', T0).map(event => event.kind)).toEqual(['finished'])
   })
 
   test('bad input parses to nothing instead of throwing', () => {

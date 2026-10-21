@@ -10,9 +10,10 @@ filter=${1:-}
 list=$(claude agents --json --all 2>/dev/null | jq -r --arg f "$filter" '
   .[] | select($f == "" or .cwd == $f or (.cwd | startswith($f + "/")))
   | (if .state == "blocked" or .status == "waiting" then 0
+     elif .state == "working" and .status == "idle" then 2
      elif .state == "working" or (.state == null and .status == "busy") then 1
-     elif .state == "failed" then 2 else 3 end) as $rank
-  | [$rank, (.state // .status), .kind, (.id // ""), .sessionId, .cwd, (.name // "")] | @tsv' | sort -n)
+     elif .state == "failed" then 3 else 4 end) as $rank
+  | [$rank, (if $rank == 2 then "waits" else .state // .status end), .kind, (.id // ""), .sessionId, .cwd, (.name // "")] | @tsv' | sort -n)
 
 [[ -n "$list" ]] || { echo "No Claude sessions${filter:+ in $filter}."; exit 0; }
 

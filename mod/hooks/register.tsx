@@ -229,7 +229,7 @@ export const register: Register = on => {
                 {mine.map(agent => (
                   <Button key={`go:${agent.sessionId}`} plain onPress={() => void go($, agent.sessionId)}>
                     {'  '}
-                    <Text color={agent.phase === 'input' ? 'warning' : agent.phase === 'failed' ? 'error' : agent.phase === 'working' ? 'success' : 'inactive'}>
+                    <Text color={agent.phase === 'input' ? 'warning' : agent.phase === 'failed' ? 'error' : agent.phase === 'working' ? 'success' : 'inactive'} dimColor={agent.phase === 'waits'}>
                       {glyphOf(agent.phase)}
                     </Text>{' '}
                     {agent.sessionId === me ? `${agent.name} (this)` : agent.name}{' '}

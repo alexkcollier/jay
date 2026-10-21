@@ -5,9 +5,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const text = (value: unknown) => (typeof value === 'string' ? value : '')
 
+// The rule of the list (wt-sidebar) and wt-all. An agent whose turn goes on (state working)
+// while its process is idle (status idle) waits: for a worker or a subagent it started, say.
 export function phaseOf(state: unknown, status: unknown): Phase {
   if (state === 'failed') return 'failed'
   if (state === 'blocked' || status === 'waiting') return 'input'
+  if (state === 'working' && status === 'idle') return 'waits'
   if (state === 'working' || ((state === null || state === undefined) && status === 'busy')) return 'working'
   return 'idle'
 }
@@ -100,7 +103,7 @@ export function transitions(
     if (agent.phase === was.phase) return []
     if (agent.phase === 'input') return event('input')
     if (agent.phase === 'failed') return event('failed')
-    if (agent.phase === 'idle' && was.phase === 'working') return event('finished')
+    if (agent.phase === 'idle' && (was.phase === 'working' || was.phase === 'waits')) return event('finished')
     return []
   })
 }
@@ -112,7 +115,7 @@ export type Group = {
   rows: Array<{ worktree: WorktreeRow; agents: AgentRow[] }>
 }
 
-const PHASE_ORDER: Record<Phase, number> = { input: 0, failed: 1, working: 2, idle: 3 }
+const PHASE_ORDER: Record<Phase, number> = { input: 0, failed: 1, working: 2, waits: 3, idle: 4 }
 
 export function groupsOf(worktrees: readonly WorktreeRow[], agents: readonly AgentRow[]): Group[] {
   const byPath = new Map<string, AgentRow[]>()
@@ -162,13 +165,14 @@ export function summaryOf(agents: readonly AgentRow[], selfId: string) {
     count('input') && `✋ ${count('input')} need input`,
     count('failed') && `✗ ${count('failed')} failed`,
     count('working') && `● ${count('working')} working`,
+    count('waits') && `◌ ${count('waits')} waits`,
     count('idle') && `${count('idle')} idle`,
   ].filter(Boolean)
   return parts.length > 0 ? parts.join(' · ') : 'No other agents'
 }
 
 export function glyphOf(phase: Phase) {
-  return { input: '✋', failed: '✗', working: '●', idle: '○' }[phase]
+  return { input: '✋', failed: '✗', working: '●', waits: '◌', idle: '○' }[phase]
 }
 
 export function ageOf(startedAt: number, now: number) {

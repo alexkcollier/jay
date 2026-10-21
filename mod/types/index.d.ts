@@ -1,4 +1,4 @@
-export type Phase = 'working' | 'input' | 'idle' | 'failed'
+export type Phase = 'working' | 'waits' | 'input' | 'idle' | 'failed'
 
 export type AgentRow = {
   sessionId: string
