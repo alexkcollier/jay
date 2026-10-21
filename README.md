@@ -78,7 +78,7 @@ change to a worker, a background agent in a worktree of its own. See
   |---|---|---|
   | terminal-notifier | `brew install terminal-notifier` | no notices |
   | Ghostty | `brew install --cask ghostty` | no tab control |
-  | lazygit 0.66+ | `brew install lazygit` | review with tuicr only |
+  | lazygit 0.66+, delta | `brew install lazygit git-delta` | review with tuicr only ([review options](docs/review.md#the-review-options)) |
 
   `./install.sh` also gets zjstatus (the bar) from GitHub, and needs `~/.local/bin` on PATH.
   All versions: [Requirements](docs/install.md#requirements).
@@ -119,7 +119,8 @@ change to a worker, a background agent in a worktree of its own. See
   hub Claude, your editor, notices, remove and prune, quit.
 - [Orchestrators](docs/orchestrators.md): one agent per repo that plans and gives each change to
   a worker; its prompt, review and merge, fresh context, an example.
-- [Review](docs/review.md): review by turn, turns and commits modes, lazygit, files, hide review.
+- [Review](docs/review.md): the review options (turns or commits, tuicr or lazygit, the patch
+  renderers), review by turn, files, hide review.
 - [Tasks](docs/tasks.md): dev servers in a tasks tab per worktree (`hub-run`).
 - [Keys](docs/keys.md): all keys of the list, the panes, review and files.
 - [Signs](docs/signs.md): the list's rows and signs, and the agent states.

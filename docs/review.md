@@ -3,6 +3,7 @@
 [README](../README.md) · [Working in the hub](working.md) · [Keys](keys.md#review-tuicr) ·
 [Orchestrators](orchestrators.md)
 
+- [The review options](#the-review-options)
 - [Review by turn](#review-by-turn)
 - [Modes: turns and commits](#modes-turns-and-commits)
 - [New turns](#new-turns)
@@ -10,6 +11,46 @@
   - [The patch in lazygit](#the-patch-in-lazygit)
 - [Files](#files)
 - [Hide review](#hide-review)
+
+## The review options
+
+The review column (right) has three choices. They do not depend on each other.
+
+| Choice | Options | How to change | When it applies |
+|---|---|---|---|
+| What you review (the mode) | **turns** (default): the agent's work, one commit per turn. **commits**: the branch's own commits | `t` in review | at once; it stays for the next picks |
+| The program in the review column | **tuicr** (default) or **lazygit** | `WT_REVIEW=tuicr\|lazygit` in `~/.config/wt-hub/config` | at the next hub start (Ctrl g, Ctrl q, then `wt hub`) |
+| How lazygit draws the patch (lazygit only) | **delta** (default), **difft** or **plain** | `WT_REVIEW_DIFF=delta\|difft\|plain` in `~/.config/wt-hub/config`; `\|` in lazygit cycles them for now | at the next start of lazygit in the pane (a pick, `t` or `q`) |
+
+`e` in review opens [files](#files) (yazi) over review with either program, and Ctrl g `v`
+[hides review](#hide-review).
+
+### tuicr or lazygit
+
+| | tuicr (default) | lazygit (`WT_REVIEW=lazygit`) |
+|---|---|---|
+| Good for | reading a turn and writing review comments for the agent | git actions: stage, commit, rebase (commits mode) |
+| Review comments | yes | no |
+| Turns | the range `base..head` of the turn chain; `(` goes to the newest turn, again for all turns | a view repo with one row per turn (see [Review with lazygit](#review-with-lazygit)) |
+| Commits mode | the branch's own commits, read only | lazygit on the worktree itself, with all its git actions |
+| A new turn | tuicr starts again on the newest turn | the new row comes in; your place stays |
+| The patch | tuicr's own | the hub's renderers: `WT_REVIEW_DIFF` (see [The patch in lazygit](#the-patch-in-lazygit)) |
+| Needs | tuicr 0.27+ | lazygit 0.66+ and delta (`brew install lazygit git-delta`); difftastic for `difft` |
+| Keys | [Review (tuicr)](keys.md#review-tuicr) | [Review (lazygit)](keys.md#review-lazygit-wt_reviewlazygit) |
+
+`t`, `e` and `q` do the same in both: `t` toggles the mode, `e` opens files, `q` goes back to
+the start (the picker, or the newest turn).
+
+### The patch renderers (lazygit only)
+
+| `WT_REVIEW_DIFF` | What it shows | Needs |
+|---|---|---|
+| `delta` (default) | one column of line numbers, a bar on each file (`3/8`, status, path), a line on each hunk (`path:line`, `2/3`), long lines wrapped under the code; `n`/`N` and `l`/`h` jump by file and hunk when the patch has the focus | delta |
+| `difft` | a diff of the syntax (difftastic): a reformat or a moved argument shows as what it is; two number columns | difftastic |
+| `plain` | delta alone: no wrap (`H` / `L` scroll to the side) | delta |
+
+Without delta or difftastic, the renderer shows git's plain diff under a red line that names
+the missing program. tuicr does not use these renderers.
 
 ## Review by turn
 
