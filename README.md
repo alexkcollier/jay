@@ -64,7 +64,8 @@ The hub supports:
   on the newest turn, and new turns come in by themselves.
 - Git state of each worktree at a glance: changes, commits to push or pull, merge conflicts,
   safe to remove.
-- Removal of agents and worktrees after a confirm, and automatic prune of dead agents.
+- Removal of agents and worktrees after a confirm (a worktree goes with its idle agents), and
+  automatic prune of dead agents.
 - macOS notices when an agent finishes a turn or needs input, with a click that shows the agent.
 - Your editor on any file of the worktree (`O` in files).
 - Dev servers in a tasks tab per worktree: their state and ports in the bar, their output
@@ -439,10 +440,10 @@ worktree. When several match, `hub-run` lists them; use the pane id.
 - **Interactive agent**: not removed. Close it in its tab, or `b` first.
 - **Worktree**: `wt remove`, then `claude rm` for each idle background agent in it, then its tasks
   tab closes (the confirm names the agents and the tasks that run). The list never removes a
-  main checkout. An agent that works, or an interactive
-  session in the worktree, stops the removal (the list names it). The branch is deleted only
-  when it is merged. Uncommitted changes stop the removal, and then the agents stay. A dim check
-  sign and a dim name mark a worktree that is safe to remove.
+  main checkout. An agent that works, or an interactive session in the worktree, stops the
+  removal (the list names it). The branch is deleted only when it is merged. Uncommitted changes
+  stop the removal, and then the agents and the tasks tab stay. A dim check sign and a dim name
+  mark a worktree that is safe to remove.
 - **Removed worktree** (a dim `(gone)` row): `claude rm` for each of its agents, with the same
   rules.
 
@@ -564,6 +565,7 @@ The list shows each repo with a `.git` folder 1–2 levels under `$WT_ROOTS` (de
 - Under each repo (bold): its worktrees, the main checkout first; under each worktree, its agents.
   A repo row acts as its main checkout (`N`, `o`, click).
 - A removed worktree that still has agents shows as a dim `<branch> (gone)` row of its repo.
+  `d` on it removes those agents.
 - Agents in no repo show under "no repo" at the bottom, with their folder.
 - A main checkout without an agent is idle, and so is a repo with only an idle main checkout:
   both are dim. `a` hides them.
