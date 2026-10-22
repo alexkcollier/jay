@@ -45,8 +45,12 @@ Elsewhere:
   `--with-mod`), `installed.txt` (the files `install.sh` installed), `no-compat` (there after
   `./install.sh --no-compat`).
 - `~/.claude/jobs/<id>/state.json`: Claude's own state of each background agent. The hub reads
-  `respawnFlags` (the orchestrator prompt), `cwd` and `worktreePath` (a worktree it entered) and
-  `needs` (an agent that waits for its first prompt) there.
+  `respawnFlags` (the orchestrator prompt, the options of a copy), `cwd` and `worktreePath` (a
+  worktree it entered), `linkScanPath` and `resumeSessionId` (its transcript, whose last cwd
+  tells where an agent is that does not run) and `needs` (an agent that waits for its first
+  prompt) there.
+- `~/.local/state/jay/replaced/<old id>`: an old agent entry that a copy replaced (the file has
+  the new id); the list hides it and removes it when its recorded worktree is gone.
 - `~/.claude.json`: Claude's folder trust, which `n`, `N` and `c` can write.
 
 Settings: `~/.config/jay/config` ([Settings](install.md#settings)). Environment variables

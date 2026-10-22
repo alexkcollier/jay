@@ -15,12 +15,12 @@
 
 | Key | Action |
 |---|---|
-| Enter | open the row; the focus moves (agent: middle column; worktree: review) |
+| Enter | open the row; the focus moves (agent: middle column; worktree: review). An agent that cannot wake (`home gone`, `lost`): continue it as a copy (asks first) |
 | click, double-click | open the row; an agent moves the focus, a worktree keeps it in the list |
 | `n` | new idle background agent in this row's worktree (on a main checkout: the repo's orchestrator; when it has one, the hub shows it) |
 | `N` | new worktree of this row's repo (asks the branch) + idle agent |
 | `o` | the row's own Ghostty tab: an interactive agent's tab, else the worktree's zellij session (`jay open`) |
-| `d` | remove the agent, or the worktree with its idle agents (asks first) |
+| `d` | remove the agent, or the worktree with its idle agents (asks first; agents that came from it and are in another worktree go on there first, as copies) |
 | `b` | an idle interactive session goes on as a background agent (asks first) |
 | `c` | an idle orchestrator (`◇`) or the hub Claude (`◆ hub` row) gets a fresh context: `/clear`, same prompt, name and id (asks first) |
 | `a` | hide / show idle repos and main checkouts |

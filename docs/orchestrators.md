@@ -335,7 +335,8 @@ and 3 when the agent is missing or not idle.
 
 When you tell the orchestrator to make a change itself, it goes into a worktree with
 `EnterWorktree`. Claude keeps that in the job's `state.json` (`cwd` is where it came from,
-`worktreePath` the worktree).
+`worktreePath` the worktree; empty when it entered a worktree that was there already, then the
+list reads the folder from `claude agents` or the transcript).
 
 - It stays under its main checkout in the list, with its `◇` when it is the orchestrator, and
   `→ <branch>` after its age names the worktree it is in.
@@ -350,7 +351,9 @@ When you tell the orchestrator to make a change itself, it goes into a worktree 
   the files of the new worktree, so the next turn shows only its own changes.
 
 `d` and the prune treat any agent that went into a worktree with `EnterWorktree` in this way,
-also one that did not come from a main checkout.
+also one that did not come from a main checkout. Such an agent from a worktree needs that
+worktree to wake: see [When the folder an agent came from
+goes](working.md#when-the-folder-an-agent-came-from-goes).
 
 ## The hub Claude and orchestrators
 

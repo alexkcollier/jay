@@ -16,6 +16,11 @@ bin/jay-pane) ⇄ files (yazi).
 - A key that marks a task pane as private, so that `jay run log` refuses to read it (the bar
   would still show its state and ports). Not built; the README notes it.
 - Tab control for terminals other than Ghostty.
+- An agent whose home is gone goes on as a copy with a new id (docs/working.md, "When the folder
+  an agent came from goes"): its turn chain starts again, and an old entry whose recorded
+  worktree is on disk stays hidden until that worktree goes. Claude has no option to move an
+  agent's home, or to remove an entry and keep its recorded worktree. When it gets one: use it
+  in `jay_continue_in` / `jay_drop_replaced` (lib/jay-lib.sh), and keep the id.
 - On record, not accepted yet (do not build unless the user asks): a tuicr config for the narrow
   review column (gruvbox-dark, unified, wrap gutter, compact folders), and a revdiff trial with
   a turn picker that sends review notes to the agent (a switch to revdiff is fine if tuicr gets
@@ -189,6 +194,23 @@ at a time). Be careful with `wt step prune` in your own repos: in one repo it wo
   replaces the old hooks and installs the mod again: Claude cannot load an installed mod after
   its plugin name changes ("Plugin wt-hub not found in marketplace wt-hub"). The checkout folder
   keeps its name for now (see docs/install.md, "Move the checkout folder").
+
+## Done 2026-10-22
+
+- Agents whose home is gone. Seen: an agent started in worktree A went into worktree B
+  (EnterWorktree), A was removed, and the agent could not wake ("Workspace not trusted. <A>
+  could not be resolved on disk"). Probe results (claude 2.1.308, a throwaway repo): Claude
+  wakes an agent in its home (state.json cwd); `claude --bg --resume <sid>` without options
+  wakes the same agent there and fails the same way; with A back as a git worktree, the same
+  command wakes the same id, and it runs in B; with options it starts a copy (new id, home B,
+  the conversation is there). EnterWorktree with the path of an existing worktree leaves
+  worktreePath empty (the transcript's cwd tells where it is); with a name it makes the
+  worktree (worktrunk's hook) and records it. `claude rm` of the old entry tries to delete
+  that recorded worktree: it refuses while a session works there, on unpushed commits, and for
+  a hook-made one (no WorktreeRemove hook), but a clean, pushed git-made one would go. Chosen:
+  `d` on A moves such agents first (copies in B, then A goes), never leaving one that cannot
+  wake; the list marks `home gone` / `lost` and a pick repairs; `jay go --repair`. Refusing `d`
+  until the agent left B was the other option: it leaves the user no way to keep the agent in B.
 
 ## How to work
 

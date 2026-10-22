@@ -207,7 +207,8 @@ to `~/.local/state/jay/notify.log`.
   worktree with `EnterWorktree` (an orchestrator, say) stops the removal (the list names it).
   The branch is deleted only when it is merged. Uncommitted changes stop the removal, and then
   the agents and the tasks tab stay. A dim check sign and a dim name mark a worktree that is safe
-  to remove.
+  to remove. Agents that came from this worktree and are in another one now go on there first
+  ([When the folder an agent came from goes](#when-the-folder-an-agent-came-from-goes)).
 - **Removed worktree** (a dim `(gone)` row): `claude rm` for each of its agents, with the same
   rules.
 
@@ -220,6 +221,43 @@ turn chains of gone agents (`jay snapshot --prune`). `p` prunes the dead agents 
 after a confirm.
 
 Idle background agents stay until you remove them.
+
+## When the folder an agent came from goes
+
+A background agent that went into another worktree (`EnterWorktree`) keeps the folder it
+started in as its home. Claude wakes a stopped agent in its home, also when the agent was in the
+other worktree. When the home is gone, the agent cannot wake: `claude attach <id>` says
+"Couldn't wake <id> — Workspace not trusted. <home> could not be resolved on disk". The same
+occurs with `claude --bg --resume <session id>` without options: it wakes the same agent. With
+options (`--name`, `--model`), `claude --bg --resume` starts a copy: a new agent with a new id
+and the same conversation. The home of the copy is the folder where it starts.
+
+Where such an agent is now: `worktreePath` in its `state.json` when `EnterWorktree` made the
+worktree. When it entered a worktree that was there already (with its path), `worktreePath` is
+empty. Then the list uses the folder from `claude agents` while the agent runs, else the last
+folder in its transcript.
+
+- `d` on its home: the confirm names each such agent and the worktree it is in
+  (`shop/two → ~/…/shop.b`). With `y`, each one goes on first as a copy in its worktree. An agent
+  that runs stops first; one that works or waits for input stops the removal. Then the worktree
+  goes, then the old entries. Thus no agent is left that cannot wake.
+- In the list, a yellow `home gone` after the age marks such an agent, under the worktree it is
+  in. Enter or a click on it (when it does not run) asks: `y` continues it there as a copy; `h`
+  only hides the old entry (when you continued it already, say with `claude --bg --resume`
+  and options). An agent that runs works on, but it cannot wake after it stops.
+- A red `lost` marks one whose worktree is gone too (under the `(gone)` row of its home). A pick
+  offers `m`, a copy in the repo's main checkout, or `x`, `claude rm` (the transcript stays).
+- `jay go <id>` on such an agent says what to do, and exits 1. `jay go --repair <id>` continues
+  it: in its worktree, or in the main checkout when that worktree is gone too.
+- The copy has a new id, so its turn chain starts again. Its name is the old one when the old
+  entry goes at once, else `<name>-2` (two agents never share a name).
+- The old entry: `claude rm` deletes the worktree that Claude recorded for the agent
+  (`worktreePath`) when git can remove it. That is the worktree where the copy works now. Thus
+  the list removes the old entry only when no recorded worktree of it is on disk. Else the entry
+  stays, hidden from the list (a mark `~/.local/state/jay/replaced/<old id>` with the new id). It
+  goes with that worktree: `d` on the worktree, or the prune after the worktree is gone. For a
+  worktree from a WorktreeCreate hook (worktrunk), `claude rm` and the agent view (ctrl+x) keep
+  the entry while the worktree is on disk.
 
 ## Tidy the list
 
