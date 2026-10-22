@@ -11,6 +11,9 @@ for _key in ROOTS TERMINAL EDITOR EDITOR_GUI TASK_SHELL LAUNCHER REVIEW REVIEW_D
   [[ $_key == HUB_SESSION ]] && _new=JAY_SESSION
   [[ -z "${!_new:-}" && -n "${!_old:-}" ]] && export "$_new=${!_old}"
 done
+# JAY_MUX from the environment wins over the hub pane the caller runs in; the file's does not
+# (see "The mux layer").
+_jay_mux_env=${JAY_MUX:-}
 if [[ -f "$JAY_CONFIG" ]]; then
   _re='^[[:space:]]*(JAY|WT)_(ROOTS|TERMINAL|EDITOR|EDITOR_GUI|TASK_SHELL|LAUNCHER|REVIEW|REVIEW_DIFF|AUTO_RESPAWN|MUX|ORCHESTRATE)[[:space:]]*=[[:space:]]*(.*)$'
   while IFS= read -r _line || [[ -n "$_line" ]]; do
@@ -512,9 +515,9 @@ jay_agent_phases() {
 JAY_SESSION=${JAY_SESSION:-jay}
 
 # --- The mux layer: every call to the hub's multiplexer goes through jay_mux_* ---
-# The backend is lib/jay-mux-$JAY_MUX.sh: zellij (the default) or tmux (JAY_MUX in the
-# environment or ~/.config/jay/config). The scripts say what they want ("focus the
-# agent column", "cover review with files"), the backend says how. jay-mux <name> [args] runs
+# The backend is lib/jay-mux-$JAY_MUX.sh: tmux or zellij (jay_which_mux, below). The scripts
+# say what they want ("focus the agent column", "cover review with files"), the backend says
+# how. jay-mux <name> [args] runs
 # one from outside bash (a pane id "self" is the caller's own pane). Pane and tab ids are the
 # backend's own strings; scripts pass them on and never take them apart.
 #   session  jay_mux_in_hub, jay_mux_alive, jay_mux_has_client, jay_mux_server_pid, jay_mux_kill,
@@ -532,7 +535,53 @@ JAY_SESSION=${JAY_SESSION:-jay}
 # A zellij hub and a tmux hub can run side by side: each keeps its panes' state in its own
 # JAY_HUB_STATE (the tmux hub in $JAY_STATE/tmux); the marks, the turn chains and the hub
 # Claude are shared.
-case ${JAY_MUX:-} in
+
+# The backend, first that applies: JAY_MUX in the environment; the hub of the pane the caller
+# runs in (a pane of jay's tmux server, or of the zellij session $JAY_SESSION; not a background
+# agent, which can carry them from where it started); JAY_MUX in ~/.config/jay/config; the hub
+# that runs, and tmux when both or none run. This file loads on each list tick and hook: no
+# zellij call, and no process at all unless a zellij hub's socket is there. A socket stays when
+# its server is killed, so pgrep asks which server runs.
+jay_which_mux() {
+  local tsock tmp zdir zsock=""
+  if [[ -n "${_jay_mux_env:-}" ]]; then
+    JAY_MUX=$_jay_mux_env
+    return 0
+  fi
+  if [[ -z "${CLAUDE_JOB_DIR:-}" ]]; then
+    tsock=${TMUX:-}
+    tsock=${tsock%%,*}
+    if [[ -n "$tsock" && "${tsock##*/}" == "${JAY_TMUX_SOCKET:-jay}" ]]; then
+      JAY_MUX=tmux
+      return 0
+    fi
+    if [[ -n "${ZELLIJ:-}" && "${ZELLIJ_SESSION_NAME:-}" == "$JAY_SESSION" ]]; then
+      JAY_MUX=zellij
+      return 0
+    fi
+  fi
+  [[ "${JAY_MUX:-}" == tmux || "${JAY_MUX:-}" == zellij ]] && return 0
+  JAY_MUX=tmux
+  # zellij's sockets: $ZELLIJ_SOCKET_DIR, else $XDG_RUNTIME_DIR/zellij or $TMPDIR/zellij-<uid>,
+  # then a folder per protocol version.
+  tmp=${TMPDIR:-$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null)}
+  tmp=${tmp:-/tmp}
+  for zdir in "${ZELLIJ_SOCKET_DIR:-}" "${XDG_RUNTIME_DIR:+$XDG_RUNTIME_DIR/zellij}" "${tmp%/}/zellij-$UID"; do
+    [[ -n "$zdir" ]] || continue
+    for zsock in "$zdir"/*/"$JAY_SESSION"; do
+      [[ -S "$zsock" ]] && break 2
+    done
+    [[ -n "${ZELLIJ_SOCKET_DIR:-}" ]] && break
+  done
+  [[ -S "$zsock" ]] || return 0
+  [[ -S "${TMUX_TMPDIR:-/tmp}/tmux-$UID/${JAY_TMUX_SOCKET:-jay}" ]] \
+    && pgrep -a -f "tmux -L ${JAY_TMUX_SOCKET:-jay}( |\$)" >/dev/null 2>&1 && return 0
+  pgrep -a -f "zellij --server $zsock\$" >/dev/null 2>&1 && JAY_MUX=zellij
+  return 0
+}
+jay_which_mux
+unset _jay_mux_env
+case $JAY_MUX in
   tmux) JAY_HUB_STATE="$JAY_STATE/tmux" ;;
   *) JAY_MUX=zellij JAY_HUB_STATE=$JAY_STATE ;;
 esac

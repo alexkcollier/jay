@@ -1,9 +1,9 @@
 # 🐦 jay
 
 A worktree and agent hub for macOS. The name: a blue jay, the bird in the real tree beside all
-the worktrees. One zellij session, "jay", shows three columns: a live list of the worktrees and
-Claude agents across your projects, the picked agent, and a review of that agent's work (tuicr
-on its turns, or yazi on its files). Built on [worktrunk](https://github.com/max-sixty/worktrunk)
+the worktrees. One session, "jay" (on jay's own tmux server, or in zellij), shows three columns:
+a live list of the worktrees and Claude agents across your projects, the picked agent, and a
+review of that agent's work (tuicr on its turns, or yazi on its files). Built on [worktrunk](https://github.com/max-sixty/worktrunk)
 and Claude Code background agents.
 
 ## What the hub is
@@ -42,8 +42,9 @@ and Claude Code background agents.
   the picked worktree's bright, the others dim), then the time. When the line is too narrow, the
   other worktrees' tasks become `+N` first, then the picked worktree's tasks only their signs,
   then the counts lose their words; the left part is never cut.
-- **tmux** (optional): `JAY_MUX=tmux jay` runs the same hub on jay's own tmux server, beside a
-  zellij hub. See [The tmux hub](docs/install.md#the-tmux-hub-jay_muxtmux).
+- **tmux or zellij**: a new hub runs on jay's own tmux server; `JAY_MUX=zellij jay` runs the
+  same hub in zellij, also beside a tmux hub. Without `JAY_MUX`, the scripts use the hub that
+  runs. See [tmux or zellij](docs/install.md#tmux-or-zellij-jay_mux).
 - **Tasks tabs** (one per worktree, Ctrl g Tab). Shell panes for dev servers, watchers and
   `docker compose up`, which you and the agents both see. See [Tasks](docs/tasks.md).
 
@@ -70,6 +71,7 @@ hub Claude plans and starts workers for it. See [Orchestrators](docs/orchestrato
 
   | Required | Install |
   |---|---|
+  | tmux 3.5+ | `brew install tmux` |
   | zellij 0.45.1+ | `brew install zellij` |
   | worktrunk (`wt`) 0.80+ | `brew install worktrunk` |
   | fzf 0.74+ | `brew install fzf` |
@@ -95,7 +97,7 @@ hub Claude plans and starts workers for it. See [Orchestrators](docs/orchestrato
 1. Install the tools and the hub:
 
    ```sh
-   brew install worktrunk zellij fzf jq tuicr yazi
+   brew install worktrunk tmux zellij fzf jq tuicr yazi
    brew install --cask claude-code
    brew install terminal-notifier; brew install --cask ghostty   # optional
    git clone <this repo> jay && cd jay

@@ -1,4 +1,4 @@
-# The mux layer, zellij backend (JAY_MUX=zellij, the default). jay-lib.sh sources it; the API
+# The mux layer, zellij backend (JAY_MUX=zellij). jay-lib.sh sources it; the API
 # is described there ("The mux layer"). Every call to the hub's zellij session goes through
 # these functions. A pane id is zellij's "terminal_<n>"; a tab id is zellij's number.
 # The zellij traps that these functions work around are in CLAUDE.md ("zellij 0.45 facts").

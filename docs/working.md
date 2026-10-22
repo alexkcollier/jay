@@ -38,20 +38,20 @@
 - Dev servers in a tasks tab per worktree: their state in the status line (with the project that owns
   each one), their ports in `jay run ls` and their pane titles, their output readable by agents
   (`jay run`), no port or repo config ([Tasks](tasks.md)). Ctrl g `t` picks any task.
-- Two multiplexers: zellij (the default) or tmux (`JAY_MUX=tmux`), with the same layout and keys
-  ([The tmux hub](install.md#the-tmux-hub-jay_muxtmux)).
+- Two multiplexers: tmux (the default) or zellij (`JAY_MUX=zellij`), with the same layout and
+  keys ([tmux or zellij](install.md#tmux-or-zellij-jay_mux)).
 
 ## Start the hub
 
 `jay` goes to the hub's Ghostty tab when the hub runs in one. Else it opens the hub in this
-terminal: it attaches to a hub that answers, or it starts a fresh hub (the zellij session
-`jay`). It opens a new Ghostty tab only when it has no terminal (an agent, a script,
-`/jay hub`) or runs inside another zellij session. `--here` and `--tab` choose. See
-[Commands](commands.md).
+terminal: it attaches to a hub that answers, or it starts a fresh hub (the session `jay` on
+jay's own tmux server, `tmux -L jay`). It opens a new Ghostty tab only when it has no terminal
+(an agent, a script, `/jay hub`) or runs inside another tmux or zellij session. `--here` and
+`--tab` choose. See [Commands](commands.md).
 
-`JAY_MUX=tmux jay` does the same for the tmux hub: the session `jay` on jay's own tmux server
-(`tmux -L jay`), beside a zellij hub if one runs. Inside a tmux session it opens a new tab. See
-[The tmux hub](install.md#the-tmux-hub-jay_muxtmux).
+`JAY_MUX=zellij jay` does the same for the zellij hub (the zellij session `jay`), beside a tmux
+hub if one runs. Without `JAY_MUX`, jay and the scripts use the hub that runs: see
+[tmux or zellij](install.md#tmux-or-zellij-jay_mux).
 
 ## Start agents in the background
 

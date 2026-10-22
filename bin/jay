@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# jay — the hub, session "jay" in zellij (default) or in jay's own tmux server (JAY_MUX=tmux):
+# jay — the hub, session "jay" on jay's own tmux server (default) or in zellij (JAY_MUX=zellij):
 # the live worktree list (left), the picked agent (middle; at start the hub Claude) and review +
 # files (right); a tasks tab per worktree for dev servers (jay run). Goes to the hub's Ghostty
 # tab when it has one, else opens the hub in this terminal; a new tab only without a terminal
@@ -15,8 +15,9 @@ usage() {
 jay: a worktree and agent hub (it was wt-hub).
 
   jay                       open the hub (session "jay"): its Ghostty tab, else this
-                            terminal, else a new tab. JAY_MUX=tmux: the tmux hub
-                            (beside a zellij one); tmux -L jay kill-server ends it.
+                            terminal, else a new tab. The hub that runs, else a
+                            tmux hub (tmux -L jay kill-server ends it);
+                            JAY_MUX=zellij: the zellij hub (beside a tmux one).
                             A list, agent or review pane that is gone comes back
   jay --here | --tab        open it in this terminal | in a new Ghostty tab
   jay --print-layout        print the hub's layout

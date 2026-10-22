@@ -80,9 +80,10 @@ version_ge() {
     exit 0 }'
 }
 
-# tool NAME MIN HOW: check a program on PATH (and mise's shims) and its version.
+# tool NAME MIN HOW [FLAG]: check a program on PATH (and mise's shims) and its version (FLAG
+# prints it: --version, tmux's -V).
 tool() {
-  local name=$1 min=$2 how=$3 path version
+  local name=$1 min=$2 how=$3 flag=${4:---version} path version
   path=$(PATH="$HOME/.local/share/mise/shims:$PATH" command -v "$name" 2>/dev/null) || {
     need "$name not found: $how"
     # For one brew command at the end.
@@ -93,8 +94,8 @@ tool() {
     return 0
   }
   # A program that fails or prints no version (a broken shim) must not stop the script.
-  version=$("$path" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1) || true
-  if [[ -z "$version" ]] && ! "$path" --version >/dev/null 2>&1; then
+  version=$("$path" "$flag" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1) || true
+  if [[ -z "$version" ]] && ! "$path" "$flag" >/dev/null 2>&1; then
     need "$name ($path) does not run: $how"
   elif [[ -n "$min" && -n "$version" ]] && ! version_ge "$version" "$min"; then
     need "$name $version is older than $min: $how"
@@ -132,13 +133,14 @@ check_tools() {
   head_ "Tools"
   [[ "$(uname -s)" == Darwin ]] || need "macOS only (Ghostty AppleScript, lsappinfo, BSD tools)"
   tool zellij 0.45.1 "brew install zellij"
-  # tmux: the other hub (JAY_MUX=tmux), on jay's own server and config. Optional for now.
-  if [[ "$(setting JAY_MUX)" == tmux ]]; then
-    tool tmux 3.5 "brew install tmux (the hub: JAY_MUX=tmux)"
+  # tmux: the hub, on jay's own server and config; not needed while JAY_MUX=zellij is set or a
+  # zellij hub runs alone (jay_which_mux).
+  if [[ "$(setting JAY_MUX)" != zellij ]]; then
+    tool tmux 3.5 "brew install tmux (the hub)" -V
   elif command -v tmux >/dev/null 2>&1; then
-    note "tmux $(tmux -V 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1): JAY_MUX=tmux jay starts the tmux hub (beside the zellij one); 3.5 or newer"
+    note "tmux $(tmux -V 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1): jay uses the zellij hub now (JAY_MUX=zellij, or the zellij hub runs); 3.5 or newer for the tmux hub"
   else
-    note "tmux: optional, for the tmux hub (JAY_MUX=tmux; brew install tmux)"
+    note "tmux: jay uses the zellij hub now (JAY_MUX=zellij, or the zellij hub runs); brew install tmux for the tmux hub, the default"
   fi
   tool wt 0.80.0 "brew install worktrunk"
   tool fzf 0.74.0 "brew install fzf"
@@ -484,9 +486,9 @@ install_settings() {
 # binary onto the new one at a quiet moment (claude respawn); off — only jay respawn does.
 # JAY_AUTO_RESPAWN=idle
 
-# The hub's multiplexer: zellij (default) or tmux (jay's own tmux server, beside a zellij hub;
-# tmux 3.5 or newer). JAY_MUX=tmux jay tries it without this line.
-# JAY_MUX=zellij
+# The hub's multiplexer: tmux (jay's own tmux server; tmux 3.5 or newer) or zellij. Without
+# this line: in a hub's pane, that hub; else the hub that runs, and tmux when both or none run.
+# JAY_MUX=tmux
 
 # The repos that always get an orchestrator, ':' between them: a repo's name as the list shows
 # it (shop), or client/repo (acme/shop). When such a repo has none, a pick of one of its rows

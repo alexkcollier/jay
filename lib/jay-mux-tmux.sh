@@ -1,5 +1,5 @@
-# The mux layer, tmux backend (JAY_MUX=tmux). jay-lib.sh sources it; the API is described
-# there ("The mux layer"). The hub is session $JAY_SESSION on jay's own tmux server
+# The mux layer, tmux backend (JAY_MUX=tmux, the default). jay-lib.sh sources it; the API is
+# described there ("The mux layer"). The hub is session $JAY_SESSION on jay's own tmux server
 # (`tmux -L $JAY_TMUX_SOCKET`, config ~/.config/jay/tmux.conf from config/tmux/jay.conf), so the
 # user's ~/.tmux.conf and their own tmux sessions do not matter, and a zellij hub can run beside
 # it. A pane id is tmux's "%<n>", a tab is a window and its id is "@<n>". Hidden panes (review

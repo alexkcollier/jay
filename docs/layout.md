@@ -42,12 +42,13 @@ lib/
   jay-lib.sh             shared helpers: settings, zellij timeout, Ghostty tabs, hub panes and
                          targets, the hub Claude and orchestrator prompts, job state (jay_jobs);
                          the list of the mux layer's functions (jay_mux_*), and it sources the
-                         backend of JAY_MUX; the status line's text for both backends
+                         backend of JAY_MUX (jay_which_mux: else the hub pane's, else the hub
+                         that runs); the status line's text for both backends
                          (jay_bar_left, jay_bar_fit: its parts and the cut to the width)
-  jay-mux-zellij.sh      the mux layer for zellij (the default): every call to the hub's zellij,
-                         the KDL layout and its zjstatus status line at the top, hide review as
-                         a floating pane
-  jay-mux-tmux.sh        the mux layer for tmux (JAY_MUX=tmux): jay's own server (tmux -L jay),
+  jay-mux-zellij.sh      the mux layer for zellij (JAY_MUX=zellij): every call to the hub's
+                         zellij, the KDL layout and its zjstatus status line at the top, hide
+                         review as a floating pane
+  jay-mux-tmux.sh        the mux layer for tmux (the default): jay's own server (tmux -L jay),
                          files over review by swap-pane, hide review by break-pane/join-pane
   wt-lib.sh              shim: sources jay-lib.sh (scripts of an old install source this path)
 config/

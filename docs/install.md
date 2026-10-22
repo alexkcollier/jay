@@ -10,7 +10,7 @@
 - [Coming from wt-hub](#coming-from-wt-hub)
 - [Settings](#settings)
 - [Pane keys](#pane-keys)
-- [The tmux hub (JAY_MUX=tmux)](#the-tmux-hub-jay_muxtmux)
+- [tmux or zellij (JAY_MUX)](#tmux-or-zellij-jay_mux)
 - [Uninstall](#uninstall)
 - [Work on jay](#work-on-jay)
 
@@ -25,7 +25,8 @@ reads the front app with `lsappinfo`.
 | Tool | Tested with | From | Used for |
 |---|---|---|---|
 | macOS | 27.0.1 | | `osascript`, `lsappinfo`, `stat -f`, `cp -c` |
-| zellij | 0.45.1 | `brew install zellij` | the hub session; the scripts use 0.45 behavior (see [CLAUDE.md](../CLAUDE.md)) |
+| tmux | 3.8 (3.5+) | `brew install tmux` | the hub, on jay's own server and config; see [tmux or zellij](#tmux-or-zellij-jay_mux). Not needed while `JAY_MUX=zellij` is set |
+| zellij | 0.45.1 | `brew install zellij` | the zellij hub (`JAY_MUX=zellij`), `jay open`, interactive agents in `jay go`; the scripts use 0.45 behavior (see [CLAUDE.md](../CLAUDE.md)) |
 | worktrunk (`wt`) | 0.80.0 | `brew install worktrunk` | the worktree operations (`wt switch`, `wt list`, `wt merge`, `wt remove`, `wt step`), `wt list` data, task notes |
 | fzf | 0.74.1 (0.74+) | `brew install fzf` | the list (`--footer`, `transform-footer`, `--listen`, `--id-nth`) |
 | jq | 1.7.1 | `brew install jq` (in `/usr/bin` on recent macOS) | all JSON |
@@ -44,7 +45,6 @@ reads the front app with `lsappinfo`.
 | Tool | Without it | Tested with | From | Used for |
 |---|---|---|---|---|
 | zjstatus | zellij's compact bar at the bottom, no status line | 0.25.0 | `./install.sh` gets it from GitHub: `~/.local/share/jay/zjstatus-v0.25.0.wasm` | the status line at the top of each tab (zellij hub) |
-| tmux | the zellij hub only | 3.8 (3.5+) | `brew install tmux` | the tmux hub (`JAY_MUX=tmux`), on jay's own server and config; see [The tmux hub](#the-tmux-hub-jay_muxtmux). Required when `JAY_MUX=tmux` is set |
 | Nerd Font | the git signs show as boxes | | Ghostty's built-in font has the Nerd Font symbols; in another terminal, set a Nerd Font | the Octicons in the git signs |
 | Ghostty | no tab control ([Terminals](#terminals)) | 1.3.2 (1.3+) | `brew install --cask ghostty` | tabs through AppleScript: `jay`, `jay go`, `jay open`, `jay edit`, notices |
 | terminal-notifier | no notices | 3.1.0 | `brew install terminal-notifier` | notices |
@@ -56,7 +56,8 @@ reads the front app with `lsappinfo`.
 What `./install.sh --check` checks:
 
 - macOS.
-- zellij 0.45.1, worktrunk 0.80.0, fzf 0.74.0, jq 1.7, tuicr 0.27.0, yazi 26.0 or newer. Each
+- tmux 3.5 (not while the hub is the zellij hub: `JAY_MUX=zellij`, or the zellij hub runs
+  alone), zellij 0.45.1, worktrunk 0.80.0, fzf 0.74.0, jq 1.7, tuicr 0.27.0, yazi 26.0 or newer. Each
   missing or old tool is a TODO line with its `brew install` command, and the result at the end
   gives one `brew install` command for all missing tools. A program that is on PATH but does
   not run (a broken shim, say) is a TODO too.
@@ -252,7 +253,7 @@ hooks in background agents and a notice click.
 | `JAY_REVIEW` | `tuicr` | the review pane: `tuicr` (review comments) or `lazygit` (git actions); see [Review with lazygit](review.md#review-with-lazygit) |
 | `JAY_REVIEW_DIFF` | `delta` | the patch in lazygit review: `delta`, `difft` (difftastic) or `plain` (delta, no wrap); see [The patch in lazygit](review.md#the-patch-in-lazygit) |
 | `JAY_AUTO_RESPAWN` | `idle` | after a Claude Code update: `idle`, the list moves each agent that runs the old version onto the new one at a quiet moment; `off`, only `jay respawn` does; see [Claude Code updates](working.md#claude-code-updates) |
-| `JAY_MUX` | `zellij` | the hub's multiplexer: `zellij` or `tmux` (jay's own tmux server); see [The tmux hub](#the-tmux-hub-jay_muxtmux) |
+| `JAY_MUX` | the hub that runs, else `tmux` | the hub's multiplexer: `tmux` (jay's own tmux server) or `zellij`; see [tmux or zellij](#tmux-or-zellij-jay_mux) |
 | `JAY_ORCHESTRATE` | none | the repos that always get an orchestrator, `:` between them: a repo's name as the list shows it (`shop`), or `client/repo` (`acme/shop`) when two clients have a repo of that name; any case. A pick of a row of such a repo starts its orchestrator when it has none; see [When to start one](orchestrators.md#when-to-start-one) |
 
 The old `WT_` names (`WT_ROOTS`, `WT_REVIEW`, ...) still work, in the file and in the
@@ -292,23 +293,32 @@ Binds of wt-hub (`hub-run`, `wt-sidebar`) still work through the shims.
 
 The tmux hub needs none of these: its keys ship in `~/.config/jay/tmux.conf`.
 
-## The tmux hub (JAY_MUX=tmux)
+## tmux or zellij (JAY_MUX)
 
-The hub can run on tmux instead of zellij (optional for now; zellij stays the default). It runs
-on jay's own tmux server (`tmux -L jay`) with jay's own config (`~/.config/jay/tmux.conf`, from
-`config/tmux/jay.conf`; `./install.sh` puts it there). Your `~/.tmux.conf`, your own tmux
-sessions and `~/.config/zellij/config.kdl` do not matter to it. The layout, the picks, review
-and files, the tasks windows, the bar and the keys (Ctrl g, then one key: [Keys](keys.md#panes-the-tmux-hub))
-are the same as in the zellij hub.
+The hub runs on tmux (the default) or on zellij. The tmux hub runs on jay's own tmux server
+(`tmux -L jay`) with jay's own config (`~/.config/jay/tmux.conf`, from `config/tmux/jay.conf`;
+`./install.sh` puts it there). Your `~/.tmux.conf`, your own tmux sessions and
+`~/.config/zellij/config.kdl` do not matter to it. The layout, the picks, review and files, the
+tasks windows, the bar and the keys (Ctrl g, then one key: [Keys](keys.md#panes-the-tmux-hub))
+are the same in both hubs.
 
-1. `brew install tmux` (3.5 or newer), then `./install.sh` (it installs the config).
-2. Try it beside the zellij hub: in a new Ghostty tab, `JAY_MUX=tmux jay`. Each hub keeps its
-   panes' state apart (the tmux hub in `~/.local/state/jay/tmux`); both show the same agents,
-   marks, turn chains and hub Claude. Both can show the hub Claude at once: its screen then
-   takes the size of the last view that opened it.
-3. To keep it: `JAY_MUX=tmux` in `~/.config/jay/config`. Then `jay`, `jay go`, `jay run` and the
-   notices use the tmux hub; without the line, agents' `jay run` and notices go to the zellij
-   hub.
+Which hub `jay`, `jay go`, `jay run`, the hooks and the notices use, first that applies:
+
+1. `JAY_MUX` (`tmux` or `zellij`) in the environment.
+2. In a pane of a hub: that hub (a pane of jay's tmux server, or of the zellij session `jay`).
+3. `JAY_MUX` in `~/.config/jay/config`.
+4. The hub that runs. When both run or none runs: tmux, so a plain `jay` starts a tmux hub.
+
+The check costs no process while no zellij hub runs (it looks for the hubs' socket files);
+with a zellij hub, one `pgrep` (a socket stays when its server is killed). It never calls
+zellij.
+
+Both hubs can run side by side: `JAY_MUX=zellij jay` in a new Ghostty tab starts or opens the
+zellij hub beside the tmux hub. Each hub keeps its panes' state apart (the tmux hub in
+`~/.local/state/jay/tmux`); both show the same agents, marks, turn chains and hub Claude. Both
+can show the hub Claude at once: its screen then takes the size of the last view that opened
+it. While both run, a script outside the hubs (an agent's `jay run`, a notice) goes to the tmux
+hub, unless `JAY_MUX` names the other.
 
 `jay` attaches to the tmux hub when it runs. Ctrl g `q` detaches; `tmux -L jay kill-server`
 ends it (its tasks stop, the agents run on). Ghostty sends Shift+Enter and the other modified

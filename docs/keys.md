@@ -122,7 +122,7 @@ to locked mode. `1` `2` `3` `h` `l` `;` `v` Tab `r` need the binds in
 
 ## Panes (the tmux hub)
 
-The tmux hub (`JAY_MUX=tmux`) runs on jay's own tmux server with its own config
+The tmux hub (the default; `JAY_MUX=tmux`) runs on jay's own tmux server with its own config
 (`~/.config/jay/tmux.conf`, from `config/tmux/jay.conf`): your `~/.tmux.conf` does not load
 there, and there is no prefix key. Ctrl g, then one key; the status line shows the keys (in
 place of the agent counts) while it waits.

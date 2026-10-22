@@ -61,6 +61,9 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   `JAY_MUX=tmux JAY_TMUX_SOCKET=<test name> TMUX_TMPDIR=<tmp>` (as `tests/smoke-tmux.sh`), with
   `TMUX`/`TMUX_PANE` unset; end it with `tmux -L <test name> kill-server`. Keep the fake HOME
   short (`/tmp`): fzf's `--listen` socket and tmux's socket fail over 104 bytes of path.
+- A test sets `JAY_MUX`, or `TMUX_TMPDIR` and `ZELLIJ_SOCKET_DIR` of its own: without
+  `JAY_MUX`, `lib/jay-lib.sh` takes the hub that runs (`jay_which_mux`), which can be the live
+  hub. `tests/lib.sh` sets `JAY_MUX=zellij`.
 - Starting a pane in the live hub from an agent: strip `CLAUDE*`/`ANTHROPIC*` env vars. The hub
   server must not inherit them either (`jay --here` removes them before zellij starts).
 - Never replace a suspended pane in place on the live hub; wait until it is visible.
@@ -123,6 +126,9 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   with the places. `resize -p <pane> increase|decrease right` moves its right border.
 - A server can outlive its session after a quit and hang every zellij command; all calls in
   `lib/jay-lib.sh` go through a 5 s timeout wrapper, and `jay` kills such a server.
+- A session's socket is `$TMPDIR/zellij-<uid>/contract_version_1/<session>` (`$ZELLIJ_SOCKET_DIR`
+  in place of `$TMPDIR/zellij-<uid>`); the server runs as `zellij --server <that path>`. A
+  server killed with -9 leaves its socket; `delete-session --force` removes it.
 
 ## tmux facts (3.8, from the tests of the tmux hub)
 

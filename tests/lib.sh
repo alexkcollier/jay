@@ -15,8 +15,11 @@ trap 'rm -rf "$TMP"' EXIT
 # The user's Claude, zellij and hub variables must not reach the scripts: an agent's
 # CLAUDE_JOB_DIR changes the turn chain's name, and ZELLIJ* would point at a live session.
 # WT_ are the old names of the JAY_ variables (jay was wt-hub).
-for _var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC|ZELLIJ|JAY_|WT_|GIT_)'); do unset "$_var"; done
+for _var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC|ZELLIJ|JAY_|WT_|GIT_|TMUX$|TMUX_PANE$)'); do unset "$_var"; done
 unset _var
+# The tests of the zellij hub name it: without JAY_MUX the hub that runs on this machine would
+# choose the backend (test-which-mux.sh tests that choice).
+export JAY_MUX=zellij
 export HOME="$TMP/home" STUB="$TMP/stub"
 export PATH="$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export JAY_TERMINAL=none JAY_SESSION=jay-test-none LC_ALL=en_US.UTF-8

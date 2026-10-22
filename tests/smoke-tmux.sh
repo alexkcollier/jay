@@ -1,5 +1,5 @@
 #!/bin/bash
-# A throwaway tmux hub (JAY_MUX=tmux): `jay` starts it in a pty (tests/pty-client.py) on a
+# A throwaway tmux hub (no JAY_MUX: the default): `jay` starts it in a pty (tests/pty-client.py) on a
 # socket of its own, in the fake HOME, with a stub claude (attach keeps its args, ← is the agent
 # view), stub tuicr and yazi. It checks the layout, a pick (also over Claude's agent view), the
 # focus keys, files over review and back, hide and show review, tasks windows, the bar and its
@@ -19,7 +19,11 @@ fi
 export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
 unset TMUX TMUX_PANE
 SOCK=jaysmoke$$
-export JAY_MUX=tmux JAY_TMUX_SOCKET=$SOCK JAY_SESSION=jay TMUX_TMPDIR="$TMP/tsock" TERM=xterm-256color
+# No JAY_MUX: with no hub, jay starts a tmux hub, and the scripts outside it find it
+# (jay_which_mux). zellij's sockets in a folder of this test, so a zellij hub of the user's never
+# counts.
+unset JAY_MUX
+export JAY_TMUX_SOCKET=$SOCK JAY_SESSION=jay TMUX_TMPDIR="$TMP/tsock" ZELLIJ_SOCKET_DIR="$TMP/zsock" TERM=xterm-256color
 export JAY_ROOTS="$TMP/projects" SHELL=/bin/bash
 mkdir -p "$TMUX_TMPDIR" "$HOME/.config/jay" "$HOME/.local/share/mise/shims" "$TMP/projects/acme"
 ln -sfn "$REPO/config/tmux/jay.conf" "$HOME/.config/jay/tmux.conf"
@@ -132,6 +136,8 @@ first_row_is_hub() { tm capture-pane -p -t "$list" | grep -v '^[[:space:]]*$' | 
 within "the list has no counts row: its first row is ◆ hub" 5 first_row_is_hub
 
 within "the focus starts in the middle" 2 is_pane "$agent"
+eq "no JAY_MUX outside the hub: the tmux hub that runs" "tmux" "$(bash -c 'source "$HOME/.local/lib/jay-lib.sh" && printf %s "$JAY_MUX"')"
+ok "jay run ls from outside, no JAY_MUX: the hub answers" jay run ls
 
 # A click on a list row selects it (no pick); a double click opens it, as Enter.
 click_at() { # click_at PANE TEXT [2]: (double) click on the first line of PANE that has TEXT

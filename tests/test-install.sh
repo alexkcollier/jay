@@ -44,6 +44,10 @@ has "a file of the user's is a TODO" "jay-go exists and is not from jay" "$out"
 eq "a file of the user's stays" mine "$(cat "$HOME/.local/bin/jay-go")"
 has "install.sh: a missing tool is a TODO with its brew command" "fzf not found: brew install fzf" "$out"
 has "install.sh: one brew command for the missing tools" "brew install fzf tuicr yazi" "$out"
+# No JAY_MUX and no hub runs: the hub is a tmux hub, so tmux is needed.
+check=$(env -u JAY_MUX TMUX_TMPDIR="$TMP/no-tmux" ZELLIJ_SOCKET_DIR="$TMP/no-zellij" "$REPO/install.sh" --check 2>&1)
+has "install.sh --check: no JAY_MUX, tmux is needed" "tmux not found: brew install tmux (the hub)" "$check"
+hasnt "install.sh --check: JAY_MUX=zellij, tmux is not needed" "tmux not found" "$("$REPO/install.sh" --check 2>&1)"
 has "install.sh: the zjstatus download fails offline" "zjstatus download failed" "$out"
 has "install.sh: the hub starts with jay" "start the hub with: jay" "$out"
 hasnt "a new install has nothing of wt-hub to move" "From wt-hub" "$out"

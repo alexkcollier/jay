@@ -37,7 +37,7 @@ source "$HOME/.local/lib/jay-lib.sh"
 calls() { cat "$STUB/zellij.calls" 2>/dev/null; }
 reset() { rm -f "$STUB/zellij.calls"; }
 
-eq "the zellij backend is the default" zellij "$JAY_MUX"
+eq "the zellij backend" zellij "$JAY_MUX"
 
 # Panes: no plugins; ids, launch and running commands, hidden (suspended) panes.
 panes=$(jay_mux_panes)
