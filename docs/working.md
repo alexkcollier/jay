@@ -82,8 +82,8 @@ The hub gives each agent a name that no other agent has:
 - When another agent has that name, the new agent gets `<name>-2`, then `<name>-3`, ... All
   agents that `claude agents --all` lists count, also stopped and done ones. An agent that
   `claude rm` removed does not. Names match in any case.
-- `b` (an interactive session goes on in the background) keeps the session's name, or adds `-2`
-  when another agent has it.
+- `b` (an interactive session goes on in the background) keeps the session's name: the session
+  goes on under its own id, so no second agent comes.
 - The hub Claude is `hub`, or `hub-2` when another agent has the name `hub`.
 
 `jay_unique_name` in `lib/jay-lib.sh` does this. Two agents can still have one name when they
