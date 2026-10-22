@@ -12,7 +12,7 @@ case "$*" in
   *" action list-panes"*) [[ -f "$STUB/panes.fail" ]] && { echo nope; exit 0; }; cat "$STUB/panes.json" ;;
   *" action list-tabs"*) cat "$STUB/tabs.json" ;;
   *" action new-pane"* | *" action new-tab"*) echo terminal_9 ;;
-  *" action dump-screen"*) printf "line one\nNORMAL mode\n" ;;
+  *" action dump-screen"*) if [[ -f "$STUB/screen" ]]; then cat "$STUB/screen"; else printf "line one\nNORMAL mode\n"; fi ;;
 esac
 exit 0'
 cat >"$STUB/panes.json" <<'JSON'
@@ -126,6 +126,35 @@ printf 'old\tx\n' >"$(jay_hub_target_file agent)"
 eq "show: the pane changes" "terminal_2" "$(jay_hub_show aaaa0001 "fix login" /w >/dev/null; jay_hub_role agent | cut -f1)"
 has "show: renamed" "rename-pane -p terminal_2 fix login" "$(calls)"
 has "show: focus to the agent" "move-focus right" "$(calls)"
+eq "show: the target line" "aaaa0001	/w	background	fix login" "$(cat "$(jay_hub_target_file agent)")"
+# The same agent again while no `claude attach` of it runs under the pane (the agent view, say):
+# it opens again.
+rm -f "$JAY_HUB_STATE/agent.again"
+eq "same agent, not attached: restart" "terminal_2	1" "$(jay_hub_point agent "$(printf 'aaaa0001\t/w\tbackground\tfix login')")"
+ok "same agent, not attached: the again file" test -f "$JAY_HUB_STATE/agent.again"
+rm -f "$JAY_HUB_STATE/agent.again"
+kill "$pid" 2>/dev/null
+wait "$pid" 2>/dev/null
+# A pane whose jay-pane runs `claude attach aaaa0001`: no restart, unless its screen is Claude's
+# agent view.
+mkdir -p "$TMP/fake"
+cat >"$TMP/fake/jay-pane" <<'SH'
+#!/bin/bash
+# a jay-pane agent: its child is a `claude attach <id>`
+"${0%/*}/claude" attach aaaa0001 &
+wait 2>/dev/null
+SH
+printf '#!/bin/bash\nsleep 30\n' >"$TMP/fake/claude"
+chmod +x "$TMP/fake/jay-pane" "$TMP/fake/claude"
+"$TMP/fake/jay-pane" agent &
+pid=$!
+sleep 0.3
+printf '2\t%s\n' "$pid" >"$(jay_hub_pane_file agent)"
+eq "same agent, attached: no restart" "terminal_2	0" "$(jay_hub_point agent "$(printf 'aaaa0001\t/w\tbackground\tfix login')")"
+printf 'Needs input\n enter to return · space to reply · ctrl+x to delete\n' >"$STUB/screen"
+eq "same agent, agent view on screen: restart" "terminal_2	1" "$(jay_hub_point agent "$(printf 'aaaa0001\t/w\tbackground\tfix login')")"
+rm -f "$STUB/screen" "$JAY_HUB_STATE/agent.again"
+pkill -P "$pid" 2>/dev/null
 kill "$pid" 2>/dev/null
 wait "$pid" 2>/dev/null
 

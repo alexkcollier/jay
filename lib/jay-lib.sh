@@ -591,16 +591,41 @@ jay_kill_children() {
 # Point the running hub pane of role $1 at target line $2. Prints "<pane id><TAB>changed",
 # changed being 1 when the pane restarts its program for the new target, else 0.
 # Fails when no pane of that role runs.
+# The agent pane is "on" the target only when it really shows that agent (jay_hub_agent_runs):
+# else a pick of the agent it should show starts `claude attach` again (the again file tells
+# jay-pane to run the same target once more).
 jay_hub_point() {
-  local pane pid
+  local pane pid now
   IFS=$'\t' read -r pane pid < <(jay_hub_role "$1") || return 1
-  if [[ "$(cat "$(jay_hub_target_file "$1")" 2>/dev/null)" == "$2" ]]; then
-    printf '%s\t0\n' "$pane"
-    return 0
+  now=$(cat "$(jay_hub_target_file "$1")" 2>/dev/null) || now=""
+  if [[ "$now" == "$2" ]] || [[ "$1" == agent && -n "$now" && "${now%%$'\t'*}" == "${2%%$'\t'*}" ]]; then
+    if [[ "$1" != agent ]] || jay_hub_agent_runs "$pane" "$pid" "$now"; then
+      printf '%s\t0\n' "$pane"
+      return 0
+    fi
+    : >"$JAY_HUB_STATE/agent.again"
   fi
   jay_hub_write_target "$1" "$2"
   jay_kill_children "$pid"
   printf '%s\t1\n' "$pane"
+}
+
+# The agent pane $1 (its jay-pane: pid $2) shows target line $3 now: a `claude attach <id>` runs
+# under it, and its screen is not Claude's agent view. ← in `claude attach` turns that process
+# into `claude agents` (the agent view), and from there it can attach another agent; the target
+# file still names the first one. An interactive agent's note has nothing to check.
+jay_hub_agent_runs() {
+  local IFS=$' \t\n' id kind p pp screen
+  IFS=$'\t' read -r id _ kind _ <<<"$3"
+  [[ -n "$id" && "$kind" != interactive ]] || return 0
+  for p in $(pgrep -f "claude attach $id\$"); do
+    pp=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
+    [[ "$pp" == "$2" || "$(ps -o ppid= -p "$pp" 2>/dev/null | tr -d ' ')" == "$2" ]] || continue
+    screen=$(jay_mux_read "$1") || screen=""
+    [[ "$screen" != *"enter to return · space to reply"* ]]
+    return
+  done
+  return 1
 }
 
 # Move the focus to the middle column (the agent viewer), from any column and tab.
@@ -622,11 +647,11 @@ jay_hub_locked() {
 
 # Show background agent $1 (short id) named $2 from folder $3 in the hub's middle column: the
 # viewer pane follows the new agent. The focus goes there. With $4 = interactive, $1 is a
-# session id and the viewer only says where that agent runs.
+# session id and the viewer only says where that agent runs. The target line: id, folder, kind
+# (background or interactive), name.
 jay_hub_show() {
   local id=$1 name=$2 cwd=$3 line viewer changed
-  line=$(printf '%s\t%s' "$id" "$cwd")
-  [[ "${4:-}" == interactive ]] && line=$(printf '%s\tinteractive\t%s' "$line" "$name")
+  line=$(printf '%s\t%s\t%s\t%s' "$id" "$cwd" "${4:-background}" "$name")
   IFS=$'\t' read -r viewer changed < <(jay_hub_point agent "$line") || return 1
   [[ "$changed" == 1 ]] && jay_mux_rename "$viewer" "$name"
   jay_hub_focus_middle

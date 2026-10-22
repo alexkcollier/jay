@@ -37,6 +37,11 @@ trap 'jay_hub_pane_gone "$role" $$' EXIT
 
 target() { cat "$target_file" 2>/dev/null; }
 
+# A pick of the agent this pane should show, while it does not (jay_hub_point): run the same
+# target again.
+again="$JAY_HUB_STATE/agent.again"
+again() { [[ "$role" == agent && -f "$again" ]] && rm -f "$again"; }
+
 # Programs stopped by a retarget can leave mouse modes or the other screen on. With `keep`, the
 # text on screen stays.
 reset_screen() {
@@ -45,10 +50,11 @@ reset_screen() {
   [[ "${1:-}" == keep ]] || clear
 }
 
-# Wait until the target changes (0) or Enter is pressed (1).
+# Wait until the target changes or a pick asks for it again (0), or Enter is pressed (1).
 wait_change() {
   local rc
   while [[ "$(target)" == "$1" ]]; do
+    again && return 0
     read -r -t 1 _ && return 1
     rc=$?
     ((rc > 128)) || sleep 0.5
@@ -180,6 +186,8 @@ run() {
         wait_change "$1"
         return 0
       fi
+      # At once, also while a long conversation loads.
+      printf '\n  Opening %s...\n' "${name:-$id}"
       leave_agent_view &
       claude attach "$id"
       rc=$?
@@ -225,7 +233,7 @@ run() {
 if [[ "$role" == agent && -z "$(target)" ]]; then
   printf '\n  Opening the hub Claude...\n'
   if hubid=$(jay_hub_claude 2>/dev/null); then
-    [[ -z "$(target)" ]] && jay_hub_write_target agent "$(printf '%s\t%s' "$hubid" "${JAY_ROOTS%%:*}")"
+    [[ -z "$(target)" ]] && jay_hub_write_target agent "$(printf '%s\t%s\tbackground\thub' "$hubid" "${JAY_ROOTS%%:*}")"
   fi
   clear
 fi
@@ -245,6 +253,11 @@ while :; do
   started=$SECONDS mode=$(jay_hub_mode)
   run "$now"
   rc=$?
+  # A pick of this same agent while the pane did not show it (jay_hub_point): open it again.
+  if again; then
+    reset_screen
+    continue
+  fi
   # 143: stopped (← in attach, see leave_agent_view), not failed.
   if [[ "$role" == agent && "$(target)" == "$now" ]] && ((rc != 0 && rc != 143 && SECONDS - started < 5)); then
     reset_screen keep
