@@ -44,6 +44,9 @@ at a time). Be careful with `wt step prune` in your own repos: in one repo it wo
   clean restart). If it comes back: quit the hub (Ctrl g, Ctrl q) and run `jay` in a terminal
   that no agent started. Notes: "Item 5 (closed): what we know".
 - Tab control is Ghostty only; other terminals get the hub without tab control.
+- With bash as `$SHELL`, `jay run stop` of a task takes about 12 s: bash 3.2's `-i +m -c` keeps
+  job control, so the command gets a process group of its own and Ctrl-C to the pane's group
+  misses it (TERM after 10 s stops it). zsh (`-i +m -c`): 0.3 s. Seen 2026-10-22.
 - macOS only: AppleScript, `lsappinfo`, BSD `stat`, `cp -c`.
 
 ## The first to-do list (2026-10-19)
