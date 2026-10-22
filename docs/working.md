@@ -169,8 +169,9 @@ folders), with a short system prompt about the hub's commands (`jay_hub_claude_p
   again on a pick.
 - It knows the orchestrators (`jay agents --orchestrators`). It sends work for a repo to the
   orchestrator of that repo (SendMessage). A repo has none by default: then it plans the work
-  and starts the workers itself (`jay new`). For long parallel work in one repo, it tells you to
-  press `n` on the repo's main checkout row. See
+  and starts the workers itself (`jay new`): every change and every in-depth task, also a
+  read-only one, goes to a worker, and the worker reports back to it (SendMessage). For long
+  parallel work in one repo, it tells you to press `n` on the repo's main checkout row. See
   [The hub Claude and orchestrators](orchestrators.md#the-hub-claude-and-orchestrators).
 - `c` on the "◆ hub" row gives it a fresh context (see
   [Fresh context](orchestrators.md#fresh-context)). To start a new hub Claude, `claude rm <id>`:

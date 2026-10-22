@@ -22,10 +22,23 @@
 
 An orchestrator is a background agent in a repo's main checkout that has the orchestrator
 prompt (`jay_orchestrator_prompt` in `lib/jay-lib.sh`). It is the orchestrator of that repo, as
-the hub Claude is for all repos. It plans, reads, reviews and answers questions, and it gives
-each change to a worker: a background agent in a new worktree (`jay new <branch> -t <task> --
-<prompt>`). So no work piles up on main, the main checkout stays free of work, and agents do not
-move between worktrees. The list marks an orchestrator with a cyan `◇` before its name.
+the hub Claude is for all repos. The list marks an orchestrator with a cyan `◇` before its name.
+
+- **What it does itself**: it plans, makes a quick analysis of the repo, answers questions about
+  it, reviews what the workers deliver, and merges when you tell it to.
+- **What it gives to a worker**: every change, and every in-depth task, also one that only reads
+  (an evaluation, a critique, an audit, research, a report), and each task that you give to "an
+  agent". A worker is a background agent in a new worktree (`jay new <branch> -t <task> --
+  <prompt>`). It uses Claude's in-process Agent tool only for its own quick lookups. It does
+  in-depth work itself only when the situation truly needs it: you tell it to, or the question
+  is so small that a worker costs more than it saves.
+- **How it hears from a worker**: the worker reports to it with SendMessage when it is done or
+  blocked (`jay new` adds that line to the worker's prompt), and the orchestrator subscribes to
+  the worker's idle notice. It does not poll (see
+  [How it follows and steers workers](#how-it-follows-and-steers-workers)).
+
+So no work piles up on main, the main checkout stays free of work, the orchestrator's context
+stays free for the plan, and agents do not move between worktrees.
 
 The prompt only steers the agent. Claude's own rule still stops a background agent from editing
 in the main checkout, and the agent can go into a worktree (`EnterWorktree`) when you tell it to
@@ -108,12 +121,23 @@ repo's name for `<repo>` and the path of its main checkout for `<main checkout>`
 ```text
 You are the orchestrator of the repo <repo>, in its main checkout <main checkout>, in jay, a worktree hub: a list
 of worktrees and Claude agents. Each worker is a background Claude session in its own git
-worktree (siblings named <repo>.<branch>). Plan, read, review and answer questions here; give each
-change to a worker. Keep the main checkout free of work.
+worktree (siblings named <repo>.<branch>). Keep the main checkout free of work.
 
-- New worker for a change: here, `jay new <branch> -t "<task>" -- <prompt>` (a new worktree
-  and a background agent in it). Give it a prompt it can act on alone: the goal, the files, how
-  to test. Start workers only when the user asks or agrees.
+- What you do here: plan, quick analysis of the repo, answers to questions about it, review of
+  what workers deliver, and a merge when the user says so.
+- What goes to a worker: every change, and every in-depth task, also one that only reads (an
+  evaluation, critique, audit, research, a report), and each task the user gives to "an agent".
+  Use the Agent tool only for your own quick lookups. Do in-depth work yourself only when the
+  situation truly needs it (the user tells you to, or a small question where a worker costs
+  more than it saves).
+- New worker: here, `jay new <branch> -t "<task>" -- <prompt>` (a new worktree and a
+  background agent in it). Give it a prompt it can act on alone: the goal, the files, how to
+  test. Start workers only when the user asks or agrees.
+- Reports: `jay new` tells the worker to report to you with SendMessage when it is done or
+  blocked; the report comes as a cross-session message. After `jay new`, subscribe to the
+  worker's idle notice: SendMessage to its name with notify_when_idle: true and no message.
+  Never poll `claude agents` or `claude logs` in a loop, and never start background shell
+  loops to wait.
 - Do not edit files in the main checkout, and do not use EnterWorktree: a change that you make
   yourself takes you into its worktree. When the user tells you to make a change yourself, do
   as they say.
@@ -121,9 +145,10 @@ change to a worker. Keep the main checkout free of work.
   push, stash, edit files) run in the worker of that branch, never here; the jay-guard hook
   denies such git commands here. A skill that only the user can start: tell the user which
   worker is ready for which command.
-- Workers: `claude agents --json --all` (id, name, cwd, state, status); recent output:
-  `claude logs <id>`; what a worker did per turn: `git log refs/wt-turns/<id>/base..refs/wt-turns/<id>/head`
-  in its worktree. Send a prompt to a worker: the ListAgents and SendMessage tools.
+- Workers, for the user's questions about their status: `claude agents --json --all` (id,
+  name, cwd, state, status); recent output: `claude logs <id>`; what a worker did per turn:
+  `git log refs/wt-turns/<id>/base..refs/wt-turns/<id>/head` in its worktree. Send a prompt
+  to a worker: the ListAgents and SendMessage tools.
 - Worktrees with git state and task notes: `wt list` (worktrunk).
 - Read the workers' worktrees in place; do not edit files in them. Never merge, and never remove
   worktrees or agents (`wt merge`, `wt remove`, `claude rm`), unless the user asks.
@@ -137,16 +162,22 @@ What each part tells the agent:
 
 - **The first paragraph**: its role. It is the orchestrator of one repo, in the main checkout.
   Workers are background sessions in sibling worktrees named `<repo>.<branch>` (the hub's
-  worktrunk setting). It plans, reads, reviews and answers; each change goes to a worker.
+  worktrunk setting).
+- **What you do here, what goes to a worker**: the split of
+  [What an orchestrator is](#what-an-orchestrator-is). "Review" is only the review of what
+  workers deliver: an evaluation or a critique that you ask for is in-depth work, so it goes to a
+  worker. The Agent tool (a subagent in the orchestrator's own process) is for quick lookups only.
 - **New worker**: the command that makes a worker, and what a good worker prompt has (the goal,
   the files, how to test). It starts workers only when you ask or agree.
+- **Reports**: how a worker's result comes back (its report, the idle notice), and no polling
+  loops. See [How it follows and steers workers](#how-it-follows-and-steers-workers).
 - **No edits in the main checkout, no `EnterWorktree`**: it does not do the work itself. When you
   tell it to make a change itself, it does as you say (it then goes into a worktree).
 - **Skills and commands**: one that changes the branch or writes runs in the worker of that
   branch. For a skill that only you can start, it tells you the worker and the command. See
   [Skills and slash commands](#skills-and-slash-commands).
-- **Workers**: how it sees them (`claude agents`, `claude logs`, the turn chains of the hub) and
-  how it talks to them (ListAgents, SendMessage).
+- **Workers**: how it sees them when you ask about their status (`claude agents`, `claude logs`,
+  the turn chains of the hub) and how it talks to them (ListAgents, SendMessage).
 - **Worktrees**: `wt list` gives the git state and the task notes.
 - **Read only, no merge, no removal**: it reads the workers' worktrees in place and never edits
   them. It merges and removes only when you ask.
@@ -165,7 +196,13 @@ The orchestrator runs `jay new <branch> -t "<task>" -- <prompt>` in the main che
    worktree is a sibling of the main checkout, `<repo>.<branch>`.
 2. The task note (`-t`, else the first line of the prompt, 60 characters) goes into worktrunk's
    state variable `task`. The list and `wt list` show it.
-3. `claude --bg --name "<repo>/<branch>" "<prompt>"` starts the worker in the new worktree. `-a`
+3. When a Claude agent runs `jay new` (an orchestrator, the hub Claude), one line goes at the end
+   of the prompt: "When you are done, or blocked, report to `<caller name>` with SendMessage:
+   the branch head, the result, what needs a decision." The caller's name is the one that
+   `claude agents` and ListAgents show (found by `CLAUDE_CODE_SESSION_ID`, else in the job's
+   `state.json`), so SendMessage finds it. No such line when a person runs `jay new` in a
+   shell, for an idle worker (`-a`), or with `--no-report`.
+4. `claude --bg --name "<repo>/<branch>" "<prompt>"` starts the worker in the new worktree. `-a`
    in place of a prompt starts an idle worker.
 
 The worker starts without the orchestrator's `CLAUDE*` and `ANTHROPIC*` variables. An inherited
@@ -178,7 +215,20 @@ You can make a worker yourself too: `N` on the repo row (an idle agent in a new 
 
 ## How it follows and steers workers
 
-The prompt gives the orchestrator these tools:
+The workers report back; the orchestrator does not poll:
+
+1. `jay new` prints the worker's name (`backgrounded · <id> · <name>`). The worker's prompt
+   tells it to report to the orchestrator (see [How it makes workers](#how-it-makes-workers)).
+2. The orchestrator subscribes to the worker's idle notice: SendMessage to the worker's name with
+   `notify_when_idle: true` and no message. That costs the worker nothing. One
+   `[Cross-session idle notice]` comes when the worker next goes idle or ends.
+3. The worker's report (the branch head, the result, what needs a decision) comes to the
+   orchestrator as a cross-session message, and starts its turn when it waits.
+4. The orchestrator never polls `claude agents` or `claude logs` in a loop, and never starts
+   background shell loops (a `while sleep 30` in a background Bash call) to wait: such shells
+   stay open, use tokens on each check, and show as active shells.
+
+To see a worker's status when you ask, it has these tools:
 
 - `claude agents --json --all`: each agent's id, name, folder (`cwd`), state and status.
 - `claude logs <id>`: a worker's recent output.
@@ -187,8 +237,7 @@ The prompt gives the orchestrator these tools:
   turn runs, `refs/wt-turns/<id>/live` holds the turn so far.
 - `wt list`: the worktrees with their git state and task notes.
 - ListAgents and SendMessage (Claude's own tools): send a prompt to a running worker, and get its
-  answer. SendMessage can also ask for one notice when a session on this machine next goes idle
-  (`notify_when_idle`).
+  answer.
 
 You see the same in the hub: the worker's row and its sign, its turns in review, a notice when
 its turn ends or it needs input. An orchestrator that only waits for its workers (state
@@ -214,7 +263,7 @@ flow:
 ## Skills and slash commands
 
 The rule: a command that changes the branch or writes runs in a worktree. In its main checkout,
-an orchestrator only reads, plans, reviews and steers workers. It merges there only with
+an orchestrator only reads, plans, reviews what workers deliver and steers workers. It merges there only with
 `git merge --ff-only <branch>`, and only when you tell it to.
 
 Why a rule for skills: Claude stops a background agent's file edits (Edit, Write) in the main
@@ -408,11 +457,15 @@ The hub Claude ([The hub Claude](working.md#the-hub-claude)) works across repos.
 - `jay agents --orchestrators` lists them, one line each: main checkout, id, name.
   `jay agents --orchestrators <main checkout>` gives only the one of that repo.
 - Send work for such a repo to its orchestrator (SendMessage).
-- An orchestrator only reads, plans and reviews: skills that change a branch run in its workers
-  (see [Skills and slash commands](#skills-and-slash-commands)).
+- An orchestrator does not change its main checkout: skills that change a branch run in its
+  workers (see [Skills and slash commands](#skills-and-slash-commands)).
 - A repo has none by default: for such a repo, plan the work and start its workers yourself with
   `jay new`. For long parallel work in one repo, tell the user that `n` on the repo's main
   checkout row starts an orchestrator.
+- The same split as an orchestrator: every change and every in-depth task (also a read-only one)
+  goes to an agent; the Agent tool is for its own quick lookups.
+- The same reports: a worker that it starts reports to it (SendMessage), and it subscribes to the
+  worker's idle notice in place of a polling loop.
 
 So you can give a change to the hub Claude from anywhere: it goes to the right repo's
 orchestrator, or the hub Claude does the orchestrator's work itself (see
