@@ -85,6 +85,7 @@ rows() {
     --argjson hideidle "$hideidle" --arg roots "$JAY_ROOTS" --argjson gone "$(gone_dirs "$agents")" \
     --argjson jobs "$jobs" --argjson orchs "$(jay_orch_ranks "$agents" "$jobs")" \
     --argjson stranded "$stranded" --argjson replaced "$(jay_replaced_ids)" --argjson stale "$stale" \
+    --argjson notes "$(jay_agent_notes)" \
     --argjson gl "$(jq -nc --arg diff "$G_DIFF" --arg up "$G_UP" --arg alert "$G_ALERT" --arg ok "$G_OK" \
       --arg merge "$G_MERGE" --arg push "$G_PUSH" --arg pull "$G_PULL" --arg home "$G_HOME" '$ARGS.named')" \
     --argjson width "$width" --argjson now "$(date +%s)" '
@@ -199,6 +200,13 @@ rows() {
       def signs: if .git then gitsigns else c("2") + (.symbols | narrow) + c("0") end;
       def cells: gsub("\u001b\\[[0-9;]*m"; "") | length;
       def fit($n): if length > $n then .[:([$n - 1, 1] | max)] + "…" else . end;
+      # The tail of an agent row in a worktree that two or more agents share: the age, then the
+      # own task note of the agent (jay_agent_notes) in the room left, as a worktree row has its note.
+      def notetail($col): bgage as $a | ($notes[.id // ""] // "") as $n
+        | if $n == "" then $a else
+            ($width - $col - 2 - (title | cells) - (stalemark | cells) - 1 - ($a | cells) - 3) as $room
+            | if $room >= 6 then $a + " · " + ($n | narrow | fit($room)) else $a end
+          end;
       # A worktree row fits the list ($width): the git signs always show, a long branch name is
       # cut, and the task note shows only in the room left. The main checkout has a home sign
       # before its branch. $hint: the dim "n: orchestrator" at the end, in the room left after
@@ -220,7 +228,7 @@ rows() {
         | ("repo\t" + .main.path + "\t " + (if .idle then c("2") else c("1") end) + .repo + c("0")),
           (.trees[]
             | treerow(.main and $hint),
-              (.agents[] | agrow(4; bgage))),
+              (if (.agents | length) > 1 then (.agents[] | agrow(4; notetail(4))) else (.agents[] | agrow(4; bgage)) end)),
           (.dead[] | ("gone\tgone:" + .path + "\t  " + c("2") + .label + " (gone)" + c("0")),
                      (.agents[] | agrow(4; bgage)));
       def heading($key; $name; $idle): " \tgap:" + $key + "\t ",

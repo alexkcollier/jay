@@ -307,6 +307,23 @@ jay_bg_id() {
   grep -oE 'backgrounded · [0-9a-f]{8}' <<<"$1" | grep -oE '[0-9a-f]{8}$' | tail -1
 }
 
+# --- Agent task notes: jay new keeps each agent's own task note (one line, a file per short
+# id), as well as the worktree's note (worktrunk's state variable task). The list shows an
+# agent's note after its row when its worktree has two or more agents.
+JAY_NOTES=${JAY_NOTES:-$JAY_STATE/notes}
+
+# Keep note $2 for agent $1 (short id).
+jay_agent_note() {
+  mkdir -p "$JAY_NOTES" 2>/dev/null && printf '%s\n' "$2" | head -1 >"$JAY_NOTES/$1"
+}
+
+# All agent notes as JSON: {short id: note}.
+jay_agent_notes() {
+  { grep -H '' "$JAY_NOTES"/* 2>/dev/null || true; } \
+    | jq -Rsc --arg d "$JAY_NOTES/" 'split("\n") | map(select(startswith($d)) | ltrimstr($d)
+        | index(":") as $i | select($i != null) | {(.[:$i]): .[$i + 1:]}) | add // {}'
+}
+
 # --- Agent names: one name for each agent, where the hub can see to it ---
 # The name for a new agent: $1 when no agent in agents JSON $2 (default: `claude agents --json
 # --all`) has it, else $1-2, $1-3, ... Every agent that `claude agents` lists counts, also a

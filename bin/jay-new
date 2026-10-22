@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
-# jay new <branch|pr:N> [-b base] [-t "task note"] [-a] [--no-report] [-- prompt...]
+# jay new <branch|pr:N> [-b base] [-t "task note"] [-n name] [-a] [--no-report] [-- prompt...]
 # Create (or reuse) the worktree (worktrunk's wt switch) and store the task note. With a prompt,
 # or -a for an idle one, start a background Claude agent there (see it in the hub list or
-# `claude agents`). Without -t, the first line of the prompt becomes the task note. Run by a
-# Claude agent, the prompt tells the new agent to report back to it (--no-report: not).
+# `claude agents`), named <repo>/<branch> or <repo>/<name> (-n). Without -t, the first line of
+# the prompt becomes the task note. Run by a Claude agent, the prompt tells the new agent to
+# report back to it (--no-report: not). The main checkout's branch: no (it is the orchestrator's).
 set -euo pipefail
 source "$HOME/.local/lib/jay-lib.sh"
 
-usage() { sed -n '2,6s/^# \{0,1\}//p' "$0"; }
-branch="" base="" task="" agent=false report=true prompt=()
+usage() { sed -n '2,7s/^# \{0,1\}//p' "$0"; }
+branch="" base="" task="" name="" agent=false report=true prompt=()
 while (($#)); do
   case $1 in
     -b|--base) base=$2; shift 2 ;;
     -t|--task) task=$2; shift 2 ;;
+    -n|--name) name=$2; shift 2 ;;
     -a|--agent) agent=true; shift ;;
     --no-report) report=false; shift ;;
     --) shift; prompt=("$@"); break ;;
@@ -21,6 +23,19 @@ while (($#)); do
   esac
 done
 [[ -n "$branch" ]] || { usage >&2; exit 2; }
+
+# The main checkout belongs to the repo's orchestrator (or to you): jay new starts no worker
+# there. A branch name is checked before wt switch, a pr:N after it (by the path).
+main_refuse() {
+  echo "jay new: $1 is checked out in the main checkout ($2). jay new starts agents only in" >&2
+  echo "worktrees; give a worker a new branch, or start an agent in the main checkout with c or n." >&2
+  exit 1
+}
+main_path=$(jay_primary "$PWD") || main_path=""
+if [[ -n "$main_path" && "$branch" != pr:* && "$branch" != http* \
+  && "$(git -C "$main_path" branch --show-current 2>/dev/null)" == "$branch" ]]; then
+  main_refuse "$branch" "$main_path"
+fi
 
 switch_args=("$branch" --no-cd --format=json)
 if [[ "$branch" != pr:* && "$branch" != http* ]] \
@@ -31,11 +46,35 @@ if [[ "$branch" != pr:* && "$branch" != http* ]] \
 fi
 
 path=$(wt switch "${switch_args[@]}" | jq -er .path)
+[[ "$path" != "$(jay_primary "$path")" ]] || main_refuse "$branch" "$path"
 
 if [[ -z "$task" ]] && ((${#prompt[@]})); then
   task=$(printf '%s' "${prompt[*]}" | head -1 | cut -c1-60)
 fi
-[[ -n "$task" ]] && wt -C "$path" config state vars set task="$task" >/dev/null 2>&1
+
+starts=false
+if ((${#prompt[@]})) || [[ "$agent" == true ]]; then starts=true; fi
+agents='[]' others=0
+if [[ "$starts" == true ]]; then
+  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  # The live agents that work in this worktree already.
+  others=$(jq --arg p "$path" '[.[] | select(.state != "stopped" and (.cwd == $p or (.cwd // "" | startswith($p + "/"))))] | length' <<<"$agents" 2>/dev/null) || others=0
+fi
+# The worktree's task note (worktrunk's state variable task: the list and wt list show it). A
+# second agent in a worktree adds its note to the one there ("evaluate the list · critique"), so
+# the first agent's note stays; each agent's own note is in $JAY_NOTES (jay_agent_note).
+if [[ -n "$task" ]]; then
+  note=$task
+  if ((others > 0)); then
+    old=$(wt -C "$path" config state vars get task 2>/dev/null || true)
+    if [[ -n "$old" && " · $old · " == *" · $task · "* ]]; then
+      note=$old
+    elif [[ -n "$old" ]]; then
+      note="$old · $task"
+    fi
+  fi
+  wt -C "$path" config state vars set task="$note" >/dev/null 2>&1 || true
+fi
 
 IFS=$'\t' read -r _ repo branch _ < <(jay_describe "$path")
 # The name of the Claude agent that runs this (an orchestrator, the hub Claude), as `claude
@@ -51,24 +90,36 @@ caller_name() {
   fi
   printf '%s' "$name"
 }
-if ((${#prompt[@]})) || [[ "$agent" == true ]]; then
-  agents=$(claude agents --json --all 2>/dev/null || true)
-fi
 if ((${#prompt[@]})) && [[ "$report" == true ]]; then
   caller=$(caller_name)
-  [[ -z "$caller" ]] || prompt+=($'\n\n'"When you are done, or blocked, report to $caller with SendMessage: the branch head, the result, what needs a decision.")
+  if [[ -n "$caller" ]]; then
+    line="When you are done, or blocked, report to $caller with SendMessage: the branch head, the result, what needs a decision."
+    ((others == 0)) || line+=" Other agents work in this worktree: commit only your own files."
+    prompt+=($'\n\n'"$line")
+  fi
+fi
+
+if [[ "$starts" != true ]]; then
+  echo "Worktree ready: $path"
+  echo "Open it with: jay open $branch"
+  exit 0
 fi
 # Called from an agent (an orchestrator, the hub Claude), the agent's CLAUDE*/ANTHROPIC*
 # variables would reach the new one: an inherited CLAUDE_CODE_CHILD_SESSION hides it from
 # `claude agents` and turns off its transcript. Start it without them.
 strip=()
 for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
-# A second agent in the same worktree gets <repo>/<branch>-2 (jay_unique_name).
-if ((${#prompt[@]})); then
-  (cd "$path" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(jay_unique_name "$(jay_tab_name "$repo" "$branch")" "$agents")" "${prompt[*]}")
-elif [[ "$agent" == true ]]; then
-  (cd "$path" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(jay_unique_name "$(jay_tab_name "$repo" "$branch")" "$agents")")
+# -n names the agent by its role: <repo>/<name> (a name with a / as it is). Else <repo>/<branch>;
+# a second agent in the same worktree gets <repo>/<branch>-2 (jay_unique_name).
+if [[ -n "$name" ]]; then
+  [[ "$name" == */* ]] || name="$repo/$name"
 else
-  echo "Worktree ready: $path"
-  echo "Open it with: jay open $branch"
+  name=$(jay_tab_name "$repo" "$branch")
 fi
+name=$(jay_unique_name "$name" "$agents")
+args=(--bg --name "$name")
+if ((${#prompt[@]})); then args+=("${prompt[*]}"); fi
+out=$(cd "$path" && env ${strip[@]+"${strip[@]}"} claude "${args[@]}" 2>&1) || { rc=$?; printf '%s\n' "$out"; exit "$rc"; }
+printf '%s\n' "$out"
+id=$(jay_bg_id "$out" || true)
+[[ -z "$id" || -z "$task" ]] || jay_agent_note "$id" "$task"
