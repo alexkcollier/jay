@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # jay-sidebar — the hub's live list of worktrees and Claude agents, for a narrow left pane.
-# Click, double-click or Enter: an agent → shown in the hub's middle column, and review (tuicr,
+# Click: select the row (the keys below act on it). Double-click or Enter: an agent → shown in
+# the hub's middle column, and review (tuicr,
 # its turns) and files (yazi, when shown) switch to it; a worktree → review and files switch to
 # it; "◆ hub" → the hub Claude (a background agent, started when it has none) in the middle
 # column. An agent takes the focus to the middle; Enter on a worktree takes it to review. An
@@ -378,7 +379,7 @@ show_quiet() {
   return 0
 }
 
-# The fzf action of a pick (Enter, click; through transform): a row with the fourth field
+# The fzf action of a pick (Enter, double-click; through transform): a row with the fourth field
 # "repair" ($2, an agent that cannot wake) repairs it after a confirm, any other row acts.
 # $1: --focus (Enter) or empty. fzf fills in {1} {2} when it runs the action.
 pick_action() {
@@ -672,7 +673,8 @@ FOOTER_SHORT="${KEY}⏎${OFF} open  ${KEY}n${OFF} new  ${KEY}d${OFF} remove
 ${KEY}?${OFF} all keys and signs"
 FOOTER_FULL="${HEAD}Keys${OFF}
 ${KEY}⏎${OFF}      open, focus moves
-${KEY}click${OFF}  open
+${KEY}click${OFF}  select (keys act on it)
+${KEY}2 clicks${OFF} open, as ⏎
 ${KEY}n${OFF}      new agent here
 ${KEY}N${OFF}      new worktree + agent
 ${KEY}o${OFF}      own Ghostty tab
@@ -1000,7 +1002,7 @@ case ${1:-} in
   --review) review_key "${2:-}"; exit 0 ;;
   --idle) if [[ -f "$HIDE_IDLE" ]]; then rm -f "$HIDE_IDLE"; else : >"$HIDE_IDLE"; fi; exit 0 ;;
   --footer) shift; footer "$@"; exit 0 ;;
-  -h|--help) sed -n '2,26s/^# \{0,1\}//p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,27s/^# \{0,1\}//p' "$0"; exit 0 ;;
   # An option this version does not have (say a bind of a list started before an update) must
   # not start a second list.
   -*) printf 'jay-sidebar: unknown option %s\n' "$1" >&2; exit 2 ;;
@@ -1091,8 +1093,7 @@ rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=
   --bind 'n:execute(jay-sidebar --new here {1} {2})+reload-sync(jay-sidebar --rows --fresh)+clear-screen' \
   --bind 'N:execute(jay-sidebar --new worktree {1} {2})+reload-sync(jay-sidebar --rows --fresh)+clear-screen' \
   --bind 'enter:transform(jay-sidebar --pick --focus {4})' \
-  --bind 'double-click:transform(jay-sidebar --pick "" {4})' \
-  --bind 'left-click:transform(jay-sidebar --pick "" {4})' \
+  --bind 'double-click:transform(jay-sidebar --pick --focus {4})' \
   --bind 'r:execute-silent(: >"$JAY_SIDEBAR_RESTART")+abort' \
   --bind 'o:execute-silent(jay-sidebar --view open {1} {2})' \
   --bind 'a:execute-silent(jay-sidebar --idle)+reload-sync(jay-sidebar --rows)+clear-screen' \

@@ -112,7 +112,8 @@ hub Claude plans and starts workers for it. See [Orchestrators](docs/orchestrato
    repo's orchestrator. Ask it for a change; it starts a worker in a new worktree with
    `jay new <branch> -- <prompt>`, and the worker shows in the list. Or press `N` on the repo
    row: the list asks for a branch and starts an idle agent in a new worktree.
-5. Pick an agent (click or Enter) to see it in the middle column and its turns in review.
+5. Pick an agent (Enter or a double click; a click selects) to see it in the middle column and
+   its turns in review.
    `?` in the list shows all keys and signs. Quit the hub with Ctrl g, Ctrl q: the agents keep
    running.
 

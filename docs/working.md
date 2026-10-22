@@ -113,21 +113,23 @@ the trust into `~/.claude.json` as the trust prompt of `claude` would. `jay new`
 
 ## Pick agents and worktrees
 
-Click a row or press Enter on it.
+Press Enter on a row, or double-click it. A single click only selects the row (the cursor moves
+there; the keys `d`, `n`, `N`, `c`, `b`, `o` then act on it).
 
 | Row | What the hub shows | Focus after the pick |
 |---|---|---|
 | background agent | the agent in the middle column; review on its turns, in its worktree | middle column |
 | interactive agent | a note in the middle column (`o` goes to its tab); review on its turns | middle column |
-| worktree | review (and files, when open) on that worktree | Enter: review (also a hidden one). Click: stays in the list |
+| worktree | review (and files, when open) on that worktree | review (also a hidden one) |
 | repo | the same as its main checkout | the same as a worktree |
 | ◆ hub | the hub Claude in the middle column; review does not change | middle column |
 
 ▸ beside an agent marks the agent in the middle column. A pick made elsewhere (a notice click,
 `jay go`, a new agent) moves the list's cursor to that agent.
 
-A click on a pane that does not have the focus only gives it the focus (zellij). Click again to
-pick. In the tmux hub one click focuses the pane and picks.
+A click on a pane that does not have the focus only gives it the focus (zellij): from another
+column, the first click in the list only focuses it. In the tmux hub one click focuses the list
+and selects the row.
 
 A pick shows "Opening <name>..." in the middle column at once; the agent's screen follows in
 about half a second (also for a long conversation: `claude attach` draws the end of it).

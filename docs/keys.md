@@ -17,7 +17,8 @@
 | Key | Action |
 |---|---|
 | Enter | open the row; the focus moves (agent: middle column; worktree: review). An agent that cannot wake (`home gone`, `lost`): continue it as a copy (asks first) |
-| click, double-click | open the row; an agent moves the focus, a worktree keeps it in the list |
+| click | select the row: the cursor moves there and nothing else changes; the keys (`d`, `n`, `N`, `c`, `b`, `o`) then act on it. In the zellij hub, a click from another column first only gives the list the focus (zellij keeps that click); in the tmux hub one click selects |
+| double-click | open the row, as Enter |
 | `n` | new idle background agent in this row's worktree (on a main checkout: the repo's orchestrator; when it has one, the hub shows it) |
 | `N` | new worktree of this row's repo (asks the branch) + idle agent |
 | `o` | the row's own Ghostty tab: an interactive agent's tab, else the worktree's zellij session (`jay open`) |
@@ -142,7 +143,7 @@ place of the agent counts) while it waits.
 
 `jay` attaches to the running tmux hub again. To end it: `tmux -L jay kill-server` (its tasks
 stop; the agents keep running). The mouse: a click on a pane focuses it and reaches the program
-at once (one click picks in the list); drag a border to resize; the wheel scrolls a program that
+at once (one click selects a row in the list, a double click opens it); drag a border to resize; the wheel scrolls a program that
 takes the mouse, else tmux's scroll mode.
 
 ## Pane titles

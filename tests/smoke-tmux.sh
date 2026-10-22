@@ -124,7 +124,36 @@ within "the agent pane opens the hub Claude" 10 screen_has "$agent" 'ATTACHED bb
 within "the list shows the agents" 15 screen_has "$list" fix-login
 first_row_is_hub() { tm capture-pane -p -t "$list" | grep -v '^[[:space:]]*$' | head -1 | grep -q '◆ hub'; }
 within "the list has no counts row: its first row is ◆ hub" 5 first_row_is_hub
+
 within "the focus starts in the middle" 2 is_pane "$agent"
+
+# A click on a list row selects it (no pick); a double click opens it, as Enter.
+click_at() { # click_at PANE TEXT [2]: (double) click on the first line of PANE that has TEXT
+  local top left n x y seq
+  read -r top left < <(tm display -p -t "$1" '#{pane_top} #{pane_left}')
+  n=$(tm capture-pane -p -t "$1" | grep -n "$2" | head -1 | cut -d: -f1)
+  [[ -n "$n" ]] || return 1
+  # pane_top counts from the window; the status line is the screen's first row.
+  x=$((left + 8)) y=$((top + 1 + n))
+  seq=$(printf '\e[<0;%d;%dM\e[<0;%d;%dm' "$x" "$y" "$x" "$y")
+  [[ "${3:-}" == 2 ]] && seq+=$seq
+  key "$(printf '%s' "$seq" | xxd -p | tr -d '\n')"
+}
+cursor_on() { tm capture-pane -p -t "$list" | grep "$1" | head -1 | grep -q '▌'; }
+click_at "$list" '○ fix-login'
+within "click: the list gets the focus" 3 is_pane "$list"
+within "click: the cursor on the clicked row" 3 cursor_on '○ fix-login'
+sleep 1.5
+ok "click: no pick (the middle still shows the hub Claude)" screen_has "$agent" 'ATTACHED bbbb0001'
+ok "click: no pick (review unchanged)" bash -c "! tmux -L $SOCK capture-pane -p -J -t $review | grep -q 'TUICR .*shop.fix-login'"
+click_at "$list" '○ fix-login' 2
+within "double click: the agent opens" 5 screen_has "$agent" 'ATTACHED aaaa0001'
+within "double click: the focus in the middle, as Enter" 3 is_pane "$agent"
+within "double click: review in its worktree" 5 screen_has "$review" 'TUICR .*shop.fix-login'
+click_at "$list" '◆ hub'
+within "click on ◆ hub: selected" 3 cursor_on '◆ hub'
+sleep 1
+ok "click on ◆ hub: no pick" screen_has "$agent" 'ATTACHED aaaa0001'
 
 # A pick: the agent in the middle (Opening at once), its worktree in review, the banner.
 jay go aaaa0001
