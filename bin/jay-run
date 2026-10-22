@@ -952,7 +952,9 @@ EOF
 case ${1:-} in
   -h | --help) usage ;;
   --exec) shift; run_pane "$*" ;;
-  --bar) cmd_bar ;;
+  # The bar's text and a tab's note; [tasks JSON file [worktree]] in place of the hub's (tests).
+  --bar) shift; cmd_bar "${1:+$(cat "$1")}" "${2:-}" ;;
+  --note) shift; cmd_note "$(if [[ -n "${1:-}" ]]; then cat "$1"; else tasks_json; fi)" "${2:-}" ;;
   --tick) cmd_tick ;;
   --hook) cmd_hook ;;
   --where) shift; cmd_where "$@" ;;

@@ -9,6 +9,7 @@
 #                                    the shims in compat/: wt new, hub-run, ... run jay's commands
 #   ~/.config/jay/config             your settings (JAY_ROOTS, ...), made when missing
 #   ~/.config/jay/yazi, lazygit      the hub's yazi keys and lazygit settings (JAY_REVIEW=lazygit)
+#   ~/.config/jay/tmux.conf          the tmux hub's own config (JAY_MUX=tmux), from config/tmux
 #   ~/.config/tuicr/config.toml      made when missing (q_quits = true); else only checked
 #   ~/.config/worktrunk/config.toml  copied when missing (always a copy: client settings go
 #                                    there); else the hub's keys it lacks are listed
@@ -131,6 +132,14 @@ check_tools() {
   head_ "Tools"
   [[ "$(uname -s)" == Darwin ]] || need "macOS only (Ghostty AppleScript, lsappinfo, BSD tools)"
   tool zellij 0.45.1 "brew install zellij"
+  # tmux: the other hub (JAY_MUX=tmux), on jay's own server and config. Optional for now.
+  if [[ "$(setting JAY_MUX)" == tmux ]]; then
+    tool tmux 3.5 "brew install tmux (the hub: JAY_MUX=tmux)"
+  elif command -v tmux >/dev/null 2>&1; then
+    note "tmux $(tmux -V 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1): JAY_MUX=tmux jay starts the tmux hub (beside the zellij one); 3.5 or newer"
+  else
+    note "tmux: optional, for the tmux hub (JAY_MUX=tmux; brew install tmux)"
+  fi
   tool wt 0.80.0 "brew install worktrunk"
   tool fzf 0.74.0 "brew install fzf"
   tool jq 1.7 "brew install jq"
@@ -284,7 +293,7 @@ is_ours() {
   [[ $target == /* ]] || { is_ours "$(dirname "$dest")/$target"; return; }
   case $target in
     */bin/* | */compat/* | */lib/*.sh) is_checkout "${target%/*}/.." ;;
-    */config/yazi | */config/lazygit | */config/tuicr/config.toml) is_checkout "${target%/config/*}" ;;
+    */config/yazi | */config/lazygit | */config/tuicr/config.toml | */config/tmux/jay.conf) is_checkout "${target%/config/*}" ;;
     */mod) is_checkout "${target%/mod}" ;;
     *) return 1 ;;
   esac
@@ -364,8 +373,9 @@ install_files() {
   fi
   put "$repo/config/yazi" "$CONF/yazi"
   put "$repo/config/lazygit" "$CONF/lazygit"
+  put "$repo/config/tmux/jay.conf" "$CONF/tmux.conf"
   ((todo > before)) && return 0
-  f="$(ls "$repo"/bin | wc -l | tr -d ' ') scripts in $BIN, jay-lib.sh in $LIB$shims, yazi keys and lazygit settings in ~/.config/jay"
+  f="$(ls "$repo"/bin | wc -l | tr -d ' ') scripts in $BIN, jay-lib.sh in $LIB$shims, yazi keys, lazygit settings and the tmux hub's config in ~/.config/jay"
   if [[ $mode != check ]]; then
     did "$f"
   elif [[ -n "$elsewhere" ]]; then
@@ -473,6 +483,10 @@ install_settings() {
 # After a Claude Code update: idle (default) — the list moves each agent that still runs the old
 # binary onto the new one at a quiet moment (claude respawn); off — only jay respawn does.
 # JAY_AUTO_RESPAWN=idle
+
+# The hub's multiplexer: zellij (default) or tmux (jay's own tmux server, beside a zellij hub;
+# tmux 3.5 or newer). JAY_MUX=tmux jay tries it without this line.
+# JAY_MUX=zellij
 CONF
       did "$SETTINGS_FILE (settings, all at their defaults)"
     fi
@@ -627,8 +641,9 @@ check_zellij() {
   local conf="$HOME/.config/zellij/config.kdl"
   if [[ -f "$conf" ]] && grep -qF 'MoveFocus "left"; MoveFocus "left"; MoveFocus "right"' "$conf" \
     && grep -qF 'jay-run" "--switch"' "$conf" && grep -qF 'jay-run" "--launcher"' "$conf" \
-    && grep -qF 'jay-sidebar" "--review" "toggle"' "$conf" && grep -qF 'jay-sidebar" "--review" "show"' "$conf"; then
-    ok "pane keys (Ctrl g, then 1 2 3 h l ; v Tab r)"
+    && grep -qF 'jay-sidebar" "--review" "toggle"' "$conf" && grep -qF 'jay-sidebar" "--review" "show"' "$conf" \
+    && grep -qF 'jay-run" "--pick"' "$conf"; then
+    ok "pane keys (Ctrl g, then 1 2 3 h l ; v Tab r t)"
     return 0
   fi
   if [[ -f "$conf" ]] && grep -qE '(hub-run|wt-sidebar)" "--' "$conf"; then
@@ -638,7 +653,7 @@ check_zellij() {
   note "for the pane keys, add these binds to the normal block of keybinds (Tab: a worktree's"
   note "tasks tab and back, through a pane of 1 cell that closes at once; zellij has no key action"
   note "for a tab by name. v: hide or show review, and 3 shows a hidden one, the same way."
-  note "r: the launcher, a floating prompt that starts a task):"
+  note "r: the launcher, a floating prompt that starts a task. t: all tasks in a picker):"
   cat <<KDL
           normal {
               bind "h" { MoveFocus "left"; SwitchToMode "locked"; }
@@ -650,8 +665,10 @@ check_zellij() {
               bind "v" { Run "$BIN/jay-sidebar" "--review" "toggle" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }
               bind "Tab" { Run "$BIN/jay-run" "--switch" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }
               bind "r" { Run "$BIN/jay-run" "--launcher" { floating true; close_on_exit true; x "20%"; y "35%"; width "60%"; height "3"; }; SwitchToMode "locked"; }
+              bind "t" { Run "$BIN/jay-run" "--pick" { floating true; close_on_exit true; x "10%"; y "15%"; width "80%"; height "60%"; }; SwitchToMode "locked"; }
           }
 KDL
+  note "the tmux hub (JAY_MUX=tmux) has these keys already, in ~/.config/jay/tmux.conf"
   note "the hub expects default_mode \"locked\", with Ctrl g to normal mode and Ctrl q to quit"
 }
 
@@ -704,7 +721,7 @@ uninstall() {
     if [[ -e "$dest" || -L "$dest" ]] && is_ours "$dest"; then rm -f "$dest"; n=$((n + 1)); fi
   done
   did "removed $n scripts and shims from $BIN and $LIB"
-  for dest in "$CONF/yazi" "$CONF/lazygit"; do
+  for dest in "$CONF/yazi" "$CONF/lazygit" "$CONF/tmux.conf"; do
     if [[ -e "$dest" || -L "$dest" ]] && is_ours "$dest"; then rm -rf "$dest"; did "removed $dest"; fi
   done
   dest="$HOME/.config/tuicr/config.toml"
