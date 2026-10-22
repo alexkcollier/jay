@@ -149,6 +149,9 @@ takes the mouse, else tmux's scroll mode.
 Alt+P and Alt+O do not reach the panes. tmux has no Cmd modifier: a Cmd key that Ghostty does
 not use itself (Cmd+P, Cmd+O) comes to the pane as Alt+P (Claude's model picker) or Alt+O
 (Claude's fast mode), and tmux cannot tell the two apart. In Claude, use `/model` and `/fast`.
+Alt+Shift+P does not reach them either: a terminal reply that comes late (`ESC P …`) gets to the
+pane as Alt+Shift+P and the reply's text, and Claude opens its model picker on it. Text such as
+`>|ghostty 1.3.2` in Claude's input box is such a reply.
 
 ## Pane titles
 

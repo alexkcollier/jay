@@ -162,7 +162,9 @@ Facts about your own machine (where the live install is, how your mod loads) go 
 - With `extkeys`, tmux puts Ghostty in modifyOtherKeys 2 (`\e[>4;2m`): Ghostty then sends a Cmd
   key it does not bind (Cmd+P, Cmd+O) as `\e[27;9;112~` (Super bit), and tmux makes that bit
   Meta: the pane gets Alt+P (Claude's model picker). Option is never Alt (no
-  `macos-option-as-alt`). jay.conf stops M-p and M-o. tmux holds a lone Esc 500 ms (not
+  `macos-option-as-alt`). A DCS reply that tmux does not expect (`\eP>|…\e\\` after its XTVERSION
+  reply came) goes to the pane as M-P (`\e[80;3u`), the text and M-\; Claude reads `\e[80;3u` as
+  Alt+P. jay.conf stops M-p, M-P and M-o. tmux holds a lone Esc 500 ms (not
   escape-time) while a query to the terminal has no answer (a test pty with no pixel size gets
   `\e[18t\e[14t`; answer them or set the size).
 - `extended-keys on` with `terminal-features …:extkeys`: `claude attach` in a pane asks for

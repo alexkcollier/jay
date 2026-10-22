@@ -419,13 +419,16 @@ if has_window 'shop/main · acme'; then
 fi
 
 # Cmd keys as Ghostty sends them (CSI 27, Super bit): Cmd+P and Cmd+O never reach a pane (tmux
-# makes them Alt+P, Claude's model picker, and Alt+O, fast mode); Cmd+X does, as Alt+X.
+# makes them Alt+P, Claude's model picker, and Alt+O, fast mode); Cmd+X does, as Alt+X. A DCS
+# reply that tmux does not expect: its ESC P (M-P, Alt+P for Claude) does not, its text does.
 tm new-window -d -n keys bash -c 'stty raw -echo; while IFS= read -rsn1 -d "" c; do printf %s "$c" | xxd -p >>"$1"; done' _ "$TMP/keys.got"
 tm select-window -t =jay:keys
 key 1b5b32373b393b3131327e; key 1b5b32373b393b3131317e; key 1b5b32373b393b3132307e
+key "$(printf '\eP>|late\e\\' | xxd -p | tr -d '\n')"
 got_keys() { tr -d '\n' <"$TMP/keys.got" 2>/dev/null; }
 within "Cmd+X reaches the pane as Alt+X" 3 bash -c "$(declare -f got_keys); TMP=$TMP; [[ \$(got_keys) =~ 1b78|5b3132303b3375 ]]"
-eq "Cmd+P and Cmd+O do not" "" "$(got_keys | grep -oE '5b3131(32|31)3b3375|1b(70|6f)')"
+within "an unexpected DCS reply: its text reaches the pane" 3 bash -c "$(declare -f got_keys); TMP=$TMP; [[ \$(got_keys) == *3e7c6c617465* ]]"
+eq "Cmd+P, Cmd+O and the reply's ESC P do not" "" "$(got_keys | grep -oE '5b3131(32|31)3b3375|5b38303b3375|1b(70|6f|50)')"
 tm kill-window -t =jay:keys
 
 # Ctrl g q: the client goes, the hub runs on.
