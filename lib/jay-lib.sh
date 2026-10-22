@@ -681,22 +681,52 @@ EOF
 
 # What the job state.json files tell about the background agents in agents JSON $1 (from
 # `claude agents --json --all`), as a JSON object id: {home, tree, orch}. For an agent in a
-# worktree it entered (EnterWorktree): home is the folder it came from, tree the worktree; else
-# both are null. While it is in that worktree, Claude keeps both in state.json (cwd,
-# worktreePath), and `claude agents` gives the home as the folder of one that does not run now.
-# Such an agent does not go with the worktree. orch: the agent has the orchestrator prompt. An
-# interactive session has no job, so no entry.
+# worktree it entered (EnterWorktree): home is the folder it came from (state.json cwd), tree the
+# folder it is in now; else both are null. Claude wakes a stopped agent in its home, and `claude
+# agents` gives the home as the folder of one that does not run now. Where it is now:
+# state.json worktreePath for a worktree that EnterWorktree made; else (EnterWorktree with the
+# path of a worktree that was there already leaves worktreePath empty) the folder `claude agents`
+# gives while it runs, or the last folder in its transcript. Such an agent does not go with the
+# worktree. orch: the agent has the orchestrator prompt. An interactive session has no job, so no
+# entry.
 jay_jobs() {
-  local IFS=$' \t\n' id dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs" files=()
+  local IFS=$' \t\n' id log sid cwd cfg="${CLAUDE_CONFIG_DIR:-$HOME/.claude}" files=() base last
   for id in $(jq -r '.[] | select(.kind == "background") | .id // empty' <<<"$1"); do
-    [[ -f "$dir/$id/state.json" ]] && files+=("$dir/$id/state.json")
+    [[ -f "$cfg/jobs/$id/state.json" ]] && files+=("$cfg/jobs/$id/state.json")
   done
   ((${#files[@]})) || { echo '{}'; return 0; }
-  jq -nc --arg mark "$JAY_ORCH_MARK" '[inputs | {(input_filename | split("/")[-2]): {
-      home: (if .worktreePath != null then .cwd // .originCwd // "" else null end),
-      tree: .worktreePath,
+  base=$(jq -nc --arg mark "$JAY_ORCH_MARK" '[inputs | {(input_filename | split("/")[-2]): {
+      cwd: (.cwd // .originCwd // ""), wt: .worktreePath, log: (.linkScanPath // ""),
+      sid: (.resumeSessionId // .sessionId // ""),
       orch: (.respawnFlags // [] | any(.[]; type == "string" and startswith($mark)))}}] | add // {}' \
-    "${files[@]}" 2>/dev/null || echo '{}'
+    "${files[@]}" 2>/dev/null) || base='{}'
+  # The last folder in the transcript of each agent that does not run and has no worktreePath.
+  # Each line of a transcript has its cwd; the tail of a big one is enough.
+  last=$(jq -r --argjson agents "$1" '
+      ($agents | map(select(.pid != null) | .id) | map({(. // ""): true}) | add // {}) as $runs
+      | to_entries[] | select(.value.wt == null and ($runs[.key] | not))
+      | [.key, (.value.log | if . == "" then "-" else . end), .value.sid] | @tsv' <<<"$base" \
+    | while IFS=$'\t' read -r id log sid; do
+        [[ -f "$log" ]] || log=$(compgen -G "$cfg/projects/*/$sid.jsonl" | head -1)
+        [[ -n "$log" && -f "$log" ]] || continue
+        cwd=$(tail -c 1000000 "$log" | grep -o '"cwd":"[^"]*"' | tail -1)
+        cwd=${cwd#\"cwd\":\"}
+        [[ -n "$cwd" ]] && printf '%s\t%s\n' "$id" "${cwd%\"}"
+      done | jq -Rsc 'split("\n") | map(select(. != "") | split("\t") | {(.[0]): .[1]}) | add // {}')
+  [[ -n "$last" ]] || last='{}'
+  # A folder in the home (a cd) is no worktree, unless it is one of Claude's (.claude/worktrees).
+  jq -c --argjson agents "$1" --argjson last "$last" '
+    ($agents | map(select(.kind == "background" and .id != null) | {(.id): .}) | add // {}) as $ag
+    | with_entries(.key as $id | .value |= (.cwd as $home
+        | (if .wt != null then .wt
+           elif $ag[$id].pid != null then $ag[$id].cwd // null
+           else $last[$id] end) as $now
+        | (if .wt != null then .wt
+           elif $now == null or $now == "" or $now == $home then null
+           elif ($now | startswith($home + "/")) and ($now | test("/\\.claude/worktrees/") | not) then null
+           else $now end) as $tree
+        | {home: (if $tree != null then $home else null end), tree: $tree, orch}))' <<<"$base" 2>/dev/null \
+    || echo '{}'
 }
 
 # The agents with the orchestrator prompt in agents JSON $1 (jobs JSON $2, from jay_jobs), as a
@@ -734,6 +764,135 @@ jay_hub_claude_find() {
       "$dir/$id/state.json" >/dev/null 2>&1 && { printf '%s\n' "$id"; return 0; }
   done
   return 1
+}
+
+# --- Agents whose home is gone ---
+# Claude wakes a stopped background agent in its home, the folder it started in (see jay_jobs),
+# also when it went into another worktree since. When that home is gone, the wake fails ("Couldn't
+# wake <id> — Workspace not trusted. <home> could not be resolved on disk"), and so does
+# `claude --bg --resume <session id>` without options: it wakes the same agent. With options,
+# `claude --bg --resume` starts a copy: a new agent with a new id and the same conversation,
+# whose home is the folder it starts in. So the hub continues such an agent as a copy in the
+# worktree it is in (jay_continue_in). The old entry then is "replaced" (a mark
+# $JAY_STATE/replaced/<old id>, with the new id): the list hides it and removes it when that is
+# safe (jay_drop_replaced).
+
+# The ids of the replaced agents, as a JSON array.
+jay_replaced_ids() {
+  { ls "$JAY_STATE/replaced" 2>/dev/null || true; } | jq -Rsc 'split("\n") | map(select(. != ""))'
+}
+
+# The background agents in agents JSON $1 (jobs JSON $2, from jay_jobs) that are in a worktree
+# they entered and whose home is gone, but not the replaced ones. One line each:
+# id<TAB>name<TAB>home<TAB>tree<TAB>fix<TAB>runs. fix: move (the tree is on disk: the agent can
+# go on there) or lost (the tree is gone too). runs: 1 while its process runs (it works on, but
+# cannot wake after it stops), else 0.
+jay_stranded() {
+  local IFS=$' \t\n' id name home tree runs
+  jq -r --argjson jobs "$2" --argjson replaced "$(jay_replaced_ids)" '.[]
+    | select(.kind == "background" and .id != null and $jobs[.id].tree != null)
+    | select(.id as $i | $replaced | index([$i]) | not)
+    | [.id, (.name // .id), $jobs[.id].home, $jobs[.id].tree, (if .pid != null then 1 else 0 end)] | @tsv' <<<"$1" \
+    | while IFS=$'\t' read -r id name home tree runs; do
+        [[ -n "$home" && ! -d "$home" ]] || continue
+        if [[ -d "$tree" ]]; then
+          printf '%s\t%s\t%s\t%s\tmove\t%s\n' "$id" "$name" "$home" "$tree" "$runs"
+        else
+          printf '%s\t%s\t%s\t%s\tlost\t%s\n' "$id" "$name" "$home" "$tree" "$runs"
+        fi
+      done
+  return 0
+}
+
+# The main checkout of the repo of folder $1, also when $1 is gone (a removed worktree): the first
+# folder up from it that is on disk, or a folder <repo> beside a gone <repo>.<branch>. Empty when
+# none is a repo.
+jay_repo_main() {
+  local p=$1 base cand
+  while [[ -n "$p" && "$p" != / ]]; do
+    if [[ -d "$p" ]]; then
+      git -C "$p" rev-parse --git-dir >/dev/null 2>&1 || return 0
+      jay_primary "$p"
+      return 0
+    fi
+    base=${p##*/}
+    while [[ "$base" == *.* ]]; do
+      base=${base%.*}
+      cand=${p%/*}/$base
+      if [[ -n "$base" && -d "$cand" ]] && git -C "$cand" rev-parse --git-dir >/dev/null 2>&1; then
+        jay_primary "$cand"
+        return 0
+      fi
+    done
+    p=${p%/*}
+  done
+  return 0
+}
+
+# Stop background agent $1 and wait (up to 10 s) until its process is gone.
+jay_stop_agent() {
+  local i
+  claude stop "$1" >/dev/null 2>&1
+  for i in $(seq 20); do
+    claude agents --json --all 2>/dev/null \
+      | jq -e --arg i "$1" 'any(.[]; .id == $i and .pid != null)' >/dev/null || return 0
+    sleep 0.5
+  done
+  return 1
+}
+
+# Background agent $1 (an id; it must not run) goes on in folder $2 as a copy: `claude --bg
+# --resume` of its conversation with its saved options (state.json respawnFlags: name, model,
+# system prompt), so Claude starts a copy there (see above). Print the new id, and mark the old
+# entry replaced. Without CLAUDE*/ANTHROPIC* variables, as in jay new. On a fault: Claude's
+# output on stderr, and return 1.
+jay_continue_in() {
+  local id=$1 dir=$2 state="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$1/state.json" sid out new name
+  local wt self="" flags=() strip=() var
+  [[ -f "$state" && -d "$dir" ]] || { echo "No job $id, or no folder $dir." >&2; return 1; }
+  sid=$(jq -r '.resumeSessionId // .sessionId // empty' "$state")
+  [[ -n "$sid" ]] || { echo "Job $id has no session id." >&2; return 1; }
+  # The saved options without the name: the copy gets its own (jay_unique_name). It keeps the
+  # old name when the old entry goes at once (jay_drop_replaced: no recorded worktree on disk).
+  eval "flags=($(jq -r '.respawnFlags // [] | map(select(type == "string"))
+    | reduce .[] as $f ({out: [], skip: false};
+        if .skip then .skip = false elif $f == "--name" or $f == "-n" then .skip = true
+        elif ($f | startswith("--name=")) then . else .out += [$f] end) | .out | @sh' "$state"))"
+  name=$(jq -r '.name // (.respawnFlags // [] | (index("--name") // index("-n")) as $i
+    | if $i != null then .[$i + 1] else null end) // empty' "$state")
+  [[ -n "$name" ]] || name=$(claude agents --json --all 2>/dev/null \
+    | jq -r --arg i "$id" 'first(.[] | select(.id == $i) | .name // empty) // empty' 2>/dev/null)
+  wt=$(jq -r '.worktreePath // empty' "$state")
+  [[ -n "$wt" && -d "$wt" ]] || self=$(jq -r '.sessionId // empty' "$state")
+  # Always with an option: without, Claude would wake the old agent in its home.
+  flags=(--name "$(jay_unique_name "${name:-$id}" "" "$self")" ${flags[@]+"${flags[@]}"})
+  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
+  out=$(cd "$dir" && env ${strip[@]+"${strip[@]}"} claude --bg --resume "$sid" "${flags[@]}" 2>&1)
+  new=$(jay_bg_id "$out")
+  if [[ -z "$new" ]]; then
+    printf '%s\n' "$out" >&2
+    return 1
+  fi
+  if [[ "$new" != "$id" ]]; then
+    jay_state_dir
+    mkdir -p "$JAY_STATE/replaced" && printf '%s\n' "$new" >"$JAY_STATE/replaced/$id"
+  fi
+  printf '%s\n' "$new"
+}
+
+# Remove the replaced entry $1 (`claude rm`), when that is safe: `claude rm` deletes the worktree
+# Claude recorded for the agent (state.json worktreePath), where the copy can work now. So while
+# that worktree is on disk, the entry stays (return 1); it goes with that worktree (d) or the
+# prune. Its transcript stays.
+jay_drop_replaced() {
+  local wt state="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$1/state.json"
+  # Removed already (by hand, say): only the mark goes.
+  [[ -f "$state" ]] || { rm -f "$JAY_STATE/replaced/$1"; return 0; }
+  wt=$(jq -r '.worktreePath // empty' "$state" 2>/dev/null)
+  [[ -n "$wt" && -d "$wt" ]] && return 1
+  claude rm "$1" >/dev/null 2>&1 || return 1
+  rm -f "$JAY_STATE/replaced/$1"
+  return 0
 }
 
 # The short id of the hub Claude. When the id file has none that `claude agents` lists, a hub
