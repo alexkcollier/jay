@@ -9,6 +9,7 @@
 - [Review (lazygit, JAY_REVIEW=lazygit)](#review-lazygit-jay_reviewlazygit)
 - [Files (yazi)](#files-yazi)
 - [Panes (zellij, every session)](#panes-zellij-every-session)
+- [Panes (the tmux hub)](#panes-the-tmux-hub)
 - [Pane titles](#pane-titles)
 
 ## List
@@ -42,6 +43,10 @@ The list's keys act in the list only. The list has no key for review's mode or f
 | ← | leave the agent (Claude's agent view is stopped; the list is that view) |
 | Enter (after you left) | open the agent again |
 | Enter (after a failed attach) | try again |
+
+A pick shows "Opening <name>..." at once. A pick of the agent the column should show opens it
+again when the column does not show it now: when Claude's agent view is on screen, or another
+agent that you opened from there, or an error.
 
 ## Review (tuicr)
 
@@ -109,9 +114,35 @@ to locked mode. `1` `2` `3` `h` `l` `;` `v` Tab `r` need the binds in
 | Ctrl g, `v` | hide or show review (see [Hide review](review.md#hide-review)) |
 | Ctrl g, Tab | hub tab ⇄ the picked worktree's tasks tab (or the tab of the newest task that the picked agent started) |
 | Ctrl g, `r` | the launcher: start a task in the picked worktree (or this tab's worktree) |
+| Ctrl g, `t` | all tasks in a picker (project, name, state); Enter: that task's tab |
 | Ctrl g, Ctrl q | quit the hub (the agents keep running) |
 | Ctrl g, Ctrl g / Esc / Enter | back to locked mode |
 | Ctrl g, `p` `t` `r` `s` `m` `o` | zellij's pane, tab, resize, scroll, move and session modes |
+
+## Panes (the tmux hub)
+
+The tmux hub (`JAY_MUX=tmux`) runs on jay's own tmux server with its own config
+(`~/.config/jay/tmux.conf`, from `config/tmux/jay.conf`): your `~/.tmux.conf` does not load
+there, and there is no prefix key. Ctrl g, then one key; the bar shows the keys while it waits.
+
+| Keys | Action |
+|---|---|
+| Ctrl g, `1` / `2` / `3` | list / middle / right column (`3` also shows a hidden review) |
+| Ctrl g, `h` / `l` | pane to the left / right |
+| Ctrl g, `;` | last pane |
+| Ctrl g, `v` | hide or show review |
+| Ctrl g, Tab | hub window ⇄ the picked worktree's tasks window (as in zellij) |
+| Ctrl g, `r` | the launcher, in a popup; its title says where the line runs |
+| Ctrl g, `t` | all tasks in a popup picker; Enter: that task's window |
+| Ctrl g, `q` | quit this terminal's view (detach); the hub, the agents and the tasks run on |
+| Ctrl g, `[` | scroll mode (tmux's copy mode; `q` leaves it) |
+| Ctrl g, Ctrl g | a Ctrl g for the program in the pane |
+| any other key, Esc | back, nothing done |
+
+`jay` attaches to the running tmux hub again. To end it: `tmux -L jay kill-server` (its tasks
+stop; the agents keep running). The mouse: a click on a pane focuses it and reaches the program
+at once (one click picks in the list); drag a border to resize; the wheel scrolls a program that
+takes the mouse, else tmux's scroll mode.
 
 ## Pane titles
 

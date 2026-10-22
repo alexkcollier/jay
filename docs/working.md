@@ -33,8 +33,11 @@
   automatic prune of dead agents.
 - macOS notices when an agent finishes a turn or needs input, with a click that shows the agent.
 - Your editor on any file of the worktree (`O` in files).
-- Dev servers in a tasks tab per worktree: their state and ports in the bar, their output
-  readable by agents (`jay run`), no port or repo config ([Tasks](tasks.md)).
+- Dev servers in a tasks tab per worktree: their state in the bar (with the project that owns
+  each one), their ports in `jay run ls` and their pane titles, their output readable by agents
+  (`jay run`), no port or repo config ([Tasks](tasks.md)). Ctrl g `t` picks any task.
+- Two multiplexers: zellij (the default) or tmux (`JAY_MUX=tmux`), with the same layout and keys
+  ([The tmux hub](install.md#the-tmux-hub-jay_muxtmux)).
 
 ## Start the hub
 
@@ -43,6 +46,10 @@ terminal: it attaches to a hub that answers, or it starts a fresh hub (the zelli
 `jay`). It opens a new Ghostty tab only when it has no terminal (an agent, a script,
 `/jay hub`) or runs inside another zellij session. `--here` and `--tab` choose. See
 [Commands](commands.md).
+
+`JAY_MUX=tmux jay` does the same for the tmux hub: the session `jay` on jay's own tmux server
+(`tmux -L jay`), beside a zellij hub if one runs. Inside a tmux session it opens a new tab. See
+[The tmux hub](install.md#the-tmux-hub-jay_muxtmux).
 
 ## Start agents in the background
 
@@ -118,7 +125,10 @@ Click a row or press Enter on it.
 `jay go`, a new agent) moves the list's cursor to that agent.
 
 A click on a pane that does not have the focus only gives it the focus (zellij). Click again to
-pick.
+pick. In the tmux hub one click focuses the pane and picks.
+
+A pick shows "Opening <name>..." in the middle column at once; the agent's screen follows in
+about half a second (also for a long conversation: `claude attach` draws the end of it).
 
 ## The middle column
 
@@ -127,7 +137,9 @@ You type to the agent here, as in any `claude attach`.
 - Leave the agent: Ctrl+Z, or ←. In `claude attach`, ← opens Claude's agent view; in the hub the
   list is that view, so the pane stops it. The agent keeps running.
 - After you leave, the pane says "You left this agent". Enter opens it again. A pick of an agent
-  opens that agent.
+  opens that agent. A pick of the agent the pane should show opens it again whenever the pane
+  does not show it (Claude's agent view, another agent opened from there, an error): the pick
+  looks at the `claude attach` that really runs under the pane, not only at the pane's target.
 - When `claude attach` fails at once (for example, the agent's worktree is gone), its error stays
   on screen. Enter tries again.
 - The pane never closes.
@@ -324,3 +336,6 @@ its process: the path of the binary under Claude's `claude bg-pty-host` process.
 Quit the hub: Ctrl g, then Ctrl q. The bar shows this hint when you press Ctrl g. The agents keep
 running. Closing the hub's Ghostty tab only detaches it: `jay` attaches it again. The list has
 no quit key.
+
+The tmux hub: Ctrl g, then `q` detaches this terminal (the hub and its tasks run on; `jay`
+attaches again). `tmux -L jay kill-server` ends it.

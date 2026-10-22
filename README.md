@@ -38,7 +38,11 @@ and Claude Code background agents.
 - **Banner** (top, zjstatus, blue). `◆ JAY › worktrees` and the picked worktree (on a tasks tab:
   `◆ JAY › tasks` and its worktree), and where `Ctrl g Tab` goes.
 - **Bar** (bottom, zjstatus). `◆ jay`, the agent counts from the list, the tasks of all worktrees
-  (`● web:5174`), the zellij mode when it is not locked and the time.
+  with the project of each (`● shop/fix-login web`; the picked worktree's bright), the zellij
+  mode when it is not locked and the time.
+- **tmux** (optional): `JAY_MUX=tmux jay` runs the same hub on jay's own tmux server, beside a
+  zellij hub; banner and bar are its status line at the top. See
+  [The tmux hub](docs/install.md#the-tmux-hub-jay_muxtmux).
 - **Tasks tabs** (one per worktree, Ctrl g Tab). Shell panes for dev servers, watchers and
   `docker compose up`, which you and the agents both see. See [Tasks](docs/tasks.md).
 
@@ -167,7 +171,7 @@ jay was called wt-hub. The commands, the variables and the folders have new name
 - [Troubleshooting](docs/troubleshooting.md): what to do when the hub does not answer.
 - [Repo layout](docs/layout.md): what each file in this repo is.
 - [TODO.md](TODO.md): open items, known faults and the hub's decisions.
-- [CLAUDE.md](CLAUDE.md): rules for edits in this repo, and zellij 0.45 facts.
+- [CLAUDE.md](CLAUDE.md): rules for edits in this repo, zellij 0.45 facts and tmux facts.
 - [LICENSE](LICENSE): MIT.
 
 ## Work on jay

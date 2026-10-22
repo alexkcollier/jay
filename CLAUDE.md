@@ -19,6 +19,7 @@ Facts about your own machine (where the live install is, how your mod loads) go 
 
 - Shell part: `tests/run.sh` (bash 3.2, no network; a fake HOME, stubs for claude and zellij).
   `tests/run.sh <name>` runs the test files whose name has `<name>`.
+- A throwaway tmux hub in a pty (about a minute): `tests/run.sh smoke` (`tests/smoke-tmux.sh`).
 - Mod: see "Mod" below.
 
 ## Rules
@@ -55,6 +56,10 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   and the test commands need the agent's own `ZELLIJ*` variables unset: `lib/jay-lib.sh` uses
   `jay` when `JAY_SESSION` (and the old `WT_HUB_SESSION`) is empty, so a `jay-sidebar --files`
   from a test acts on the live hub.
+- Test the tmux hub on a socket of its own, never tmux's default server or the socket `jay`:
+  `JAY_MUX=tmux JAY_TMUX_SOCKET=<test name> TMUX_TMPDIR=<tmp>` (as `tests/smoke-tmux.sh`), with
+  `TMUX`/`TMUX_PANE` unset; end it with `tmux -L <test name> kill-server`. Keep the fake HOME
+  short (`/tmp`): fzf's `--listen` socket and tmux's socket fail over 104 bytes of path.
 - Starting a pane in the live hub from an agent: strip `CLAUDE*`/`ANTHROPIC*` env vars. The hub
   server must not inherit them either (`jay --here` removes them before zellij starts).
 - Never replace a suspended pane in place on the live hub; wait until it is visible.
@@ -80,6 +85,10 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   (also after an attach wakes a retired agent): the running binary is the path after `--` in the
   parent `claude bg-pty-host` process. The daemon starts every worker from its own binary.
 - Claude: a notify_when_idle subscription to an idle session fires at once.
+- Claude: ← in `claude attach` execs the same pid as `claude agents` (its args change; SIGTERM
+  ends it). From that view Enter attaches the chosen agent. `claude --bg --resume <session-id>
+  --name x` of an ended session took the same ids (no copy) and wrote the new title into that
+  session's transcript: never use an old session of the user as a probe.
 - Test Claude sessions in a pty with every CLAUDE*/ANTHROPIC* variable unset: an inherited
   `CLAUDE_CODE_CHILD_SESSION` turns off the transcript and hides the session from `claude agents`.
 - A test that starts Claude sessions removes them at the end (`claude rm <id>`): without the
@@ -109,3 +118,38 @@ Facts about your own machine (where the live install is, how your mod loads) go 
 - A held (exited) command pane cannot be re-run from outside; close it and open a new one.
 - A server can outlive its session after a quit and hang every zellij command; all calls in
   `lib/jay-lib.sh` go through a 5 s timeout wrapper, and `jay` kills such a server.
+
+## tmux facts (3.8, from the tests of the tmux hub)
+
+- `select-pane -T <title>` only sets the title; it does not make the pane active. A separate
+  `select-pane -t <pane>` does, and from the CLI it moves the client's real focus.
+- Targets: `=jay:hub.1` works; `=jay:=hub` does not. A window name with `.` or `:`
+  (`shop/release-1.2`) breaks a target by name: go by window id (`@5`).
+- `display -p -t =jay '<fmt>'` prints nothing while a client is attached; `-t =jay:` (with the
+  colon) or a pane id works. In zsh, quote `=jay`: `=word` is zsh's command expansion.
+- `#{pane_start_command}` quotes args with spaces (`jay-run --exec "pnpm dev"`); a pane made
+  without a command has an empty one. `#{pane_current_command}` is only the program's name
+  (`claude`, `bash`), not its args: look at the process under `#{pane_pid}` (`ps`, `pgrep -P`).
+  The pane processes are children of the server (`#{pid}`), started directly when the command
+  is given as several args.
+- `swap-pane -d` with a pane in a hidden window (`new-window -d`) puts a pane over another; the
+  covered one runs on there (it gets SIGWINCH to the hidden window's size). `break-pane -d` /
+  `join-pane -d -h -l <columns>` hide and show review; `-l N%` is a share of the target pane, not
+  of the window. Pane ids stay.
+- `send-keys -l` sends control characters too (`\x05\x15 line\r` types a line with Enter).
+- A key table (`bind -n C-g switch-client -T jay`) acts once and goes back; `run-shell -b` runs a
+  script without a pane. `display-popup -E -e VAR=1` sets a variable in the popup; a popup has
+  no pane of its own (its `TMUX_PANE` is the pane under it: `jay_mux_self` ignores it there).
+  The popup's `-T` title is a format.
+- User options carry the bar: `set -g @jay_tasks '#[fg=...]text'` (styles in the value work; `#`
+  must be doubled), `set -w -t @5 @jay_note …` for one window; the status line reads pane, then
+  window, then global options.
+- `extended-keys on` with `terminal-features …:extkeys`: `claude attach` in a pane asks for
+  mode 2 (`#{pane_key_mode}` = `Ext 2`); Shift+Enter from the terminal as CSI u (`\e[13;2u`) or
+  xterm's `\e[27;2;13~` reaches Claude as a new line. `claude attach` turns on the mouse modes
+  (`mouse_any_flag`, `mouse_sgr_flag`) and the other screen.
+- A click on an unfocused pane focuses it and reaches the program (one click picks in the list).
+- Under `set -e` (`jay`, `jay go`), a process substitution inherits errexit: any failing command
+  in it (a `kill` of a child that just ended, `x=$(cat <missing file>)`) ends it silently.
+- `new-session` checks the client's `TERM`: `xterm-ghostty` needs Ghostty's `TERMINFO` (set in
+  Ghostty's tabs, not in `env -i`).

@@ -16,6 +16,14 @@ bin/jay-pane) ⇄ files (yazi).
 - A key that marks a task pane as private, so that `jay run log` refuses to read it (the bar
   would still show its state and ports). Not built; the README notes it.
 - Tab control for terminals other than Ghostty.
+- The tmux hub (2026-10-22, `JAY_MUX=tmux`, steps 1 and 2 of notes/paradigm.md): Alex's trial
+  beside the zellij hub (step 3). To judge on a real screen in Ghostty: the look (border titles,
+  the two status lines at the top: banner, then bar), the keys (Ctrl g table; Claude's own
+  Ctrl+B, Ctrl+G are free now), the mouse (one click picks; border drag; wheel), fzf's partial
+  redraws in the list (the clear on a new row count stays), wide glyphs. Known limits: both
+  hubs' lists follow a pick made in either (`jay_list_follow` finds every list's socket); the
+  zellij tasks tabs' note counts from the picked worktree, tmux's from each window's own; the
+  launcher's popup has a fixed height. Then step 4 (tmux the default) and 5 (remove zellij).
 - An agent whose home is gone goes on as a copy with a new id (docs/working.md, "When the folder
   an agent came from goes"): its turn chain starts again, and an old entry whose recorded
   worktree is on disk stays hidden until that worktree goes. Claude has no option to move an

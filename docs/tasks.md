@@ -53,9 +53,14 @@ hub tab, `◆ JAY › tasks <its worktree>` on a tasks tab, with where Ctrl g Ta
 
 ## The bar and the task panes
 
-The bar shows each task that runs or ended, with its first port: `● web:5174` (runs), `✗ admin`
-(failed), `○ build` (ended with 0). A shell at its prompt is not shown. Two tasks with the same
-name get their branch. The list sends the bar text every 3 s.
+The bar shows each task that runs or ended: its sign, the project it runs in (the repo for a main
+checkout, `repo/branch` for a worktree) and its name: `● shop/fix-login web` (runs), `✗ shop
+admin` (failed), `○ shop build` (ended with 0). The tasks of the picked worktree come first and
+bright, the others dim. A shell at its prompt is not shown. No ports in the bar: `jay run ls`
+has them, and so do the task panes' titles (`web · :5173`). The list sends the bar text every
+3 s. Each tasks tab's banner says how many tasks run in other worktrees, and where
+(`2 running elsewhere: shop, acme-api`); in the zellij hub that count is from the picked
+worktree. Ctrl g `t` lists all tasks (project, name, state, ports): Enter goes to the task's tab.
 
 A pane that `jay run` started shows `$ <command>` at the top. When the command ends, the pane says
 `exited (<code>) · Enter: run again · q: close`. Ctrl-C stops the command, not the pane. The
@@ -89,7 +94,7 @@ PS1='❯ '   # one line: the pane title says where the command runs
 
 There is no port config. Vite and Next take the next free port by themselves; the hub finds the
 ports that each task's processes listen on (`lsof`), and for `docker compose` the ports that its
-containers publish. `jay run ls` and the bar show them, so an agent can give a frontend its
+containers publish. `jay run ls` and the task panes' titles show them, so an agent can give a frontend its
 backend's URL (`VITE_API_URL=http://localhost:<port> pnpm dev`). For "address in use",
 `jay run port <n>` tells who holds the port: a task (with its pane), a Docker container (with its
 compose project), or another process (with its folder).
@@ -104,8 +109,9 @@ folder), but their published ports collide unless the compose file takes them fr
 ## Output and secrets
 
 There are no log files. A pane's output stays in zellij's scrollback (`scroll_buffer_size`,
-default 10000 lines), as in any zellij pane; `jay run log` reads it with
-`zellij action dump-screen` at that moment. Every pane in a tasks tab is readable by agents, and
+default 10000 lines), as in any zellij pane, or in tmux's (`history-limit` 50000 in the tmux
+hub); `jay run log` reads it with `zellij action dump-screen` (tmux: `capture-pane`) at that
+moment. Every pane in a tasks tab is readable by agents, and
 what an agent reads goes into its transcript. Run a command that prints secrets in a terminal
 outside the hub's tasks tabs. Not built yet, in case it is needed: a key that marks a pane as
 private, so that `jay run log` refuses to read it (the bar would still show its state and ports).

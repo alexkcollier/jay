@@ -10,6 +10,7 @@
 - [Coming from wt-hub](#coming-from-wt-hub)
 - [Settings](#settings)
 - [Pane keys](#pane-keys)
+- [The tmux hub (JAY_MUX=tmux)](#the-tmux-hub-jay_muxtmux)
 - [Uninstall](#uninstall)
 - [Work on jay](#work-on-jay)
 
@@ -43,6 +44,7 @@ reads the front app with `lsappinfo`.
 | Tool | Without it | Tested with | From | Used for |
 |---|---|---|---|---|
 | zjstatus | zellij's compact bar, no banners | 0.25.0 | `./install.sh` gets it from GitHub: `~/.local/share/jay/zjstatus-v0.25.0.wasm` | the bar and the banners |
+| tmux | the zellij hub only | 3.8 (3.5+) | `brew install tmux` | the tmux hub (`JAY_MUX=tmux`), on jay's own server and config; see [The tmux hub](#the-tmux-hub-jay_muxtmux). Required when `JAY_MUX=tmux` is set |
 | Nerd Font | the git signs show as boxes | | Ghostty's built-in font has the Nerd Font symbols; in another terminal, set a Nerd Font | the Octicons in the git signs |
 | Ghostty | no tab control ([Terminals](#terminals)) | 1.3.2 (1.3+) | `brew install --cask ghostty` | tabs through AppleScript: `jay`, `jay go`, `jay open`, `jay edit`, notices |
 | terminal-notifier | no notices | 3.1.0 | `brew install terminal-notifier` | notices |
@@ -150,7 +152,8 @@ Options of `install.sh`: `--link` (symlinks in place of copies, for work on jay)
 
 | What | Where |
 |---|---|
-| the scripts in `bin/` and `lib/jay-lib.sh` | `~/.local/bin`, `~/.local/lib` (copies; `--link`: symlinks) |
+| the scripts in `bin/`, `lib/jay-lib.sh` and the mux backends `lib/jay-mux-*.sh` | `~/.local/bin`, `~/.local/lib` (copies; `--link`: symlinks) |
+| the tmux hub's config (`config/tmux/jay.conf`) | `~/.config/jay/tmux.conf` |
 | the shims of the old names (`compat/`, `lib/wt-lib.sh`; not after `--no-compat`) | `~/.local/bin`, `~/.local/lib` |
 | your settings, all at their defaults (see [Settings](#settings)) | `~/.config/jay/config`, made when missing |
 | the hub's yazi keys | `~/.config/jay/yazi` |
@@ -249,12 +252,14 @@ hooks in background agents and a notice click.
 | `JAY_REVIEW` | `tuicr` | the review pane: `tuicr` (review comments) or `lazygit` (git actions); see [Review with lazygit](review.md#review-with-lazygit) |
 | `JAY_REVIEW_DIFF` | `delta` | the patch in lazygit review: `delta`, `difft` (difftastic) or `plain` (delta, no wrap); see [The patch in lazygit](review.md#the-patch-in-lazygit) |
 | `JAY_AUTO_RESPAWN` | `idle` | after a Claude Code update: `idle`, the list moves each agent that runs the old version onto the new one at a quiet moment; `off`, only `jay respawn` does; see [Claude Code updates](working.md#claude-code-updates) |
+| `JAY_MUX` | `zellij` | the hub's multiplexer: `zellij` or `tmux` (jay's own tmux server); see [The tmux hub](#the-tmux-hub-jay_muxtmux) |
 
 The old `WT_` names (`WT_ROOTS`, `WT_REVIEW`, ...) still work, in the file and in the
 environment; a `JAY_` name wins over a `WT_` name. `./install.sh --check` tells you when a
 `JAY_ROOTS` folder does not exist.
 
-Environment variables only: `JAY_SESSION` (default `jay`), `JAY_ZELLIJ_TIMEOUT` (default 5 s).
+Environment variables only: `JAY_SESSION` (default `jay`), `JAY_ZELLIJ_TIMEOUT` (default 5 s),
+`JAY_TMUX_SOCKET` (the tmux hub's socket name, default `jay`), `JAY_TMUX_TIMEOUT` (default 5 s).
 The old `WT_HUB_SESSION` and `WT_ZELLIJ_TIMEOUT` still work.
 
 Your own worktrunk settings, for example aliases for one client's repo, go in
@@ -283,6 +288,30 @@ normal {
 `Tab`, `v` and `3` run a script in a floating pane of 1 cell that closes at once: zellij has no
 key action for a tab by name. What each key does: [Keys](keys.md#panes-zellij-every-session).
 Binds of wt-hub (`hub-run`, `wt-sidebar`) still work through the shims.
+
+The tmux hub needs none of these: its keys ship in `~/.config/jay/tmux.conf`.
+
+## The tmux hub (JAY_MUX=tmux)
+
+The hub can run on tmux instead of zellij (optional for now; zellij stays the default). It runs
+on jay's own tmux server (`tmux -L jay`) with jay's own config (`~/.config/jay/tmux.conf`, from
+`config/tmux/jay.conf`; `./install.sh` puts it there). Your `~/.tmux.conf`, your own tmux
+sessions and `~/.config/zellij/config.kdl` do not matter to it. The layout, the picks, review
+and files, the tasks windows, the bar and the keys (Ctrl g, then one key: [Keys](keys.md#panes-the-tmux-hub))
+are the same as in the zellij hub.
+
+1. `brew install tmux` (3.5 or newer), then `./install.sh` (it installs the config).
+2. Try it beside the zellij hub: in a new Ghostty tab, `JAY_MUX=tmux jay`. Each hub keeps its
+   panes' state apart (the tmux hub in `~/.local/state/jay/tmux`); both show the same agents,
+   marks, turn chains and hub Claude. Both can show the hub Claude at once: its screen then
+   takes the size of the last view that opened it.
+3. To keep it: `JAY_MUX=tmux` in `~/.config/jay/config`. Then `jay`, `jay go`, `jay run` and the
+   notices use the tmux hub; without the line, agents' `jay run` and notices go to the zellij
+   hub.
+
+`jay` attaches to the tmux hub when it runs. Ctrl g `q` detaches; `tmux -L jay kill-server`
+ends it (its tasks stop, the agents run on). Ghostty sends Shift+Enter and the other modified
+keys through tmux to Claude (extended keys, tested with `claude attach` in a tmux pane).
 
 ## Uninstall
 
