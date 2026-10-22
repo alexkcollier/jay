@@ -126,6 +126,11 @@ jay_mux_uncover() {
   jay_mux_close "$1"
 }
 
+# The cover's own program ended: zellij shows the covered pane again by itself.
+jay_mux_cover_done() {
+  return 0
+}
+
 # Wait up to 2 s until pane $1 is shown, not suspended under another pane.
 jay_mux_wait_shown() {
   local i
@@ -240,6 +245,12 @@ jay_mux_tab_pane() {
 # hub tab's banner). Text $2 may have ANSI colors.
 jay_mux_bar() {
   zellij -s "$JAY_SESSION" pipe "zjstatus::pipe::pipe_$1::$2" >/dev/null 2>&1
+}
+
+# A tab's own part of the banner: zjstatus pipes reach every tab alike, so the tasks tabs' banner
+# has one shared part instead ("note", jay_mux_bar).
+jay_mux_tab_note() {
+  return 0
 }
 
 # The bar at the bottom of the hub, in kanagawa colors: the agent counts and the tasks (both

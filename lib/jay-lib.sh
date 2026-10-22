@@ -12,7 +12,7 @@ for _key in ROOTS TERMINAL EDITOR EDITOR_GUI TASK_SHELL LAUNCHER REVIEW REVIEW_D
   [[ -z "${!_new:-}" && -n "${!_old:-}" ]] && export "$_new=${!_old}"
 done
 if [[ -f "$JAY_CONFIG" ]]; then
-  _re='^[[:space:]]*(JAY|WT)_(ROOTS|TERMINAL|EDITOR|EDITOR_GUI|TASK_SHELL|LAUNCHER|REVIEW|REVIEW_DIFF|AUTO_RESPAWN)[[:space:]]*=[[:space:]]*(.*)$'
+  _re='^[[:space:]]*(JAY|WT)_(ROOTS|TERMINAL|EDITOR|EDITOR_GUI|TASK_SHELL|LAUNCHER|REVIEW|REVIEW_DIFF|AUTO_RESPAWN|MUX)[[:space:]]*=[[:space:]]*(.*)$'
   while IFS= read -r _line || [[ -n "$_line" ]]; do
     [[ "$_line" =~ $_re ]] || continue
     _key=JAY_${BASH_REMATCH[2]} _val=${BASH_REMATCH[3]}
@@ -41,7 +41,7 @@ JAY_STATE="$HOME/.local/state/jay"
 # Make the state folder before a write there. Not when this file loads: install.sh --check
 # loads it and must change nothing.
 jay_state_dir() {
-  [[ -d "$JAY_STATE" ]] || mkdir -p "$JAY_STATE" 2>/dev/null
+  [[ -d "${JAY_HUB_STATE:-$JAY_STATE}" ]] || mkdir -p "$JAY_STATE" "${JAY_HUB_STATE:-$JAY_STATE}" 2>/dev/null
   return 0
 }
 
@@ -422,17 +422,18 @@ jay_agent_phases() {
       else "idle" end)})' <<<"$1"
 }
 
-# --- Hub panes (zellij session "jay"): agent viewer, review ⇄ files ---
+# --- Hub panes (session "jay"): agent viewer, review ⇄ files ---
 # One pane in each column. The agent viewer (middle) and review (right) are layout panes; files
-# opens in place over review: zellij keeps review suspended and shows it again when files
-# closes. The panes run `jay-pane <role>`, which follows the target in
-# $JAY_STATE/<role>.target; a pick writes the target and stops the running program, so the pane
-# stays where it is and only its program and title change.
+# covers review (jay_mux_cover), which runs on under it and comes back when files closes. The
+# panes run `jay-pane <role>`, which follows the target in $JAY_HUB_STATE/<role>.target; a pick
+# writes the target and stops the running program, so the pane stays where it is and only its
+# program and title change.
 
 JAY_SESSION=${JAY_SESSION:-jay}
 
 # --- The mux layer: every call to the hub's multiplexer goes through jay_mux_* ---
-# The backend is lib/jay-mux-$JAY_MUX.sh (zellij). The scripts say what they want ("focus the
+# The backend is lib/jay-mux-$JAY_MUX.sh: zellij (the default) or tmux (JAY_MUX in the
+# environment or ~/.config/jay/config). The scripts say what they want ("focus the
 # agent column", "cover review with files"), the backend says how. jay-mux <name> [args] runs
 # one from outside bash (a pane id "self" is the caller's own pane). Pane and tab ids are the
 # backend's own strings; scripts pass them on and never take them apart.
@@ -447,8 +448,14 @@ JAY_SESSION=${JAY_SESSION:-jay}
 #            jay_mux_keep_hidden
 #   tabs     jay_mux_tabs (JSON lines), jay_mux_tab_id, jay_mux_active_tab, jay_mux_tab_go,
 #            jay_mux_tab_go_id, jay_mux_tab_new, jay_mux_tab_close, jay_mux_tab_pane
-#   bar      jay_mux_bar <agents|tasks|where> <text>
-JAY_MUX=${JAY_MUX:-zellij}
+#   bar      jay_mux_bar <agents|tasks|where> <text>, jay_mux_tab_note <tab> <text>
+# A zellij hub and a tmux hub can run side by side: each keeps its panes' state in its own
+# JAY_HUB_STATE (the tmux hub in $JAY_STATE/tmux); the marks, the turn chains and the hub
+# Claude are shared.
+case ${JAY_MUX:-} in
+  tmux) JAY_HUB_STATE="$JAY_STATE/tmux" ;;
+  *) JAY_MUX=zellij JAY_HUB_STATE=$JAY_STATE ;;
+esac
 source "${BASH_SOURCE[0]%/*}/jay-mux-$JAY_MUX.sh"
 
 jay_in_hub() {
@@ -481,8 +488,8 @@ jay_hub_widths() {
 }
 
 # The files of role $1 (agent, review, files); the folder is made for the write that may follow.
-jay_hub_target_file() { jay_state_dir; printf '%s/%s.target\n' "$JAY_STATE" "$1"; }
-jay_hub_pane_file() { jay_state_dir; printf '%s/%s.pane\n' "$JAY_STATE" "$1"; }
+jay_hub_target_file() { jay_state_dir; printf '%s/%s.target\n' "$JAY_HUB_STATE" "$1"; }
+jay_hub_pane_file() { jay_state_dir; printf '%s/%s.pane\n' "$JAY_HUB_STATE" "$1"; }
 
 # Forget all hub pane targets (a fresh hub).
 jay_hub_reset() {
@@ -603,7 +610,7 @@ jay_hub_focus_middle() {
 # Run "$@" holding the hub lock, so two picks (sidebar, /jay go, a notice click) never move
 # the hub's panes at the same time. A lock older than 5 s is taken over.
 jay_hub_locked() {
-  local lock="$JAY_STATE/hub.lock" i rc=0
+  local lock="$JAY_HUB_STATE/hub.lock" i rc=0
   jay_state_dir
   for i in $(seq 50); do mkdir "$lock" 2>/dev/null && break; sleep 0.1; done
   [[ -d "$lock" ]] || mkdir "$lock"
@@ -637,7 +644,7 @@ JAY_HUB_MARK="You are the hub Claude"
 # Added to the hub Claude's system prompt. It must start with $JAY_HUB_MARK.
 jay_hub_claude_prompt() {
   cat <<EOF
-You are the hub Claude of jay, a worktree hub: a zellij session "jay" with a list of worktrees and
+You are the hub Claude of jay, a worktree hub: a terminal session "jay" (zellij or tmux) with a list of worktrees and
 Claude agents on the left, one agent in the middle column (you now) and a review of that agent's
 turns on the right. The user comes to you to start and steer agents, and with questions across
 repos. Each agent is a background Claude session in its own git worktree. Repos live under
@@ -1094,7 +1101,7 @@ jay_hub_show_review() {
 # --- Review hidden (Ctrl g v): the middle column takes review's width; tuicr runs on, so your
 # place and draft comments stay. The backend does it (jay_mux_hide_review). The file holds
 # review's share of the tab's width and 1 when files was open.
-JAY_HIDDEN="$JAY_STATE/review.hidden"
+JAY_HIDDEN="$JAY_HUB_STATE/review.hidden"
 
 # Review is hidden: prints the id of its tab (zellij) or window (tmux).
 jay_hub_review_hidden() {

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# jay — the hub, zellij session "jay": the live worktree list (left), the picked agent (middle;
-# at start the hub Claude) and review + files (right); a tasks tab per worktree for dev servers
-# (jay run). Goes to the hub's Ghostty tab when it has one, else opens the hub in this
-# terminal; a new tab only without a terminal or from inside another zellij session.
-# --here: in this terminal.  --tab: in a new tab.  --print-layout: the zellij layout it starts.
-# --print-tasks-tab <worktree> <name>: the layout of a worktree's tasks tab (jay run makes it).
+# jay — the hub, session "jay" in zellij (default) or in jay's own tmux server (JAY_MUX=tmux):
+# the live worktree list (left), the picked agent (middle; at start the hub Claude) and review +
+# files (right); a tasks tab per worktree for dev servers (jay run). Goes to the hub's Ghostty
+# tab when it has one, else opens the hub in this terminal; a new tab only without a terminal
+# or from inside another session of the same multiplexer.
+# --here: in this terminal.  --tab: in a new tab.  --print-layout: the layout it starts.
+# --print-tasks-tab <worktree> <name>: the zellij layout of a worktree's tasks tab.
 # jay <command> [args]: runs jay-<command> (jay --help lists them).
 set -euo pipefail
 
@@ -12,10 +13,11 @@ usage() {
   cat <<'EOF'
 jay: a worktree and agent hub (it was wt-hub).
 
-  jay                       open the hub (zellij session "jay"): its Ghostty tab, else this
-                            terminal, else a new tab
+  jay                       open the hub (session "jay"): its Ghostty tab, else this
+                            terminal, else a new tab. JAY_MUX=tmux: the tmux hub
+                            (beside a zellij one); tmux -L jay kill-server ends it
   jay --here | --tab        open it in this terminal | in a new Ghostty tab
-  jay --print-layout        print the hub's zellij layout
+  jay --print-layout        print the hub's layout
   jay <command> [args]      run jay-<command>; jay <command> -h shows its help
 
 Commands:
@@ -99,8 +101,11 @@ if [[ "$where" != --here ]] && jay_mux_alive && tab=$(jay_mux_gh_tab); then
 fi
 
 # Else in this terminal (no new tab by default). Not possible without a terminal (an
-# agent, a script) or inside another zellij session (nested zellij): then a new tab.
-if [[ "$where" == --here ]] || [[ "$where" != --tab && -t 0 && -t 1 && -z "${ZELLIJ:-}" ]]; then
+# agent, a script) or inside a zellij session (nested; its Ctrl g would take jay's keys), or for
+# the tmux hub inside a tmux session: then a new tab.
+nested=false
+[[ -n "${ZELLIJ:-}" || ( "$JAY_MUX" == tmux && -n "${TMUX:-}" ) ]] && nested=true
+if [[ "$where" == --here ]] || [[ "$where" != --tab && -t 0 && -t 1 && $nested == false ]]; then
   jay_mux_alive && jay_mux_attach
   fresh_start
   # The hub's panes inherit the server's environment. A Ghostty started by an agent passes that
@@ -119,5 +124,5 @@ if jay_mux_alive; then
   jay_gh_new_tab "$root" "$(jay_mux_attach_cmd)" >/dev/null
 else
   no_old_hub
-  jay_gh_new_tab "$root" "$HOME/.local/bin/jay --here" >/dev/null
+  jay_gh_new_tab "$root" "JAY_MUX=$JAY_MUX $HOME/.local/bin/jay --here" >/dev/null
 fi

@@ -17,7 +17,7 @@ source "$HOME/.local/lib/jay-lib.sh"
 
 # The hub's own tab (list, agent, review); every other tab of the hub is a worktree's tasks tab.
 HUB_TAB=hub
-STATE_DIR="$JAY_STATE/tasks"
+STATE_DIR="$JAY_HUB_STATE/tasks"
 # A record of each task that jay run started (see record_task), and of the ones a hub restart took.
 STARTED="$STATE_DIR/started"
 GONE="$STATE_DIR/gone"

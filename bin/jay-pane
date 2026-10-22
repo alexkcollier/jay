@@ -281,6 +281,7 @@ while :; do
   # You left the program yourself: the pane closes and the one under it comes back. Review
   # gets its title after that (the delay outlives the pane, so HUP is ignored).
   if [[ "$role" == files ]]; then
+    jay_mux_cover_done "$self"
     (trap '' HUP; sleep 0.5; jay_hub_retitle review) >/dev/null 2>&1 &
   fi
   [[ "$role" == review ]] || exit 0
