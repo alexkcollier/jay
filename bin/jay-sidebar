@@ -325,11 +325,12 @@ Trust ${key/#$HOME/~} and all its worktrees? This is the same as yes in the trus
     out=$(cd "$primary" && jay-new "$branch" --agent 2>&1)
   elif [[ "$top" == "$primary" ]]; then
     say "Starting an orchestrator in $repo (main checkout)..."
-    out=$(cd "$top" && claude --bg --name "$(jay_tab_name "$repo" "$branch")" \
+    out=$(cd "$top" && claude --bg --name "$(jay_unique_name "$(jay_tab_name "$repo" "$branch")")" \
       --append-system-prompt "$(jay_orchestrator_prompt "$repo" "$top")" 2>&1)
   else
+    # A second agent in the worktree: <repo>/<branch>-2 (jay_unique_name).
     say "Starting an agent in $repo/${branch##*/}..."
-    out=$(cd "$top" && claude --bg --name "$(jay_tab_name "$repo" "$branch")" 2>&1)
+    out=$(cd "$top" && claude --bg --name "$(jay_unique_name "$(jay_tab_name "$repo" "$branch")")" 2>&1)
   fi
   agent=$(jay_bg_id "$out")
   if [[ -z "$agent" ]]; then
@@ -355,10 +356,13 @@ show_started() {
 # Interactive session $1 (session id) goes on as a background agent, after a confirm. It must be
 # idle: it ends in its tab (SIGTERM; two copies must never write one conversation), and
 # `claude --bg --resume` continues the conversation under the same session id, so its short id
-# and turn chain stay. Its tab goes back to the shell. The hub then shows the agent.
+# and turn chain stay. Its tab goes back to the shell. The hub then shows the agent. It keeps its
+# name, unless another agent has that name too: then it gets <name>-2 (jay_unique_name).
 to_background() {
-  local sid=$1 agent name pid cwd out short i
-  agent=$(agent_json "$sid")
+  local sid=$1 agents agent name unique pid cwd out short i
+  local rename=()
+  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  agent=$(jq -c --arg s "$sid" 'first(.[] | select(.sessionId == $s)) // empty' <<<"$agents")
   [[ -n "$agent" ]] || return 0
   name=$(jq -r '.name // .sessionId[0:8]' <<<"$agent")
   if [[ "$(jq -r .kind <<<"$agent")" == background ]]; then
@@ -384,7 +388,11 @@ It ends in its own tab and goes on in the background with the same conversation.
     pause "\"$name\" did not end. Nothing changed."
     return 0
   fi
-  out=$(cd "$cwd" && claude --bg --resume "$sid" 2>&1)
+  if [[ -n "$(jq -r '.name // ""' <<<"$agent")" ]]; then
+    unique=$(jay_unique_name "$name" "$agents" "$sid")
+    [[ "$unique" == "$name" ]] || rename=(--name "$unique")
+  fi
+  out=$(cd "$cwd" && claude --bg --resume "$sid" ${rename[@]+"${rename[@]}"} 2>&1)
   short=$(jay_bg_id "$out")
   if [[ -z "$short" ]]; then
     pause "\"$name\" ended, but it did not start in the background:

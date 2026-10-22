@@ -294,6 +294,22 @@ jay_bg_id() {
   grep -oE 'backgrounded · [0-9a-f]{8}' <<<"$1" | grep -oE '[0-9a-f]{8}$' | tail -1
 }
 
+# --- Agent names: one name for each agent, where the hub can see to it ---
+# The name for a new agent: $1 when no agent in agents JSON $2 (default: `claude agents --json
+# --all`) has it, else $1-2, $1-3, ... Every agent that `claude agents` lists counts, also a
+# stopped or done one: it still exists. A removed one does not. Names match in any case, as in
+# `jay go`. $3: a session id to leave out (an agent that keeps its own name, say after a resume).
+jay_unique_name() {
+  local agents=${2:-}
+  [[ -n "$agents" ]] || agents=$(claude agents --json --all 2>/dev/null)
+  [[ -n "$agents" ]] || agents='[]'
+  jq -r --arg n "$1" --arg self "${3:-}" '
+    [.[] | select(.sessionId != $self) | .name // empty | ascii_downcase] as $taken
+    | first(range(1; 1000) | (if . == 1 then $n else "\($n)-\(.)" end)
+        | select(ascii_downcase as $c | $taken | index([$c]) | not)) // $n' <<<"$agents" 2>/dev/null \
+    || printf '%s\n' "$1"
+}
+
 # --- Folder trust: `claude --bg` does not start in a repo that was never trusted ---
 # Claude keeps the trust in ~/.claude.json (projects.<path>.hasTrustDialogAccepted), under the
 # path of the repo's main checkout: all its worktrees share it. A trusted parent folder of the
@@ -586,7 +602,11 @@ jay_hub_show() {
 
 JAY_HUB_CLAUDE_FILE=${JAY_HUB_CLAUDE_FILE:-$JAY_STATE/hub-claude}
 
-# Added to the hub Claude's system prompt.
+# The first words of the hub Claude's prompt: they tell it from other agents (respawnFlags in
+# the job's state.json, as for $JAY_ORCH_MARK).
+JAY_HUB_MARK="You are the hub Claude"
+
+# Added to the hub Claude's system prompt. It must start with $JAY_HUB_MARK.
 jay_hub_claude_prompt() {
   cat <<EOF
 You are the hub Claude of jay, a worktree hub: a zellij session "jay" with a list of worktrees and
@@ -601,8 +621,9 @@ $JAY_ROOTS (a folder per client, then the repo; worktrees are siblings named <re
 - Worktrees with git state and task notes: \`jay all --json\`; in a repo also \`wt list\`
   (worktrunk).
 - New worktree with an agent: in the repo's main checkout, \`jay new <branch> -t "<task>" -- <prompt>\`
-  (-a: an idle agent). New agent in a worktree that exists: \`cd <worktree> && claude --bg
-  --name "<repo>/<branch>" "<prompt>"\`. Start agents only when the user asks or agrees.
+  (-a: an idle agent); for a branch whose worktree exists, the same command starts an agent in
+  that worktree. It gives the agent a name no other agent has. Start agents only when the user
+  asks or agrees.
   "Workspace not trusted": Claude never ran in that repo. Do not change ~/.claude.json; tell the
   user to press n on one of its worktrees in the list, or N on its repo row (both ask to trust
   the repo), or to run \`c\` in it.
@@ -613,6 +634,7 @@ $JAY_ROOTS (a folder per client, then the repo; worktrees are siblings named <re
   yourself with \`jay new\`, or tell the user that n on the repo's main checkout row starts one.
   An orchestrator only reads, plans and reviews: skills that change a branch run in its workers.
 - Show an agent in the middle column: \`jay go <id or name>\`; \`jay go hub\` comes back to you.
+  Prefer ids: two agents made outside the hub can have one name.
 - Dev servers and other long-running commands: the hub's "tasks" tab (\`jay run ls --json\`,
   \`jay run log <task>\`, \`jay run -n <name> -w -- <command>\`), not a background Bash call.
 - Read other worktrees in place. Do not edit files in an agent's worktree, and never remove
@@ -703,24 +725,41 @@ jay_orchestrators() {
   return 0
 }
 
-# The short id of the hub Claude. When there is none (never started, or `claude rm` removed it),
-# start it, and wait until `claude agents` lists it. A stopped one stays: `claude attach` opens
-# it again. A lock keeps two callers (the pane at hub start, a list pick) from starting two.
+# The newest background agent in agents JSON $1 with the hub Claude's prompt, as a short id; fails
+# when there is none.
+jay_hub_claude_find() {
+  local IFS=$' \t\n' id dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs"
+  for id in $(jq -r 'sort_by(-(.startedAt // 0)) | .[] | select(.kind == "background") | .id // empty' <<<"$1"); do
+    jq -e --arg mark "$JAY_HUB_MARK" '.respawnFlags // [] | any(.[]; type == "string" and startswith($mark))' \
+      "$dir/$id/state.json" >/dev/null 2>&1 && { printf '%s\n' "$id"; return 0; }
+  done
+  return 1
+}
+
+# The short id of the hub Claude. When the id file has none that `claude agents` lists, a hub
+# Claude the file lost (a new state folder) is taken on. When there is none (never started, or
+# `claude rm` removed it), start it, and wait until `claude agents` lists it. Its name is "hub",
+# or "hub-2"... when another agent has that name. A stopped one stays: `claude attach` opens it
+# again. A lock keeps two callers (the pane at hub start, a list pick) from starting two.
 jay_hub_claude() {
-  local lock="$JAY_STATE/hub-claude.lock" id out var i rc=0
+  local lock="$JAY_STATE/hub-claude.lock" id out var i agents rc=0
   local strip=() dirs=() args=()
   jay_state_dir
   for i in $(seq 150); do mkdir "$lock" 2>/dev/null && break; sleep 0.1; done
   [[ -d "$lock" ]] || mkdir "$lock"
   id=$(cat "$JAY_HUB_CLAUDE_FILE" 2>/dev/null)
-  if [[ -z "$id" ]] || ! claude agents --json --all 2>/dev/null | jq -e --arg id "$id" 'any(.[]; .id == $id)' >/dev/null; then
+  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  if [[ -z "$id" ]] || ! jq -e --arg id "$id" 'any(.[]; .id == $id)' <<<"$agents" >/dev/null 2>&1; then
+    id=$(jay_hub_claude_find "$agents") && printf '%s\n' "$id" >"$JAY_HUB_CLAUDE_FILE"
+  fi
+  if [[ -z "$id" ]]; then
     # An inherited CLAUDE_CODE_CHILD_SESSION (a caller in an agent) hides a session from
     # `claude agents`: start it without CLAUDE*/ANTHROPIC* variables.
     for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
     # It starts in the first root; the other roots are added folders.
     IFS=: read -ra dirs <<<"$JAY_ROOTS"
     for ((i = 1; i < ${#dirs[@]}; i++)); do args+=(--add-dir "${dirs[i]}"); done
-    out=$(cd "${dirs[0]:-$HOME}" && env ${strip[@]+"${strip[@]}"} claude --bg --name hub \
+    out=$(cd "${dirs[0]:-$HOME}" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(jay_unique_name hub "$agents")" \
       ${args[@]+"${args[@]}"} --append-system-prompt "$(jay_hub_claude_prompt)" 2>&1)
     id=$(jay_bg_id "$out")
     if [[ -n "$id" ]]; then

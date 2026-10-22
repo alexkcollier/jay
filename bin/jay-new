@@ -41,10 +41,11 @@ IFS=$'\t' read -r _ repo branch _ < <(jay_describe "$path")
 # `claude agents` and turns off its transcript. Start it without them.
 strip=()
 for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
+# A second agent in the same worktree gets <repo>/<branch>-2 (jay_unique_name).
 if ((${#prompt[@]})); then
-  (cd "$path" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(jay_tab_name "$repo" "$branch")" "${prompt[*]}")
+  (cd "$path" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(jay_unique_name "$(jay_tab_name "$repo" "$branch")")" "${prompt[*]}")
 elif [[ "$agent" == true ]]; then
-  (cd "$path" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(jay_tab_name "$repo" "$branch")")
+  (cd "$path" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(jay_unique_name "$(jay_tab_name "$repo" "$branch")")")
 else
   echo "Worktree ready: $path"
   echo "Open it with: jay open $branch"
