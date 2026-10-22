@@ -197,11 +197,11 @@ jay go aaaa0001
 within "same agent after leaving: attached" 3 screen_has "$agent" 'ATTACHED aaaa0001'
 
 # A notice click: jay-notify gives terminal-notifier a command (-execute), which macOS runs
-# through /bin/sh with launchd's environment: HOME and the system PATH, no TMUX, no JAY_MUX (the
-# config file names the backend). The agent opens in the middle column and the hub's Ghostty tab
+# through /bin/sh with launchd's environment: HOME and the system PATH, no TMUX, no JAY_MUX
+# anywhere (jay_which_mux finds the tmux hub that runs). The agent opens in the middle column and the hub's Ghostty tab
 # comes to the front; no new tab. Stubs first on PATH: Ghostty's AppleScript (a tab on the hub's
 # client, another tab selected), pgrep for Ghostty, lsappinfo.
-printf 'JAY_MUX=tmux\nJAY_ROOTS=%s\n' "$JAY_ROOTS" >>"$HOME/.config/jay/config"
+printf 'JAY_ROOTS=%s\n' "$JAY_ROOTS" >>"$HOME/.config/jay/config"
 cat >"$HOME/.local/bin/terminal-notifier" <<SH
 #!/bin/bash
 while ((\$#)); do [[ "\$1" == -execute ]] && printf '%s\n' "\$2" >"$STUB/notice.execute"; shift; done
@@ -229,7 +229,7 @@ jq -n --arg c "$TMP/projects/acme/shop.fix-login" '{hook_event_name: "Stop", cwd
 within "notice: terminal-notifier gets the click command" 5 test -s "$STUB/notice.execute"
 has "notice: the click runs jay-go with the session id" "jay-go aaaa0001-0000-0000-0000-000000000001" "$(cat "$STUB/notice.execute" 2>/dev/null)"
 env -i HOME="$HOME" PATH="$TMP/gh:/usr/bin:/bin:/usr/sbin:/sbin" TMUX_TMPDIR="$TMUX_TMPDIR" JAY_TMUX_SOCKET="$SOCK" \
-  /bin/sh -c "$(cat "$STUB/notice.execute")"
+  ZELLIJ_SOCKET_DIR="$ZELLIJ_SOCKET_DIR" /bin/sh -c "$(cat "$STUB/notice.execute")"
 within "click: the agent in the middle column" 5 screen_has "$agent" 'ATTACHED aaaa0001'
 eq "click: its title" fix-login "$(tm display -p -t "$agent" '#{pane_title}')"
 within "click: the focus in the middle" 2 is_pane "$agent"
