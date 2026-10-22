@@ -12,7 +12,7 @@ for _key in ROOTS TERMINAL EDITOR EDITOR_GUI TASK_SHELL LAUNCHER REVIEW REVIEW_D
   [[ -z "${!_new:-}" && -n "${!_old:-}" ]] && export "$_new=${!_old}"
 done
 if [[ -f "$JAY_CONFIG" ]]; then
-  _re='^[[:space:]]*(JAY|WT)_(ROOTS|TERMINAL|EDITOR|EDITOR_GUI|TASK_SHELL|LAUNCHER|REVIEW|REVIEW_DIFF|AUTO_RESPAWN|MUX)[[:space:]]*=[[:space:]]*(.*)$'
+  _re='^[[:space:]]*(JAY|WT)_(ROOTS|TERMINAL|EDITOR|EDITOR_GUI|TASK_SHELL|LAUNCHER|REVIEW|REVIEW_DIFF|AUTO_RESPAWN|MUX|ORCHESTRATE)[[:space:]]*=[[:space:]]*(.*)$'
   while IFS= read -r _line || [[ -n "$_line" ]]; do
     [[ "$_line" =~ $_re ]] || continue
     _key=JAY_${BASH_REMATCH[2]} _val=${BASH_REMATCH[3]}
@@ -372,7 +372,8 @@ JAY_MARKS=$JAY_STATE
 
 # Set mark $1 (seen, ended) of agent key $2 to now. An empty key does nothing.
 jay_mark() {
-  [[ -n "${2:-}" ]] || return 0
+  # -: no agent (a note in the middle column, see jay-pane).
+  [[ -n "${2:-}" && "$2" != - ]] || return 0
   mkdir -p "$JAY_MARKS/$1" 2>/dev/null && touch "$JAY_MARKS/$1/$2" 2>/dev/null
   return 0
 }
@@ -598,7 +599,8 @@ jay_hub_point() {
   local pane pid now
   IFS=$'\t' read -r pane pid < <(jay_hub_role "$1") || return 1
   now=$(cat "$(jay_hub_target_file "$1")" 2>/dev/null) || now=""
-  if [[ "$now" == "$2" ]] || [[ "$1" == agent && -n "$now" && "${now%%$'\t'*}" == "${2%%$'\t'*}" ]]; then
+  # The same agent (its id) is the same target; two notes (id -) are not.
+  if [[ "$now" == "$2" ]] || [[ "$1" == agent && -n "$now" && "${now%%$'\t'*}" != - && "${now%%$'\t'*}" == "${2%%$'\t'*}" ]]; then
     if [[ "$1" != agent ]] || jay_hub_agent_runs "$pane" "$pid" "$now"; then
       printf '%s\t0\n' "$pane"
       return 0
@@ -613,11 +615,12 @@ jay_hub_point() {
 # The agent pane $1 (its jay-pane: pid $2) shows target line $3 now: a `claude attach <id>` runs
 # under it, and its screen is not Claude's agent view. ← in `claude attach` turns that process
 # into `claude agents` (the agent view), and from there it can attach another agent; the target
-# file still names the first one. An interactive agent's note has nothing to check.
+# file still names the first one. An interactive agent's note, or a note of the list (kind note,
+# id -), has nothing to check.
 jay_hub_agent_runs() {
   local IFS=$' \t\n' id kind p pp screen
   IFS=$'\t' read -r id _ kind _ <<<"$3"
-  [[ -n "$id" && "$kind" != interactive ]] || return 0
+  [[ -n "$id" && "$kind" != interactive && "$kind" != note ]] || return 0
   for p in $(pgrep -f "claude attach $id\$"); do
     pp=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
     [[ "$pp" == "$2" || "$(ps -o ppid= -p "$pp" 2>/dev/null | tr -d ' ')" == "$2" ]] || continue
@@ -691,8 +694,9 @@ $JAY_ROOTS (a folder per client, then the repo; worktrees are siblings named <re
 - Send a prompt to a running agent: the ListAgents and SendMessage tools.
 - Orchestrators: a repo can have one, an agent in its main checkout with an orchestrator prompt
   (◇ in the list). \`jay agents --orchestrators\` lists them (main checkout, id, name). Send work
-  for such a repo to its orchestrator (SendMessage). For a repo without one, start workers
-  yourself with \`jay new\`, or tell the user that n on the repo's main checkout row starts one.
+  for such a repo to its orchestrator (SendMessage). A repo has none by default: for such a
+  repo, plan the work and start its workers yourself with \`jay new\`. For long parallel work in
+  one repo, tell the user that n on the repo's main checkout row starts an orchestrator.
   An orchestrator only reads, plans and reviews: skills that change a branch run in its workers.
 - Show an agent in the middle column: \`jay go <id or name>\`; \`jay go hub\` comes back to you.
   Prefer ids: two agents made outside the hub can have one name.
@@ -738,6 +742,27 @@ change to a worker. Keep the main checkout free of work.
 - Read the workers' worktrees in place; do not edit files in them. Never merge, and never remove
   worktrees or agents (\`wt merge\`, \`wt remove\`, \`claude rm\`), unless the user asks.
 EOF
+}
+
+# Start the orchestrator of the repo with main checkout $1 (repo name $2, branch $3) as a
+# background agent: the name <repo>/<branch> (jay_unique_name) and the orchestrator prompt.
+# Prints claude's output (jay_bg_id gives the new id). The caller checks the trust and that the
+# repo has no orchestrator yet. n on a main checkout row and JAY_ORCHESTRATE (a pick) use it.
+jay_orchestrator_start() {
+  (cd "$1" && claude --bg --name "$(jay_unique_name "$(jay_tab_name "$2" "$3")")" \
+    --append-system-prompt "$(jay_orchestrator_prompt "$2" "$1")" 2>&1)
+}
+
+# JAY_ORCHESTRATE: the repos that always get an orchestrator, ':' between them. An entry is a
+# repo's name as the list shows it (shop), or client/repo (acme/shop) for one of two repos with
+# that name; any case. The list starts the orchestrator of such a repo when you pick one of its
+# rows and it has none (jay-sidebar, orchestrate); never by itself.
+# Is the repo $2 of client $1 in it?
+jay_orchestrate_wanted() {
+  local list
+  list=":$(printf '%s' "${JAY_ORCHESTRATE:-}" | tr -d ' ' | tr '[:upper:]' '[:lower:]'):"
+  set -- "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" "$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$2" ]] && [[ "$list" == *":$2:"* || "$list" == *":$1/$2:"* ]]
 }
 
 # What the job state.json files tell about the background agents in agents JSON $1 (from

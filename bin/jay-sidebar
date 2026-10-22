@@ -12,7 +12,8 @@
 # review pane.
 # d: remove the agent, or the worktree with its idle agents (asks first; agents that came from
 # it and are in another worktree go on there as copies first)
-# a: hide/show idle repos and main checkouts
+# a: hide/show idle repos (a main checkout row stays while its repo has other rows)
+# JAY_ORCHESTRATE: a pick of a row of a listed repo without an orchestrator starts one
 # b: an idle interactive session goes on as a background agent (asks first)
 # p: prune dead agents (folder gone; asks first). The list also prunes them by itself, every
 # 10 minutes, with plain `claude rm` (it keeps an agent whose worktree has work to lose), and
@@ -142,7 +143,8 @@ rows() {
     # first, then the removed worktrees that still have agents (dim, "(gone)": a folder
     # <repo>.<branch> or one in the repo). Agents in no repo go last, under "no repo". A main
     # checkout without an agent is idle, and so is a repo with only an idle main checkout: both
-    # are dim, and hidden with $hideidle (key a).
+    # are dim. $hideidle (key a) hides such a repo; an idle main checkout of a repo that shows
+    # stays.
     | ($roots | split(":") | map(rtrimstr("/"))) as $rootdirs
     | def byrank: sort_by((.phase | rank), -born);
       ($wts | map(. as $w | . + {agents: ($ag | map(select(.wt == $w.path)) | byrank)}
@@ -154,10 +156,13 @@ rows() {
                  dead: ($ag | map(select(.gone and (.cwd | startswith($m + ".") or startswith($m + "/")))) | group_by(.cwd)
                    | map({path: .[0].cwd, agents: byrank,
                           label: (.[0].cwd | if startswith($m + ".") then .[($m | length) + 1:] else split("/") | last end)}))}
-              | . + {idle: (all(.trees[]; .idle) and .dead == [])})
+              | . + {idle: (all(.trees[]; .idle) and .dead == []),
+                     # Two or more workers (agents in its other worktrees) and no orchestrator:
+                     # its main checkout row hints at n.
+                     hint: (([.trees[] | select(.main | not) | .agents[] | select(.state != "stopped")] | length) >= 2
+                            and (any(.trees[] | select(.main) | .agents[]; .orch == "main") | not))})
         | map(select(.main != null))) as $repos
     | ($repos | map(select(.idle)) | length) as $idle
-    | ($repos | map(select(.idle | not) | .trees[] | select(.idle)) | length) as $idlemain
     | ($repos | [.[].dead[].agents[].sessionId]) as $housed
     | ($ag | map(select(.wt == "" and (.sessionId as $s | $housed | index([$s]) | not))) | byrank) as $stray
     | def lead($col): (" " * ($col - 2)) + (if shown then c("1;36") + "▸ " + c("0") else "  " end);
@@ -192,18 +197,25 @@ rows() {
       def fit($n): if length > $n then .[:([$n - 1, 1] | max)] + "…" else . end;
       # A worktree row fits the list ($width): the git signs always show, a long branch name is
       # cut, and the task note shows only in the room left. The main checkout has a home sign
-      # before its branch.
-      def treerow: signs as $s | ($s | cells | if . > 0 then . + 1 else 0 end) as $sw
+      # before its branch. $hint: the dim "n: orchestrator" at the end, in the room left after
+      # the task note.
+      def treerow($hint): signs as $s | ($s | cells | if . > 0 then . + 1 else 0 end) as $sw
         | (if .main then $gl.home + " " else "" end) as $m
         | (.branch | split("/") | last | fit([$width - 2 - ($m | length) - $sw, 6] | max)) as $b
         | ($width - 2 - ($m | length) - ($b | length) - $sw - 3) as $room
+        | (if .task != "" and $room >= 6 then " · " + (.task | narrow | fit($room)) else "" end) as $t
+        | ($room + 2 - ($t | length)) as $left
         | "wt\t" + .path + "\t  " + (if .idle or (.git and safe) then c("2") else "" end) + $m + $b + c("0")
           + (if $sw > 0 then " " + $s else "" end)
-          + (if .task != "" and $room >= 6 then c("2") + " · " + (.task | narrow | fit($room)) + c("0") else "" end);
+          + (if $t != "" then c("2") + $t + c("0") else "" end)
+          + (if $hint and $left >= 6 then c("2") + " " + ("n: orchestrator" | fit($left)) + c("0") else "" end);
+      # With $hideidle, an idle repo goes; the main checkout row stays while its repo shows: it is
+      # the anchor of the other rows of the repo.
       def reporows: select((.idle and $hideidle) | not)
+        | .hint as $hint
         | ("repo\t" + .main.path + "\t " + (if .idle then c("2") else c("1") end) + .repo + c("0")),
-          (.trees[] | select((.idle and $hideidle) | not)
-            | treerow,
+          (.trees[]
+            | treerow(.main and $hint),
               (.agents[] | agrow(4; bgage))),
           (.dead[] | ("gone\tgone:" + .path + "\t  " + c("2") + .label + " (gone)" + c("0")),
                      (.agents[] | agrow(4; bgage)));
@@ -221,9 +233,8 @@ rows() {
           ($stray | select(length > 0)
             | ("hdr\thdr:norepo\t " + c("2") + "no repo" + c("0")),
               (.[] | agrow(3; .cwd + (if .gone then " (gone)" else "" end))))),
-      (if $hideidle and $idle + $idlemain > 0 then " \tgap:idle\t ",
-         "idle\tidle\t" + c("2") + "a shows " + ([(if $idle > 0 then "\($idle) idle repo" + (if $idle > 1 then "s" else "" end) else empty end),
-                                     (if $idlemain > 0 then "\($idlemain) idle main" else empty end)] | join(", ")) + c("0")
+      (if $hideidle and $idle > 0 then " \tgap:idle\t ",
+         "idle\tidle\t" + c("2") + "a shows \($idle) idle repo" + (if $idle > 1 then "s" else "" end) + c("0")
        else empty end)
   ' "$CACHE" | tee >(wc -l | tr -d ' ' >"${JAY_SIDEBAR_COUNT:-/dev/null}") \
     >(head -1 | cut -f3 >"${JAY_SIDEBAR_SUM:-/dev/null}")
@@ -267,6 +278,7 @@ pick_interactive() {
 
 act() {
   local agent
+  case $1 in ag|wt|repo) orchestrate "$1" "$2" ;; esac
   case $1 in
     ag) agent=$(agent_json "$2")
         if jay_in_hub && [[ -n "$agent" && "$(jq -r .kind <<<"$agent")" != background ]]; then
@@ -289,6 +301,79 @@ act() {
         fi ;;
     hub) JAY_LIST_PICK=1 jay-go hub >/dev/null 2>&1 ;;
   esac
+  return 0
+}
+
+# JAY_ORCHESTRATE (jay_orchestrate_wanted): the pick of row kind $1 with id $2, in a listed repo
+# that has no orchestrator, starts one as n on its main checkout row does, but without a
+# question. Only on a pick, never by itself. After a worktree or repo row, the middle column
+# says so (mid_note), then shows the new orchestrator, without the focus. After an agent row,
+# that agent goes to the middle column as usual, and the orchestrator only comes into the list.
+# A repo that Claude does not trust yet gets none: the middle column says to press n (it asks).
+# The start runs in the background, so the list does not wait for claude; a stamp per repo keeps
+# a second pick in the next minute from starting a second one.
+orchestrate() {
+  local kind=$1 path primary client repo branch stamp out agent name i
+  [[ -n "${JAY_ORCHESTRATE:-}" ]] || return 0
+  path=$(path_of "$kind" "$2")
+  [[ -n "$path" && -d "$path" ]] || return 0
+  primary=$(jay_primary "$(jay_toplevel "$path")")
+  [[ -n "$primary" ]] || return 0
+  IFS=$'\t' read -r client repo branch _ < <(jay_describe "$primary")
+  jay_orchestrate_wanted "$client" "$repo" || return 0
+  stamp="$STATE/orchestrate.$(printf '%s' "$primary" | cksum | cut -d' ' -f1)"
+  [[ -n "$(find "$stamp" -mmin -1 2>/dev/null)" ]] && return 0
+  [[ -z "$(jay_orchestrators "$primary")" ]] || return 0
+  if ! jay_trusted "$primary"; then
+    [[ "$kind" == ag ]] || mid_note "$repo is in JAY_ORCHESTRATE, but Claude does not trust it yet. n on its main checkout row asks, then starts the orchestrator." "$primary" "$repo"
+    return 0
+  fi
+  touch "$stamp"
+  [[ "$kind" == ag ]] || mid_note "Starting the orchestrator of $repo (JAY_ORCHESTRATE)..." "$primary" "$repo"
+  (
+    trap '' HUP
+    out=$(jay_orchestrator_start "$primary" "$repo" "$branch")
+    agent=$(jay_bg_id "$out")
+    if [[ -z "$agent" ]]; then
+      rm -f "$stamp"
+      mid_noted "$primary" && mid_note "The orchestrator of $repo did not start: $(grep -m1 . <<<"$out")" "$primary" "$repo"
+      exit 0
+    fi
+    [[ "$kind" == ag ]] && exit 0
+    for i in $(seq 20); do
+      name=$(claude agents --json --all 2>/dev/null | jq -r --arg i "$agent" 'first(.[] | select(.id == $i) | .name // .id) // empty')
+      [[ -n "$name" ]] && break
+      sleep 0.5
+    done
+    jay_hub_locked show_quiet "$agent" "${name:-$agent}" "$primary"
+  ) </dev/null >/dev/null 2>&1 &
+  return 0
+}
+
+# Show note $1 about main checkout $2 in the hub's middle column, under pane title $3, without
+# the focus. A note has no agent: id -, kind note (jay-pane prints it).
+mid_note() {
+  local viewer changed
+  jay_in_hub || return 0
+  IFS=$'\t' read -r viewer changed < <(jay_hub_locked jay_hub_point agent "$(printf -- '-\t%s\tnote\t%s' "$2" "$1")") || return 0
+  [[ "$changed" == 1 ]] && jay_mux_rename "$viewer" "$3"
+  return 0
+}
+
+# The middle column shows a note about main checkout $1 (mid_note).
+mid_noted() {
+  local cwd kind
+  IFS=$'\t' read -r _ cwd kind _ 2>/dev/null <"$(jay_hub_target_file agent)" || return 1
+  [[ "$kind" == note && "$cwd" == "$1" ]]
+}
+
+# Show background agent $1 named $2 from folder $3 in the middle column, without the focus, while
+# it still shows the note about $3: a pick since then wins.
+show_quiet() {
+  local viewer changed
+  mid_noted "$3" || return 0
+  IFS=$'\t' read -r viewer changed < <(jay_hub_point agent "$(printf '%s\t%s\tbackground\t%s' "$1" "$3" "$2")") || return 0
+  [[ "$changed" == 1 ]] && jay_mux_rename "$viewer" "$2"
   return 0
 }
 
@@ -445,8 +530,7 @@ Trust ${key/#$HOME/~} and all its worktrees? This is the same as yes in the trus
     out=$(cd "$primary" && jay-new "$branch" --agent 2>&1)
   elif [[ "$top" == "$primary" ]]; then
     say "Starting an orchestrator in $repo (main checkout)..."
-    out=$(cd "$top" && claude --bg --name "$(jay_unique_name "$(jay_tab_name "$repo" "$branch")")" \
-      --append-system-prompt "$(jay_orchestrator_prompt "$repo" "$top")" 2>&1)
+    out=$(jay_orchestrator_start "$top" "$repo" "$branch")
   else
     # A second agent in the worktree: <repo>/<branch>-2 (jay_unique_name).
     say "Starting an agent in $repo/${branch##*/}..."
@@ -914,7 +998,7 @@ case ${1:-} in
   --review) review_key "${2:-}"; exit 0 ;;
   --idle) if [[ -f "$HIDE_IDLE" ]]; then rm -f "$HIDE_IDLE"; else : >"$HIDE_IDLE"; fi; exit 0 ;;
   --footer) shift; footer "$@"; exit 0 ;;
-  -h|--help) sed -n '2,25s/^# \{0,1\}//p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,26s/^# \{0,1\}//p' "$0"; exit 0 ;;
   # An option this version does not have (say a bind of a list started before an update) must
   # not start a second list.
   -*) printf 'jay-sidebar: unknown option %s\n' "$1" >&2; exit 2 ;;

@@ -6,7 +6,8 @@
 #         fresh hub opens on the hub Claude (a background agent, see jay_hub_claude).
 #         When you leave the agent (Ctrl+Z, or ←: the list is the agent view here), it keeps
 #         running and Enter opens it again. An interactive agent runs in its own terminal tab:
-#         the pane says so. When attach fails at once (say the agent's worktree is gone), its
+#         the pane says so. A note of the list (kind note: "Starting the orchestrator of
+#         shop...", see jay-sidebar orchestrate) shows until the next target. When attach fails at once (say the agent's worktree is gone), its
 #         error stays on screen.
 # review: tuicr in one of two modes (review.mode), switched with `t` (jay-keys); the
 #         title starts with the mode.
@@ -186,6 +187,12 @@ run() {
         wait_change "$1"
         return 0
       fi
+      # A note of the list (jay-sidebar, mid_note): no agent.
+      if [[ "$kind" == note ]]; then
+        printf '\n  %s\n' "$name"
+        wait_change "$1"
+        return 0
+      fi
       # At once, also while a long conversation loads.
       printf '\n  Opening %s...\n' "${name:-$id}"
       leave_agent_view &
@@ -272,7 +279,7 @@ while :; do
   # so a pick of the same agent opens it again too.
   if [[ "$role" == agent ]]; then
     IFS=$'\t' read -r _ _ kind _ <<<"$now"
-    if [[ "$kind" != interactive ]]; then
+    if [[ "$kind" != interactive && "$kind" != note ]]; then
       jay_hub_write_target agent ""
       printf '\n  You left this agent. It keeps running.\n\n  Enter: open it again.\n  Or pick an agent in the list.\n'
       wait_change "" || jay_hub_write_target agent "$now"
