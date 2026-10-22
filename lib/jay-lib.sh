@@ -533,7 +533,7 @@ jay_hub_role() {
     fi
     lost=$pid
     jay_kill_children "$pid"
-    kill -TERM "$pid" 2>/dev/null
+    kill -TERM "$pid" 2>/dev/null || true
     jay_hub_pane_gone "$1" "$pid"
   else
     panes=$(jay_mux_panes)
@@ -577,12 +577,13 @@ jay_hub_role_ready() {
 }
 
 # Callers run it inside `IFS=$'\t' read … < <(…)`, whose IFS bash 3.2 passes on: split the pids
-# with the usual IFS.
+# with the usual IFS. A child can end between pgrep and kill (a `sleep` of a watcher loop): under
+# `set -e` (jay go) that failed kill would end the pick, so it may fail.
 jay_kill_children() {
   local child IFS=$' \t\n'
   for child in $(pgrep -P "$1"); do
     jay_kill_children "$child"
-    kill -TERM "$child" 2>/dev/null
+    kill -TERM "$child" 2>/dev/null || true
   done
   return 0
 }
