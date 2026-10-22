@@ -69,10 +69,31 @@ From the list:
 - `N` on a repo, worktree or agent row: the list asks for a branch, makes a new worktree of that
   repo (`jay new <branch> --agent`) and starts an idle agent in it.
 
-The new agent shows in the middle column, with the focus there. Type its first prompt. Agents
-started by the list are named `<repo>/<branch>`.
+The new agent shows in the middle column, with the focus there. Type its first prompt.
 
 From a shell: `jay new <branch> -- <prompt>` makes the worktree and starts the agent with a prompt.
+
+### Agent names
+
+The hub gives each agent a name that no other agent has:
+
+- An agent that the hub starts (`n`, `N`, `jay new`, `c`) is named `<repo>/<branch>` (`c` outside a
+  repo: the folder's name; `c --name <name>`: that name).
+- When another agent has that name, the new agent gets `<name>-2`, then `<name>-3`, ... All
+  agents that `claude agents --all` lists count, also stopped and done ones. An agent that
+  `claude rm` removed does not. Names match in any case.
+- `b` (an interactive session goes on in the background) keeps the session's name, or adds `-2`
+  when another agent has it.
+- The hub Claude is `hub`, or `hub-2` when another agent has the name `hub`.
+
+`jay_unique_name` in `lib/jay-lib.sh` does this. Two agents can still have one name when they
+come from outside the hub: `claude --bg --name <name>`, or `claude --bg --resume <id>` while that
+session runs (a copy). Then:
+
+- The list and `jay agents` show the short id after the name, in both rows.
+- `jay go <name>` and `/jay msg <name>` do not pick one: they say that several agents match and
+  list their ids. Give the id. A pick in the list, a notice click and the mod's rows always use
+  the id.
 
 `claude --bg` has no trust prompt: in a repo where Claude never ran, it fails with "Workspace not
 trusted". Claude keeps the trust per repo, under its main checkout, for all its worktrees; a
@@ -115,7 +136,7 @@ You type to the agent here, as in any `claude attach`.
 
 ## The hub Claude
 
-A background agent named `hub`, for work across agents and repos: ask it to start agents (`jay
+A background agent named `hub` (`hub-2` when another agent has that name), for work across agents and repos: ask it to start agents (`jay
 new`), to send a prompt to an agent, to tell you what the agents did, or to answer a question
 that needs several repos. It starts in the first `JAY_ROOTS` folder (the other roots are added
 folders), with a short system prompt about the hub's commands (`jay_hub_claude_prompt` in
@@ -124,6 +145,8 @@ folders), with a short system prompt about the hub's commands (`jay_hub_claude_p
 - A fresh hub opens on it, with the focus in the middle column. The "◆ hub" row at the top of
   the list, or `jay go hub` from anywhere, shows it again.
 - It is started the first time the hub needs it. Its id is in `~/.local/state/jay/hub-claude`.
+  When that file is lost, the hub takes on the newest agent with the hub Claude's prompt, and does
+  not start a second one.
   It is like any background agent: it keeps running when you leave it, and a stopped one opens
   again on a pick.
 - It knows the orchestrators (`jay agents --orchestrators`). It sends work for a repo to the
