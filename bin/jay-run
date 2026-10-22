@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # jay run — long-running commands (dev servers, watchers, docker compose) in the hub, in a tab per
 # worktree, where you and agents both see them. Each pane outside the "hub" tab is a task: a shell
-# you type in, or a pane that jay run started. Output stays in zellij's scrollback: no log files.
+# you type in, or a pane that jay run started. Output stays in the hub's scrollback (zellij or
+# tmux): no log files. The tasks tabs are windows in the tmux hub.
 #   jay run [-n name] [-w [-t s]] [--] <command...>   a new pane in this worktree's tab, in this
 #                            folder. -w: wait until it listens (see wait). Without the hub: runs here.
 #   jay run ls [--json]      the tasks: name, state, ports, worktree, command; and the ones that a
@@ -11,7 +12,7 @@
 #   jay run stop <task>      Ctrl-C to the task; a pane that jay run started closes
 #   jay run restart <task>   stop and start again, in the same pane (panes that jay run started)
 #   jay run port <port>      who listens on a port
-# <task>: a name, a pane id (terminal_3 or 3), or a part of the command or folder.
+# <task>: a name, a pane id (terminal_3, %3 in tmux, or 3), or a part of the command or folder.
 set -uo pipefail
 source "$HOME/.local/lib/jay-lib.sh"
 
@@ -25,7 +26,7 @@ SELF="$HOME/.local/bin/jay-run"
 
 die() { printf 'jay run: %s\n' "$*" >&2; exit 1; }
 
-usage() { sed -n '2,13s/^# \{0,1\}//p' "$0"; }
+usage() { sed -n '2,15s/^# \{0,1\}//p' "$0"; }
 
 # The values of jq array $1 on one line, split by \x1f: `read` with a tab IFS would merge empty
 # fields.
@@ -184,7 +185,7 @@ panes_raw() {
     | ($cwds | lines | map({key: .[0], value: .[1]}) | from_entries) as $C
     # Not the short-lived panes of the keys (jay-run --switch, --launcher; hub-run in old binds).
     | [.[] | select(.tab != $hub
-                    and ((.launch // "") | test("(jay|hub)-run --(switch|launcher)") | not))] | sort_by(.n)
+                    and ((.launch // "") | test("(jay|hub)-run --(switch|launcher|pick)") | not))] | sort_by(.n)
     # A pane gets its own root process when the backend gives its pid (tmux). Else the first
     # free root process whose foreground command is the pane command, in the same folder when
     # there is one (panes and roots both go in start order). When zellij gives no command (it
@@ -228,11 +229,13 @@ tasks_json() {
   srv=$(hub_server)
   # Exit codes of panes whose command ended (jay-run --exec writes them), names, who started
   # them, worktrees and docker ports.
-  local line id root rc name cwd cmd wt dport top branch repo agent
+  local line id root rc name cwd cmd wt dport top branch repo agent project primary
   local -a out=()
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
     IFS=$'\x1f' read -r id root name cwd cmd < <(fields '[.id, (.root // ""), (if .owned then .title else "" end), .cwd, (.command // "")]' <<<"$line")
+    # The title of a pane that jay run started is its name, with its ports after " · :" (tidy_shells).
+    name=${name% · :*}
     rc=""
     [[ -n "$root" && -f "$STATE_DIR/$root.exit" ]] && rc=$(cat "$STATE_DIR/$root.exit")
     agent=$(jq -r '.agent // ""' "$STARTED/$srv-$id.json" 2>/dev/null)
@@ -244,16 +247,26 @@ tasks_json() {
     if [[ -z "$name" ]]; then
       if [[ -n "$cmd" ]]; then name=$(short_name "$cmd"); else name=shell; fi
     fi
-    wt=""
+    # The worktree (repo/branch), its folder, and the project the bar names: the repo for a main
+    # checkout, repo/branch for a worktree.
+    wt="" project="" primary=""
     if top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null); then
-      repo=$(basename "$(jay_primary "$top")")
+      primary=$(jay_primary "$top")
+      repo=$(basename "$primary")
       branch=$(git -C "$top" branch --show-current 2>/dev/null)
       wt="$repo/${branch:-$(basename "$top")}"
+      project=$wt
+      [[ "$top" == "$primary" ]] && project=$repo
+    else
+      top=""
     fi
     dport=""
     [[ "$cmd" == *docker* ]] && dport=$(docker_ports "$cwd" "$cmd" | paste -sd, -)
-    out+=("$(jq -c --arg rc "$rc" --arg name "$name" --arg wt "$wt" --arg dport "$dport" --arg agent "$agent" '
+    out+=("$(jq -c --arg rc "$rc" --arg name "$name" --arg wt "$wt" --arg dport "$dport" --arg agent "$agent" \
+      --arg top "$top" --arg project "$project" '
       .name = $name | .worktree = (if $wt == "" then null else $wt end)
+      | .top = (if $top == "" then null else $top end)
+      | .project = (if $project == "" then (.cwd | split("/") | last) else $project end)
       | .agent = (if $agent == "" then null else $agent end)
       | (if $rc != "" then .exit = ($rc | tonumber) else . end)
       | .ports = ((.ports + ($dport | split(",") | map(select(length > 0) | tonumber))) | unique)
@@ -420,6 +433,31 @@ cmd_switch() {
   fi
   [[ -n "$tid" ]] || tid=$(ensure_tab "$dir") || return 0
   jay_mux_tab_go_id "$tid"
+}
+
+# Ctrl g t (zellij: a Run binding in a floating pane; tmux: a popup): all tasks of the hub in
+# fzf, by project, name and state; Enter goes to that task's tab.
+cmd_pick() {
+  local tasks line
+  jay_hub_keep_hidden "$(jay_mux_self)"
+  if ! tasks=$(tasks_json 2>/dev/null); then
+    printf 'The hub does not answer.\n'; sleep 2; return 1
+  fi
+  if [[ "$(jq '[.[] | select(.state == "running" or .state == "exited")] | length' <<<"$tasks")" == 0 ]]; then
+    printf '\n  No tasks run. jay run <command> or Ctrl g r starts one.\n'
+    read -r -s -n 1 -t 5 _ || true
+    return 0
+  fi
+  line=$(jq -r '
+    def c($x): "\u001b[" + $x + "m";
+    def pad($n): (. + (" " * $n))[0:$n];
+    [.[] | select(.state == "running" or .state == "exited")] | sort_by(.project, .name) | .[]
+    | (if .state == "running" then c("32") + "● running" elif (.exit // 0) == 0 then c("2") + "○ ended  " else c("31") + "✗ failed " end) as $state
+    | [(.tab_id | tostring), (.project | pad(28)) + "  " + (.name | pad(20)) + "  " + $state + c("0")
+       + (if .ports != [] then c("2") + "  :" + (.ports | map(tostring) | join(",")) + c("0") else "" end)] | @tsv' <<<"$tasks" \
+    | fzf --ansi --delimiter=$'\t' --with-nth=2 --no-sort --layout=reverse --info=hidden \
+        --prompt='task ❯ ' --header='Enter: its tab · Esc: close' --pointer='▌' --color=pointer:173) || return 0
+  jay_mux_tab_go_id "${line%%$'\t'*}"
 }
 
 # Ctrl g r (a zellij Run binding, in a floating pane): a prompt that starts a command with
@@ -783,23 +821,32 @@ cmd_port() {
   printf 'port %s: pid %s, not a hub task: %s (in %s)\n' "$port" "$pid" "$cmd" "${cwd/#$HOME/~}"
 }
 
-# The bar text: one item per task that runs or ended, with its first port. Names that two tasks
-# share get the branch.
+# The bar's tasks part, the same text for both hubs (ANSI colors; the tmux backend turns them
+# into its styles): per task that runs or ended, its sign, the project it runs in (the repo for a
+# main checkout, repo/branch for a worktree) and its name. The tasks of the picked worktree ($2,
+# default: review's) come first and bright, the others dim. No ports: jay run ls and the panes'
+# titles in the tasks tab have them.
 cmd_bar() {
-  local tasks=${1:-}
+  local tasks=${1:-} picked=${2:-}
   [[ -n "$tasks" ]] || tasks=$(tasks_json 2>/dev/null) || return 0
-  jq -r '
+  [[ -n "$picked" ]] || picked=$(cut -f1 "$(jay_hub_target_file review)" 2>/dev/null)
+  jq -r --arg picked "$picked" '
     def c($x): "\u001b[" + $x + "m";
-    [.[] | select(.state == "running" or .state == "exited")] as $t
-    | ($t | group_by(.name) | map(select(length > 1) | .[0].name)) as $dup
-    | $t | map(
-        (if .state == "running" then c("32") + "●"
-         elif (.exit // 0) == 0 then c("2") + "○"
-         else c("31") + "✗" end) + c("0") + " "
-        + (if (.name | IN($dup[])) and .worktree then (.worktree | split("/") | last) + " " else "" end)
-        + (.name | .[0:24])
-        + (if .ports != [] then c("2") + ":" + (.ports[0] | tostring) + c("0") else "" end))
+    [.[] | select(.state == "running" or .state == "exited") | . + {here: (.top != null and .top == $picked)}]
+    | sort_by(.here | not)
+    | map((if .state == "running" then ["32", "●"] elif (.exit // 0) == 0 then ["2", "○"] else ["31", "✗"] end) as [$col, $sign]
+        | if .here then c($col) + $sign + c("0") + " " + .project + " " + (.name | .[0:24])
+          else c("2") + $sign + " " + .project + " " + (.name | .[0:24]) + c("0") end)
     | join("  ")' <<<"$tasks"
+}
+
+# The note of the tasks tab of worktree $2 (a folder; tasks JSON $1): how many tasks run in other
+# worktrees, and where. Plain text; empty when none do.
+cmd_note() {
+  jq -r --arg here "${2:-}" '[.[] | select(.state == "running" and (.top // "") != $here)] | group_by(.project)
+    | if length == 0 then "" else
+        "\(map(length) | add) running elsewhere: " + (map(.[0].project + (if length > 1 then " (\(length))" else "" end)) | join(", "))
+      end' <<<"$1"
 }
 
 # Keep one free shell in each tasks tab: when a command takes the last shell at its prompt in a
@@ -816,6 +863,7 @@ spare_shell() {
 }
 
 # Shell panes are named for what they are: "console" at the prompt, else the command's name. A
+# task that listens has its ports after its name (" · :5173"; tasks_json takes them off again). A
 # tab keeps one console (its newest): another one closes after 10 minutes at its prompt (a
 # server that ended leaves its last lines there for that long). The idle times are in
 # idle-<pane id> files.
@@ -825,8 +873,10 @@ tidy_shells() {
   while IFS=$'\t' read -r pane title want; do
     [[ -n "$pane" && "$title" != "$want" ]] || continue
     jay_mux_rename "$pane" "$want"
-  done < <(jq -r '.[] | select((.owned | not) and (.state == "idle" or .state == "running"))
-    | [.pane, .title, (if .state == "idle" then "console" else .name end)] | @tsv' <<<"$tasks")
+  done < <(jq -r '.[] | select(.owned or .state == "idle" or .state == "running")
+    | [.pane, .title, (if .state == "idle" and (.owned | not) then "console"
+                       else .name + (if .ports != [] then " · :" + (.ports | map(tostring) | join(",")) else "" end) end)]
+    | @tsv' <<<"$tasks")
   # A console back at its prompt: the line the launcher typed is done.
   for id in $(jq -r '.[] | select(.state == "idle" and (.owned | not)) | .id' <<<"$tasks"); do
     rm -f "$STATE_DIR/console-$id.line"
@@ -849,14 +899,27 @@ tidy_shells() {
   done
 }
 
-# The list's tick (jay-sidebar, every 3 s): a console in each tasks tab, names, then the bar text.
+# The list's tick (jay-sidebar, every 3 s): a console in each tasks tab, names, the tabs' notes
+# (each tab's own in tmux; in zellij one for all, from the picked worktree), then the bar text.
+# A note goes out when it changes.
 cmd_tick() {
-  local tasks
+  local tasks picked tid top note notes=""
   tasks=$(tasks_json 2>/dev/null) || return 0
   mkdir -p "$STATE_DIR"
   spare_shell "$tasks"
   tidy_shells "$tasks"
-  cmd_bar "$tasks"
+  picked=$(cut -f1 "$(jay_hub_target_file review)" 2>/dev/null)
+  while IFS=$'\t' read -r tid top; do
+    [[ -n "$tid" ]] || continue
+    note=$(cmd_note "$tasks" "$top")
+    notes+="$tid	$note"$'\n'
+    grep -qxF "$tid	$note" "$STATE_DIR/notes" 2>/dev/null || jay_mux_tab_note "$tid" "$note"
+  done < <(jq -r 'group_by(.tab_id)[] | "\(.[0].tab_id)\t\(map(.top // empty) | first // "")"' <<<"$tasks")
+  note=$(cmd_note "$tasks" "$picked")
+  notes+="all	$note"$'\n'
+  grep -qxF "all	$note" "$STATE_DIR/notes" 2>/dev/null || jay_mux_bar note "$note"
+  printf '%s' "$notes" >"$STATE_DIR/notes"
+  cmd_bar "$tasks" "$picked"
 }
 
 # The banner of the hub tab (see bin/jay) shows the picked worktree $1 as <repo>/<branch> (a pick
@@ -895,6 +958,7 @@ case ${1:-} in
   --where) shift; cmd_where "$@" ;;
   --switch) cmd_switch ;;
   --launcher) cmd_launcher ;;
+  --pick) cmd_pick ;;
   --worktree-tab) shift; cmd_worktree_tab "$@" ;;
   --close-tab) shift; cmd_close_tab "$@" ;;
   ls) shift; cmd_ls "$@" ;;

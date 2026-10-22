@@ -448,7 +448,7 @@ JAY_SESSION=${JAY_SESSION:-jay}
 #            jay_mux_keep_hidden
 #   tabs     jay_mux_tabs (JSON lines), jay_mux_tab_id, jay_mux_active_tab, jay_mux_tab_go,
 #            jay_mux_tab_go_id, jay_mux_tab_new, jay_mux_tab_close, jay_mux_tab_pane
-#   bar      jay_mux_bar <agents|tasks|where> <text>, jay_mux_tab_note <tab> <text>
+#   bar      jay_mux_bar <agents|tasks|where|note> <text>, jay_mux_tab_note <tab> <text>
 # A zellij hub and a tmux hub can run side by side: each keeps its panes' state in its own
 # JAY_HUB_STATE (the tmux hub in $JAY_STATE/tmux); the marks, the turn chains and the hub
 # Claude are shared.

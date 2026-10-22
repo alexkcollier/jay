@@ -285,10 +285,12 @@ KDL
 # The banner at the top of each tab, so that each tab says it is the hub's: "◆ JAY › <what the
 # tab is>" ($1), the worktree ($3; without it the picked one, sent at each pick, see
 # jay_hub_target and jay-sidebar) and where Ctrl g Tab goes ($2). Without zjstatus, none.
+# A tasks tab's banner also has the note (jay run's tick): the tasks that run in other worktrees
+# than the picked one.
 _jay_zj_banner() {
   [[ -f "$JAY_ZJSTATUS" ]] || return 0
   local where='{pipe_where}'
-  [[ -n "${3:-}" ]] && where=$(sed 's/[\\"]/\\&/g; s/#\[/# [/g' <<<"$3")
+  [[ -n "${3:-}" ]] && where="$(sed 's/[\\"]/\\&/g; s/#\[/# [/g' <<<"$3")   {pipe_note}"
   cat <<KDL
 pane size=1 borderless=true {
             plugin location="file:$JAY_ZJSTATUS" {
@@ -297,6 +299,8 @@ pane size=1 borderless=true {
                 format_space  "#[bg=#7E9CD8]"
                 pipe_where_format     "#[fg=#1F1F28,bg=#7E9CD8]{output}"
                 pipe_where_rendermode "static"
+                pipe_note_format      "#[fg=#1F1F28,bg=#7E9CD8]{output}"
+                pipe_note_rendermode  "static"
             }
         }
 KDL
