@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# jay setup [path] — copy env files and install deps in a worktree.
+# jay setup [path] — copy env files and Claude's local settings, install deps in a worktree.
 # Runs as the worktrunk pre-start hook; safe to re-run by hand.
 set -uo pipefail
 [[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,3s/^# \{0,1\}//p' "$0"; exit 0; }
@@ -22,6 +22,13 @@ if [[ "$root" != "$primary" ]]; then
       echo "jay setup:copied $rel"
     done < <(find "$primary" \( -name node_modules -o -name .git -o -name .claude -o -name .worktrees -o -name dist \) -prune \
       -o -type f -name '.env*' -print0)
+  fi
+  # Claude's local settings (your permissions for the repo), also with a .worktreeinclude: it is
+  # yours, and the search above skips .claude.
+  rel=.claude/settings.local.json
+  if [[ -f "$primary/$rel" && ! -e "$root/$rel" ]] && git -C "$primary" check-ignore -q -- "$rel"; then
+    mkdir -p "$root/.claude"
+    cp "$primary/$rel" "$root/$rel" && echo "jay setup:copied $rel"
   fi
 fi
 
