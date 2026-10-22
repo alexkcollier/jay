@@ -164,8 +164,9 @@ folders), with a short system prompt about the hub's commands (`jay_hub_claude_p
   It is like any background agent: it keeps running when you leave it, and a stopped one opens
   again on a pick.
 - It knows the orchestrators (`jay agents --orchestrators`). It sends work for a repo to the
-  orchestrator of that repo (SendMessage). For a repo without one, it starts workers itself
-  (`jay new`), or it tells you to press `n` on the repo's main checkout row. See
+  orchestrator of that repo (SendMessage). A repo has none by default: then it plans the work
+  and starts the workers itself (`jay new`). For long parallel work in one repo, it tells you to
+  press `n` on the repo's main checkout row. See
   [The hub Claude and orchestrators](orchestrators.md#the-hub-claude-and-orchestrators).
 - `c` on the "◆ hub" row gives it a fresh context (see
   [Fresh context](orchestrators.md#fresh-context)). To start a new hub Claude, `claude rm <id>`:
@@ -324,8 +325,9 @@ its process: the path of the binary under Claude's `claude bg-pty-host` process.
 
 ## Tidy the list
 
-- `a` hides the idle repos and idle main checkouts (dim rows), and shows them again. A last row
-  says how many are hidden.
+- `a` hides the idle repos (dim rows), and shows them again. A last row says how many are
+  hidden. The main checkout row of a repo stays while the repo shows other rows, also when it is
+  idle: the repo's home sign, git state and `n` are on it.
 - `h` / `l` make the list narrower or wider. A mouse drag on the border works too. The hub keeps
   the width (`sidebar.pct`, 10–60 %) for its next fresh start.
 - `r` reloads the list: fresh git signs now, and the list starts again as the newest version of

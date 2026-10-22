@@ -47,8 +47,8 @@ and Claude Code background agents.
   `docker compose up`, which you and the agents both see. See [Tasks](docs/tasks.md).
 
 An agent in a repo's main checkout can be the repo's **orchestrator**: it plans and gives each
-change to a worker, a background agent in a worktree of its own. See
-[Orchestrators](docs/orchestrators.md).
+change to a worker, a background agent in a worktree of its own. A repo has none by default: the
+hub Claude plans and starts workers for it. See [Orchestrators](docs/orchestrators.md).
 
 ## Before you start
 
@@ -157,8 +157,8 @@ jay was called wt-hub. The commands, the variables and the folders have new name
   uninstall.
 - [Working in the hub](docs/working.md): start the hub and agents, pick, the middle column, the
   hub Claude, your editor, notices, remove and prune, quit.
-- [Orchestrators](docs/orchestrators.md): one agent per repo that plans and gives each change to
-  a worker; its prompt, review and merge, fresh context, an example.
+- [Orchestrators](docs/orchestrators.md): when a repo gets one, the agent that plans and gives
+  each change to a worker; its prompt, review and merge, fresh context, an example.
 - [Review](docs/review.md): the review options (turns or commits, tuicr or lazygit, the patch
   renderers), review by turn, files, hide review.
 - [Tasks](docs/tasks.md): dev servers in a tasks tab per worktree (`jay run`).

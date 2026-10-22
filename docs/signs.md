@@ -16,7 +16,9 @@ The list shows each repo with a `.git` folder 1–2 levels under `$JAY_ROOTS` (d
   `d` on it removes those agents.
 - Agents in no repo show under "no repo" at the bottom, with their folder.
 - A main checkout without an agent is idle, and so is a repo with only an idle main checkout:
-  both are dim. `a` hides them.
+  both are dim. `a` hides the idle repos. The main checkout row of a repo that shows always
+  stays, also when it is idle: it is the anchor of the repo's other rows (home sign, git state,
+  `n` for an orchestrator).
 - A worktree row: branch (last part, cut to the width), the git signs (always shown), then the
   task note in the room left.
 - The hub Claude has its own row at the top, "◆ hub", not one in its folder.
@@ -35,6 +37,7 @@ point.
 | `◆ hub` row (cyan) | the hub Claude, with its state sign |
 | `◇` cyan, before the name | the repo's orchestrator: the oldest agent with the orchestrator prompt in its main checkout (also when it is in a worktree it entered) |
 | `◇` yellow, before the name | a second agent with the orchestrator prompt in the same main checkout; remove it (`d`) |
+| `n: orchestrator` (dim, at the end of the main checkout row) | the repo has two or more workers (agents in its other worktrees, not stopped) and no orchestrator: `n` on this row starts one. It goes when an orchestrator runs or fewer than two workers are left; a narrow list cuts it ([When to start one](orchestrators.md#when-to-start-one)) |
 | `↻` (dim, after the name) | the agent runs an older Claude Code than the installed one; the list respawns it at a quiet moment ([Claude Code updates](working.md#claude-code-updates)). The first row and the bar end with their count, `↻ 2` |
 | `→ feat` (dim, after the age) | the agent from the main checkout is in that worktree now (`EnterWorktree`); it shows under its main checkout |
 | `home gone` yellow, after the age | the folder the agent came from is gone, so it cannot wake; a pick continues it as a copy in the worktree it is in ([When the folder an agent came from goes](working.md#when-the-folder-an-agent-came-from-goes)) |

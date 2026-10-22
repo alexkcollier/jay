@@ -702,6 +702,7 @@ ${ROW}◆ hub${OFF} row: the hub Claude
 ${DIM}↻${OFF} old Claude Code, respawns
 ${CYN}◇${OFF} orchestrator of the repo
 ${YEL}◇${OFF} second orchestrator (d it)
+${DIM}n: orchestrator${OFF} 2+ workers
 ${YEL}home gone${OFF} cannot wake (⏎)
 ${RED}lost${OFF} worktree gone too (⏎)
 ${G_HOME} main checkout

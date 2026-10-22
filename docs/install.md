@@ -253,6 +253,7 @@ hooks in background agents and a notice click.
 | `JAY_REVIEW_DIFF` | `delta` | the patch in lazygit review: `delta`, `difft` (difftastic) or `plain` (delta, no wrap); see [The patch in lazygit](review.md#the-patch-in-lazygit) |
 | `JAY_AUTO_RESPAWN` | `idle` | after a Claude Code update: `idle`, the list moves each agent that runs the old version onto the new one at a quiet moment; `off`, only `jay respawn` does; see [Claude Code updates](working.md#claude-code-updates) |
 | `JAY_MUX` | `zellij` | the hub's multiplexer: `zellij` or `tmux` (jay's own tmux server); see [The tmux hub](#the-tmux-hub-jay_muxtmux) |
+| `JAY_ORCHESTRATE` | none | the repos that always get an orchestrator, `:` between them: a repo's name as the list shows it (`shop`), or `client/repo` (`acme/shop`) when two clients have a repo of that name; any case. A pick of a row of such a repo starts its orchestrator when it has none; see [When to start one](orchestrators.md#when-to-start-one) |
 
 The old `WT_` names (`WT_ROOTS`, `WT_REVIEW`, ...) still work, in the file and in the
 environment; a `JAY_` name wins over a `WT_` name. `./install.sh --check` tells you when a

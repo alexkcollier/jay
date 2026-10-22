@@ -14,7 +14,8 @@ In `~/.local/state/jay/`:
 | `review.mode` | `turns` or `commits` |
 | `review.hidden` | there while review is hidden (Ctrl g `v`): its share of the width, and 1 when files was open |
 | `sidebar.pct` | the list's share of the width |
-| `sidebar.hide-idle` | there while `a` hides idle rows |
+| `sidebar.hide-idle` | there while `a` hides idle repos |
+| `orchestrate.<n>` | a pick started the orchestrator of a repo in `JAY_ORCHESTRATE` (one file per main checkout); for a minute, a second pick does not start another one |
 | `worktrees.ndjson` | cache of `jay all --json` (refreshed after 30 s) |
 | `sidebar.<pid>.sock`, `.count`, `.sum`, `.help`, `.restart` | a running list: its fzf socket, row count, agent counts, `?` state, `r` flag |
 | `turns/<id>.worktree`, `<id>.prompt`, `<id>.live` | the worktree of each turn chain; the prompt of the current turn; the time of the last live snapshot |

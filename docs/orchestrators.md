@@ -4,6 +4,7 @@
 [Signs](signs.md) · [Commands](commands.md)
 
 - [What an orchestrator is](#what-an-orchestrator-is)
+- [When to start one](#when-to-start-one)
 - [Start one](#start-one)
 - [The orchestrator prompt](#the-orchestrator-prompt)
 - [How it makes workers](#how-it-makes-workers)
@@ -31,6 +32,43 @@ in the main checkout, and the agent can go into a worktree (`EnterWorktree`) whe
 make a change itself (see
 [An orchestrator in a worktree it entered](#an-orchestrator-in-a-worktree-it-entered)).
 
+## When to start one
+
+- **By default, no repo has one.** The hub Claude (the "◆ hub" row) is the orchestrator of all
+  repos: ask it for a change in any repo, and it plans the work and starts the workers itself
+  (`jay new`). Its prompt says so (see
+  [The hub Claude and orchestrators](#the-hub-claude-and-orchestrators)). For a quick fix or two,
+  that is enough.
+- **A repo orchestrator** is for sustained parallel work in one repo: many workers over hours or
+  days, each one to follow, review and merge. It keeps that repo's plan in its own context, so
+  the hub Claude's context stays free for the other repos. Start it with `n` on the repo's main
+  checkout row ([Start one](#start-one)).
+- **The hint**: when a repo has two or more workers (agents in its worktrees other than the main
+  checkout, not stopped) and no orchestrator, its main checkout row ends with a dim
+  `n: orchestrator`. It goes when an orchestrator runs, or when fewer than two workers are left.
+  It is only a hint: nothing starts by itself.
+- **`JAY_ORCHESTRATE`**: for the repos that always get an orchestrator. In
+  `~/.config/jay/config` (see [Settings](install.md#settings)), a list with `:` between the
+  entries; an entry is a repo's name as the list shows it, or `client/repo` when two clients
+  have a repo of that name (any case):
+
+  ```sh
+  JAY_ORCHESTRATE=shop:acme/web
+  ```
+
+  When such a repo has no orchestrator, a pick (Enter or a click) of one of its rows starts one,
+  as `n` on its main checkout row does: the orchestrator prompt and the name `<repo>/<branch>`
+  (`jay_orchestrator_start`). It starts only on a pick, never by itself in the background, and
+  without a question:
+  - After a pick of the repo row or a worktree row, the middle column says "Starting the
+    orchestrator of shop (JAY_ORCHESTRATE)...", then shows the new orchestrator. The focus stays
+    where the pick put it, and review shows the worktree you picked.
+  - After a pick of an agent row, that agent goes to the middle column as usual; the
+    orchestrator only comes into the list (its row with a cyan `◇`).
+  - When Claude does not trust the repo yet, nothing starts: the middle column says to press `n`
+    on its main checkout row, which asks first. A start that fails says so there too.
+  - A second pick in the same minute does not start a second one while the first one starts.
+
 ## Start one
 
 Press `n` on the main checkout row of the repo (the worktree row with the home sign), or on an
@@ -53,6 +91,10 @@ row.
    `<branch>` is the main checkout's branch, so the name is `shop/main`, say.
 4. The hub shows the new agent in the middle column, idle, with the focus there. Type its first
    prompt.
+
+For a repo in `JAY_ORCHESTRATE`, a pick of one of its rows starts it in the same way, without a
+question; in a repo that Claude does not trust yet, nothing starts (see
+[When to start one](#when-to-start-one)).
 
 A repo has one orchestrator. An agent that you start in the main checkout in another way (`c`,
 `claude --bg`, an interactive `claude`) has no orchestrator prompt: it is a plain agent, and
@@ -282,6 +324,7 @@ first words.
 | yellow `◇` before the name | an extra agent with the orchestrator prompt in the same main checkout; remove it with `d` |
 | no `◇` | any other agent, also one in the main checkout without the prompt |
 | `→ <branch>` after the age | the orchestrator is in that worktree now (see below) |
+| dim `n: orchestrator` at the end of the main checkout row | two or more workers and no orchestrator (see [When to start one](#when-to-start-one)) |
 
 How the list finds the orchestrator (`jay_jobs`, `jay_orch_ranks`, `jay_orchestrators`):
 
@@ -367,11 +410,13 @@ The hub Claude ([The hub Claude](working.md#the-hub-claude)) works across repos.
 - Send work for such a repo to its orchestrator (SendMessage).
 - An orchestrator only reads, plans and reviews: skills that change a branch run in its workers
   (see [Skills and slash commands](#skills-and-slash-commands)).
-- For a repo without one, start workers yourself with `jay new`, or tell the user that `n` on the
-  repo's main checkout row starts one.
+- A repo has none by default: for such a repo, plan the work and start its workers yourself with
+  `jay new`. For long parallel work in one repo, tell the user that `n` on the repo's main
+  checkout row starts an orchestrator.
 
-So you can give a change to the hub Claude from anywhere, and it goes to the right repo's
-orchestrator.
+So you can give a change to the hub Claude from anywhere: it goes to the right repo's
+orchestrator, or the hub Claude does the orchestrator's work itself (see
+[When to start one](#when-to-start-one)).
 
 ## Probe sessions in tests
 

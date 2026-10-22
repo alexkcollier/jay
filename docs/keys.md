@@ -24,7 +24,7 @@
 | `d` | remove the agent, or the worktree with its idle agents (asks first; agents that came from it and are in another worktree go on there first, as copies) |
 | `b` | an idle interactive session goes on as a background agent (asks first) |
 | `c` | an idle orchestrator (`◇`) or the hub Claude (`◆ hub` row) gets a fresh context: `/clear`, same prompt, name and id (asks first) |
-| `a` | hide / show idle repos and main checkouts |
+| `a` | hide / show idle repos (a main checkout row stays while its repo has other rows) |
 | `p` | prune dead agents now (asks first) |
 | `r` | reload the list (fresh git signs; starts the newest `jay-sidebar`) |
 | `j` / `k`, ↓ / ↑, wheel | move |
