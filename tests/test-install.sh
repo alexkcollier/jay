@@ -109,4 +109,18 @@ ok "--uninstall keeps the settings" test -f "$HOME/.config/jay/config"
 ok "--uninstall keeps the worktrunk config" test -f "$HOME/.config/worktrunk/config.toml"
 ok "--uninstall keeps the stubs" test -x "$HOME/.local/bin/claude"
 
+# old_hub_runs (the Result line asks to quit the old hub): only a running session "hub" counts,
+# not an exited one that zellij keeps to resurrect, nor one whose name only ends in hub.
+eval "$(sed -n '/^old_hub_runs() {$/,/^}$/p' "$REPO/install.sh")"
+stub zellij '[[ "$1" == list-sessions ]] && cat "$STUB/sessions.txt"'
+sessions() { printf '%s\n' "$@" >"$STUB/sessions.txt"; }
+sessions "jay [Created 23m 20s ago] (current)" "hub [Created 5days 2h ago] (EXITED - attach to resurrect)"
+no "old_hub_runs: an exited hub does not count" old_hub_runs
+sessions "claude agent hub [Created 5days ago] " "jay [Created 23m ago] "
+no "old_hub_runs: a name that ends in hub does not count" old_hub_runs
+sessions "hub [Created 2h 3m ago] " "jay [Created 23m ago] (current)"
+ok "old_hub_runs: a running hub" old_hub_runs
+sessions "hub [Created 2h 3m ago] (current)"
+ok "old_hub_runs: the hub you are in" old_hub_runs
+
 finish

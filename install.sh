@@ -645,9 +645,12 @@ KDL
   note "the hub expects default_mode \"locked\", with Ctrl g to normal mode and Ctrl q to quit"
 }
 
-# The hub of wt-hub runs: the zellij session "hub" (jay's is "jay").
+# The hub of wt-hub runs: the zellij session "hub" (jay's is "jay"). zellij also lists exited
+# sessions that it keeps to resurrect ("hub [Created …] (EXITED - attach to resurrect)"); they
+# do not count. A name can have spaces: it ends before " [Created".
 old_hub_runs() {
-  perl -e 'alarm 5; exec @ARGV or exit 127' zellij list-sessions --short --no-formatting 2>/dev/null | grep -qxF hub
+  perl -e 'alarm 5; exec @ARGV or exit 127' zellij list-sessions --no-formatting 2>/dev/null \
+    | grep -v '(EXITED' | sed 's/ \[Created .*$//' | grep -qxF hub
 }
 
 # --no-compat: the shims and the links at the old paths go, once nothing of the user's calls the
