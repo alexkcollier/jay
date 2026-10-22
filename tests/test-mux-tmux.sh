@@ -72,6 +72,19 @@ eq "self: a popup" "" "$(JAY_POPUP=1 TMUX=/tmp/tmux-501/jaytest-sock,1,0 TMUX_PA
 ok "in the hub: on jay's server" env TMUX=/tmp/tmux-501/jaytest-sock,1,0 /bin/bash -c 'source "$HOME/.local/lib/jay-lib.sh"; jay_in_hub'
 no "in the hub: not from an agent" env TMUX=/tmp/tmux-501/jaytest-sock,1,0 CLAUDE_JOB_DIR=/x /bin/bash -c 'source "$HOME/.local/lib/jay-lib.sh"; jay_in_hub'
 
+# A Ghostty tab's session (jay_gh_tab_session), from its tty's processes (a stub ps) or its title:
+# a tmux client is "tmux:<session>", so the zellij hub "jay" never takes the tmux hub's tab.
+stub ps '[[ "$*" == "-t "* ]] && cat "$STUB/ps.$2"'
+printf '%s\n' '-zsh' 'tmux -L jay -f /h/.config/jay/tmux.conf attach -t =jay' >"$STUB/ps.ttys001"
+printf '%s\n' '-zsh' 'zellij attach jay' >"$STUB/ps.ttys002"
+printf '%s\n' '-zsh' 'tmux' >"$STUB/ps.ttys003"
+printf '%s\n' '-zsh' >"$STUB/ps.ttys004"
+eq "tab session: the tmux hub's client" "tmux:jay" "$(jay_gh_tab_session /dev/ttys001 'jay | fix-login')"
+eq "tab session: the zellij hub" "jay" "$(jay_gh_tab_session /dev/ttys002 'jay | fix-login')"
+eq "tab session: a tmux client without -t, by its title" "tmux:jay" "$(jay_gh_tab_session /dev/ttys003 'jay | worktrees')"
+no "tab session: no client" jay_gh_tab_session /dev/ttys004 'zsh'
+rm -f "$HOME/.local/bin/ps"
+
 # Calls.
 reset
 jay_mux_rename %1 "fix-login"

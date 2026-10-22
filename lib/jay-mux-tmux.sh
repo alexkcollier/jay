@@ -85,7 +85,8 @@ jay_mux_attach_cmd() {
   printf 'tmux -L %q attach -t %q\n' "$JAY_TMUX_SOCKET" "=$JAY_SESSION"
 }
 
-# The Ghostty tab that shows the hub: its tty is one of the hub's clients.
+# The Ghostty tab that shows the hub: its tty is one of the hub's clients; else a tab whose tmux
+# client or title names the session (jay_gh_tab_session).
 jay_mux_gh_tab() {
   local clients id sel front tty title
   clients=$(_jay_tm list-clients -t "=$JAY_SESSION" -F '#{client_tty}' 2>/dev/null)
@@ -93,7 +94,7 @@ jay_mux_gh_tab() {
   while IFS=$'\t' read -r id sel front tty title; do
     grep -qxF "$tty" <<<"$clients" && { printf '%s\n' "$id"; return 0; }
   done < <(jay_gh_tabs)
-  return 1
+  jay_gh_tab_for_session "tmux:$JAY_SESSION"
 }
 
 # What `jay --print-layout` prints: the tmux commands that make the hub window.

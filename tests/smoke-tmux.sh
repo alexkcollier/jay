@@ -97,6 +97,9 @@ place_of() { tm display -p -t "$1" '#{window_name}.#{pane_index}'; }
 is_at() { [[ "$(place_of "$1")" == "$2" ]]; }
 key() { printf '%s\n' "$1" >>"$TMP/client.out.keys"; }
 client_shows() { tr -d '\000' <"$TMP/client.out" | tail -c 8000 | grep -q "$1"; }
+# The last terminal title tmux sent to the client (OSC 0 or 2).
+last_title() { perl -0777 -ne 'my @t = /\e\][02];([^\a\e]*)(?:\a|\e\\)/g; print $t[-1] // ""' "$TMP/client.out"; }
+title_is() { [[ "$(last_title)" == "$1" ]]; }
 no_window() { ! tm list-windows -t =jay -F '#{window_name}' | grep -qx "$1"; }
 has_window() { tm list-windows -t =jay -F '#{window_name}' | grep -qx "$1"; }
 has_client() { [[ -n "$(tm list-clients 2>/dev/null)" ]]; }
@@ -125,6 +128,7 @@ within "the focus starts in the middle" 2 is_pane "$agent"
 jay go aaaa0001
 within "pick: Opening <name>" 3 screen_has "$agent" 'Opening fix-login'
 within "pick: the agent attached" 5 screen_has "$agent" 'ATTACHED aaaa0001'
+within "tab title: the session and the agent, as zellij's" 3 title_is 'jay | fix-login'
 eq "pick: its title" fix-login "$(tm display -p -t "$agent" '#{pane_title}')"
 within "pick: review in its worktree" 5 screen_has "$review" 'TUICR .*shop.fix-login'
 within "pick: review's title" 2 bash -c "[[ \"\$(tmux -L $SOCK display -p -t $review '#{pane_title}')\" == 'turns · shop'* ]]"
@@ -147,8 +151,10 @@ within "same agent after leaving: attached" 3 screen_has "$agent" 'ATTACHED aaaa
 
 # Ctrl g keys.
 key 0731; within "Ctrl g 1: the list" 2 is_pane "$list"
+within "tab title follows the focus" 3 title_is 'jay | worktrees'
 key 0733; within "Ctrl g 3: review" 2 is_pane "$review"
 key 0732; within "Ctrl g 2: the agent" 2 is_pane "$agent"
+within "tab title back on the agent" 3 title_is 'jay | fix-login'
 key 0768; within "Ctrl g h: left" 2 is_pane "$list"
 key 076c; within "Ctrl g l: right" 2 is_pane "$agent"
 key 07; within "Ctrl g: the bar shows the keys" 2 client_shows 'h l 1 2 3 ; v Tab r t q'

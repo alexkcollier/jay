@@ -191,11 +191,21 @@ end tell
 return out' 2>/dev/null | sed '/^$/d'
 }
 
-# Zellij session a Ghostty tab shows, from its client process or its title ("name | pane").
+# Zellij session a Ghostty tab shows, from its client process or its title ("name | pane"). A tab
+# with a tmux client (the tmux hub) shows "tmux:<session>", from the client's `attach -t`, else
+# from the title (jay's tmux config sets it as zellij does): a zellij session never matches it.
 jay_gh_tab_session() {
   local tty=${1#/dev/} title=$2 args
-  args=$(ps -t "$tty" -o command= 2>/dev/null | awk '$1 ~ /(^|\/)zellij$/ { print; exit }')
+  args=$(ps -t "$tty" -o command= 2>/dev/null | awk '$1 ~ /(^|\/)(zellij|tmux)$/ { print; exit }')
   [[ -n "$args" ]] || return 1
+  if [[ "${args%% *}" == *tmux ]]; then
+    if [[ "$args" =~ [[:space:]]-t[[:space:]]+=?([^[:space:]:]+) ]]; then
+      printf 'tmux:%s\n' "${BASH_REMATCH[1]}"
+    else
+      printf 'tmux:%s\n' "${title%% | *}"
+    fi
+    return 0
+  fi
   if [[ "$args" =~ (attach|a|-s|--session)[[:space:]]+(-c[[:space:]]+)?([^[:space:]]+) ]]; then
     printf '%s\n' "${BASH_REMATCH[3]}"
   else
