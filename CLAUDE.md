@@ -141,6 +141,8 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   covered one runs on there (it gets SIGWINCH to the hidden window's size). `break-pane -d` /
   `join-pane -d -h -l <columns>` hide and show review; `-l N%` is a share of the target pane, not
   of the window. Pane ids stay.
+- With no UTF-8 locale (no LANG/LC_*: a notice click, launchd), tmux writes the tabs of a `-F`
+  format and each non-ASCII character as `_`; `tmux -u` (in `_jay_tm`) keeps them.
 - `send-keys -l` sends control characters too (`\x05\x15 line\r` types a line with Enter).
 - A key table (`bind -n C-g switch-client -T jay`) acts once and goes back; `run-shell -b` runs a
   script without a pane. `display-popup -E -e VAR=1` sets a variable in the popup; a popup has

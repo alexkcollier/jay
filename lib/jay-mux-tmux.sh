@@ -10,8 +10,10 @@ JAY_TMUX_SOCKET=${JAY_TMUX_SOCKET:-jay}
 JAY_TMUX_CONF=${JAY_TMUX_CONF:-$HOME/.config/jay/tmux.conf}
 
 # Every tmux call of the hub, on jay's server; it gives up after $JAY_TMUX_TIMEOUT seconds.
+# -u: without a UTF-8 locale (a notice click has no LANG or LC_*), tmux writes the tabs of a -F
+# format and each non-ASCII character as "_".
 _jay_tm() {
-  perl -e 'alarm shift; exec @ARGV or exit 127' "${JAY_TMUX_TIMEOUT:-5}" tmux -L "$JAY_TMUX_SOCKET" -f "$JAY_TMUX_CONF" "$@"
+  perl -e 'alarm shift; exec @ARGV or exit 127' "${JAY_TMUX_TIMEOUT:-5}" tmux -L "$JAY_TMUX_SOCKET" -u -f "$JAY_TMUX_CONF" "$@"
 }
 
 # The caller runs in a pane of jay's tmux server ($TMUX: socket path, server pid, session).

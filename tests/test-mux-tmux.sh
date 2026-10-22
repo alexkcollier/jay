@@ -42,7 +42,7 @@ reset() { rm -f "$STUB/tmux.calls"; }
 
 eq "the tmux backend" tmux "$JAY_MUX"
 eq "its own hub state" "$JAY_STATE/tmux" "$JAY_HUB_STATE"
-eq "jay's own server and config" "-L jaytest-sock -f $HOME/.config/jay/tmux.conf has-session -t =jaytest" "$(reset; jay_mux_alive; calls)"
+eq "jay's own server and config, UTF-8 output (-u)" "-L jaytest-sock -u -f $HOME/.config/jay/tmux.conf has-session -t =jaytest" "$(reset; jay_mux_alive; calls)"
 no "alive: no session" jay_mux_alive
 : >"$STUB/alive"
 ok "alive: the session" jay_mux_alive
@@ -63,8 +63,8 @@ eq "tabs: no hidden window" "@0 @5" "$(jay_mux_tabs | jq -r .id | paste -sd' ' -
 eq "tabs: id by name (a name with dots and spaces)" "@5" "$(jay_mux_tab_id 'shop/main · acme')"
 eq "tabs: active" hub "$(jay_mux_active_tab)"
 reset; jay_mux_tab_go 'shop/main · acme'
-eq "tab go by name: by its id" "-L jaytest-sock -f $HOME/.config/jay/tmux.conf list-windows -t =jaytest -F #{window_id}	#{window_name}	#{window_active}
--L jaytest-sock -f $HOME/.config/jay/tmux.conf select-window -t @5" "$(calls)"
+eq "tab go by name: by its id" "-L jaytest-sock -u -f $HOME/.config/jay/tmux.conf list-windows -t =jaytest -F #{window_id}	#{window_name}	#{window_active}
+-L jaytest-sock -u -f $HOME/.config/jay/tmux.conf select-window -t @5" "$(calls)"
 
 # Self: TMUX_PANE only on jay's server, never in a popup.
 eq "self: outside" "" "$(jay_mux_self)"
