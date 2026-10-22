@@ -112,7 +112,8 @@ trap cleanup EXIT
 /usr/bin/python3 -I "$REPO/tests/pty-client.py" "$TMP/client.out" 200 50 jay &
 client=$!
 within "jay starts the tmux hub" 10 tm has-session -t =jay
-within "the hub window: list, agent, review" 10 bash -c "[[ \$(tmux -L $SOCK list-panes -t =jay:hub | wc -l) -eq 3 ]]"
+# jay_mux_start names the panes after the splits: wait for the names, not only the panes.
+within "the hub window: list, agent, review" 10 bash -c "[[ \"\$(tmux -L $SOCK list-panes -t =jay:hub -F '#{pane_title}' | sort | tr '\n' ' ')\" == 'hub review worktrees ' ]]"
 list=$(pane_by_title worktrees) agent=$(pane_by_title hub) review=$(pane_by_title review)
 eq "the panes from the left" "hub.0 hub.1 hub.2" "$(place_of "$list") $(place_of "$agent") $(place_of "$review")"
 within "a client" 3 has_client
@@ -237,6 +238,6 @@ within "orchestrate: review on the picked worktree" 5 screen_has "$review" 'TUIC
 
 # Ctrl g q: the client goes, the hub runs on.
 key 0771
-within "Ctrl g q: the client detaches" 3 bash -c "! $(declare -f has_client tm); SOCK=$SOCK; has_client"
+within "Ctrl g q: the client detaches" 3 bash -c "$(declare -f has_client tm); SOCK=$SOCK; ! has_client"
 ok "Ctrl g q: the hub runs on" tm has-session -t =jay
 finish
