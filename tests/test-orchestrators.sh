@@ -16,7 +16,20 @@ prompt=$(jay_orchestrator_prompt shop "$shop")
 eq "the prompt starts with the mark" "$JAY_ORCH_MARK" "${prompt:0:${#JAY_ORCH_MARK}}"
 has "the prompt: skills that write run in the worker" "run in the worker of that branch, never here" "$prompt"
 has "the prompt: user-only skills" "tell the user which" "$prompt"
-has "the hub Claude prompt: orchestrators only read" "skills that change a branch run in its workers" "$(jay_hub_claude_prompt)"
+has "the prompt: what stays here" "quick analysis of the repo" "$prompt"
+has "the prompt: in-depth work that only reads goes to a worker" "also one that only reads (an
+  evaluation, critique, audit, research, a report)" "$prompt"
+has "the prompt: a task for \"an agent\" goes to a worker" 'each task the user gives to "an agent"' "$prompt"
+has "the prompt: the Agent tool only for quick lookups" "Agent tool only for your own quick lookups" "$prompt"
+has "the prompt: subscribe to the worker's idle notice" "notify_when_idle: true" "$prompt"
+has "the prompt: no polling loops" "Never poll \`claude agents\` or \`claude logs\` in a loop" "$prompt"
+hasnt "the prompt: no ambiguous \"review\" of work" "Plan, read, review" "$prompt"
+hub=$(jay_hub_claude_prompt)
+has "the hub Claude prompt: orchestrators only read" "skills that change a branch run in its workers" "$hub"
+has "the hub Claude prompt: in-depth work goes to an agent" "To an agent goes every change and every in-depth task" "$hub"
+has "the hub Claude prompt: the Agent tool only for quick lookups" "Agent tool only for your own quick lookups" "$hub"
+has "the hub Claude prompt: subscribe to the idle notice" "notify_when_idle: true" "$hub"
+has "the hub Claude prompt: no polling loops" "Never poll" "$hub"
 # respawnFlags: the options a background agent started with (claude keeps them in state.json).
 orch_flags() { jq -nc --arg p "$(jay_orchestrator_prompt "$1" "$2")" --arg n "$1/main" '["--name", $n, "--append-system-prompt", $p]'; }
 job 0000000a "{\"cwd\": \"$shop\", \"respawnFlags\": $(orch_flags shop "$shop")}"
