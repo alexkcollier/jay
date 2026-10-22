@@ -133,6 +133,11 @@ worktree (siblings named <repo>.<branch>). Keep the main checkout free of work.
 - New worker: here, `jay new <branch> -t "<task>" -- <prompt>` (a new worktree and a
   background agent in it). Give it a prompt it can act on alone: the goal, the files, how to
   test. Start workers only when the user asks or agrees.
+- One worktree per code change (`jay new <new branch>`). Read-only or report tasks on the same
+  code, and a follow-up on another worker's output (a critique after an evaluation), share a
+  worktree: `jay new <its branch> -n <role> -- <prompt>` (name the agent by its role). Agents in
+  one worktree write separate files and commit only their own paths (`git add <paths>`, then
+  `git commit -- <paths>`), never `git add -A`.
 - Reports: `jay new` tells the worker to report to you with SendMessage when it is done or
   blocked; the report comes as a cross-session message. After `jay new`, subscribe to the
   worker's idle notice: SendMessage to its name with notify_when_idle: true and no message.
@@ -169,6 +174,8 @@ What each part tells the agent:
   worker. The Agent tool (a subagent in the orchestrator's own process) is for quick lookups only.
 - **New worker**: the command that makes a worker, and what a good worker prompt has (the goal,
   the files, how to test). It starts workers only when you ask or agree.
+- **One worktree per code change**: read-only tasks and follow-ups share a worktree, with
+  agents named by their role. See [Shared worktrees](#shared-worktrees).
 - **Reports**: how a worker's result comes back (its report, the idle notice), and no polling
   loops. See [How it follows and steers workers](#how-it-follows-and-steers-workers).
 - **No edits in the main checkout, no `EnterWorktree`**: it does not do the work itself. When you
@@ -190,20 +197,52 @@ from another agent in the main checkout (`JAY_ORCH_MARK`). See [The signs](#the-
 The orchestrator runs `jay new <branch> -t "<task>" -- <prompt>` in the main checkout
 (`bin/jay-new`):
 
-1. `wt switch <branch> --no-cd --format=json` makes the worktree, with `--create` when the
+1. The branch that the main checkout has (`main`, say) is refused: the main checkout belongs to
+   the orchestrator, so `jay new` starts no worker there (exit 1, with a message). A `pr:<N>`
+   whose branch is in the main checkout is refused after `wt switch`, by its path.
+2. `wt switch <branch> --no-cd --format=json` makes the worktree, with `--create` when the
    branch does not exist yet, locally or as `origin/<branch>` (`-b <base>`: the branch to start
    from). `pr:<N>` takes a pull request's branch. An existing worktree is used again. The
    worktree is a sibling of the main checkout, `<repo>.<branch>`.
-2. The task note (`-t`, else the first line of the prompt, 60 characters) goes into worktrunk's
-   state variable `task`. The list and `wt list` show it.
-3. When a Claude agent runs `jay new` (an orchestrator, the hub Claude), one line goes at the end
+3. The task note (`-t`, else the first line of the prompt, 60 characters) goes into worktrunk's
+   state variable `task`. The list and `wt list` show it. When other live agents work in the
+   worktree, the note is added to the one there (`evaluate the list · critique the eval`), so
+   no note is lost; the same note is not added twice. Each agent's own note is kept too
+   (`~/.local/state/jay/notes/<id>`, see [Shared worktrees](#shared-worktrees)).
+4. When a Claude agent runs `jay new` (an orchestrator, the hub Claude), one line goes at the end
    of the prompt: "When you are done, or blocked, report to `<caller name>` with SendMessage:
-   the branch head, the result, what needs a decision." The caller's name is the one that
-   `claude agents` and ListAgents show (found by `CLAUDE_CODE_SESSION_ID`, else in the job's
-   `state.json`), so SendMessage finds it. No such line when a person runs `jay new` in a
-   shell, for an idle worker (`-a`), or with `--no-report`.
-4. `claude --bg --name "<repo>/<branch>" "<prompt>"` starts the worker in the new worktree. `-a`
-   in place of a prompt starts an idle worker.
+   the branch head, the result, what needs a decision." When other agents work in the worktree,
+   the line adds: "Other agents work in this worktree: commit only your own files." The
+   caller's name is the one that `claude agents` and ListAgents show (found by
+   `CLAUDE_CODE_SESSION_ID`, else in the job's `state.json`), so SendMessage finds it. No such
+   line when a person runs `jay new` in a shell, for an idle worker (`-a`), or with
+   `--no-report`.
+5. `claude --bg --name "<repo>/<branch>" "<prompt>"` starts the worker in the worktree. `-a`
+   in place of a prompt starts an idle worker. `-n <name>` names it by its role:
+   `<repo>/<name>` (a name with a `/` stays as it is). The name goes through `jay_unique_name`:
+   a taken one gets `-2`, `-3`, ...
+
+### Shared worktrees
+
+The rule of thumb in the prompt: one worktree per code change. Read-only or report tasks on
+the same code, and a follow-up on another worker's output (a critique after an evaluation),
+share a worktree. Each new worktree costs a branch and its setup (a `pnpm install`, say); four
+reports on one commit need only one.
+
+```sh
+jay new list-eval -t "evaluate the list" -- <prompt>                          # shop/list-eval
+jay new list-eval -n list-critique -t "critique the eval" -- <prompt>         # shop/list-critique
+```
+
+- Agents in one worktree write separate files and commit only their own paths (`git add
+  <paths>`, then `git commit -- <paths>`), never `git add -A`: one agent's `git add -A` takes in
+  the other one's work, and two agents that stage at the same time race for the index.
+- The list shows all of them under the worktree row. When two or more agents share it, each
+  agent row ends with that agent's own task note (dim, in the room left); the worktree row has
+  the joined note. A worktree with one agent looks as before.
+- Review works for each agent: each one has its own turn chain (`refs/wt-turns/<id>`). A turn
+  snapshots the whole worktree, so it also shows the files that another agent changed during
+  that turn.
 
 The worker starts without the orchestrator's `CLAUDE*` and `ANTHROPIC*` variables. An inherited
 `CLAUDE_CODE_CHILD_SESSION` would hide the worker from `claude agents` (so from the list) and
@@ -463,7 +502,8 @@ The hub Claude ([The hub Claude](working.md#the-hub-claude)) works across repos.
   `jay new`. For long parallel work in one repo, tell the user that `n` on the repo's main
   checkout row starts an orchestrator.
 - The same split as an orchestrator: every change and every in-depth task (also a read-only one)
-  goes to an agent; the Agent tool is for its own quick lookups.
+  goes to an agent; the Agent tool is for its own quick lookups. One worktree per code change;
+  read-only tasks and follow-ups share one ([Shared worktrees](#shared-worktrees)).
 - The same reports: a worker that it starts reports to it (SendMessage), and it subscribes to the
   worker's idle notice in place of a polling loop.
 

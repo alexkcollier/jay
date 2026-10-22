@@ -44,7 +44,8 @@ Elsewhere:
 
 - `refs/wt-turns/<id>/{base,head,live}` in each repo: the turn chains. These refs keep the old
   name: they live in each repo, and a new name would lose the old chains.
-- The task note: worktrunk's state variable `task` (`wt task`, `jay new -t`).
+- The task note: worktrunk's state variable `task` (`wt task`, `jay new -t`). Each agent's own
+  note from `jay new -t`: `~/.local/state/jay/notes/<short id>`, one line.
 - `~/.local/share/jay/`: `zjstatus-v0.25.0.wasm` (the bar), `mod/` (the mod, with
   `--with-mod`), `installed.txt` (the files `install.sh` installed), `no-compat` (there after
   `./install.sh --no-compat`).

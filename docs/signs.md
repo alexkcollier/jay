@@ -21,6 +21,9 @@ The list shows each repo with a `.git` folder 1–2 levels under `$JAY_ROOTS` (d
   `n` for an orchestrator).
 - A worktree row: branch (last part, cut to the width), the git signs (always shown), then the
   task note in the room left.
+- In a worktree that two or more agents share, each agent row ends with that agent's own task
+  note (dim, in the room left; `jay new -t`). See
+  [Shared worktrees](orchestrators.md#shared-worktrees).
 - The hub Claude has its own row at the top, "◆ hub", not one in its folder.
 
 Agent rows update every few seconds, git signs every 30 s.
