@@ -444,7 +444,7 @@ JAY_SESSION=${JAY_SESSION:-jay}
 #   panes    jay_mux_panes (JSON lines), jay_mux_self, jay_mux_rename, jay_mux_read, jay_mux_type,
 #            jay_mux_close, jay_mux_cover / jay_mux_uncover (a pane over a pane and back),
 #            jay_mux_wait_shown, jay_mux_wait_gone, jay_mux_focus <list|agent|review>,
-#            jay_mux_resize_list, jay_mux_list_share, jay_mux_float_height
+#            jay_mux_resize_list, jay_mux_list_share, jay_mux_float_height, jay_mux_popup_text
 #   review   jay_mux_hide_review, jay_mux_unhide_review, jay_mux_review_hidden, jay_mux_rehide,
 #            jay_mux_keep_hidden
 #   tabs     jay_mux_tabs (JSON lines), jay_mux_tab_id, jay_mux_active_tab, jay_mux_tab_go,

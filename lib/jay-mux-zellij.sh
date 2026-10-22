@@ -190,6 +190,11 @@ jay_mux_float_height() {
   zellij -s "$JAY_SESSION" action change-floating-pane-coordinates -p "$1" --height "$2" >/dev/null 2>&1
 }
 
+# A text in a popup of its own (tmux): zellij's launcher pane grows instead (jay_mux_float_height).
+jay_mux_popup_text() {
+  return 1
+}
+
 # --- Tabs ---
 
 # The tabs, one JSON object per line: id, name, active.

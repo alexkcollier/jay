@@ -241,6 +241,26 @@ jay_mux_float_height() {
   return 0
 }
 
+# Show text $1 in a popup titled $2, on the caller's client, sized to the text, until a key: the
+# popup the caller runs in cannot grow, and a client has one popup at a time, so the new one
+# opens just after the caller's closes (the caller ends right after this). Fails outside a popup.
+jay_mux_popup_text() {
+  local client file h title cmd
+  [[ -n "${JAY_POPUP:-}" ]] && _jay_tm_inside || return 1
+  client=$(_jay_tm display-message -p '#{client_name}' 2>/dev/null)
+  [[ -n "$client" ]] || return 1
+  jay_state_dir
+  file=$(mktemp "$JAY_HUB_STATE/popup.XXXXXX") || return 1
+  printf '%s\n' "$1" >"$file"
+  h=$(($(wc -l <"$file") + 3))
+  ((h > 40)) && h=40
+  ((h < 5)) && h=5
+  title=" ${2//#/##} · any key: close "
+  cmd=$(printf '%q ' "$HOME/.local/bin/jay-run" --show "$file")
+  _jay_tm run-shell -b "sleep 0.3; $(printf '%q ' "$(command -v tmux)" -L "$JAY_TMUX_SOCKET" -f "$JAY_TMUX_CONF" \
+    display-popup -c "$client" -E -e JAY_POPUP=1 -w 70% -h "$h" -T "$title" "$cmd")" >/dev/null 2>&1
+}
+
 # --- Tabs (windows; the hidden ones are not tabs) ---
 
 jay_mux_tabs() {

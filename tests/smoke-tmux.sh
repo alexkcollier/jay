@@ -218,8 +218,22 @@ sleep 0.5
 key "$(printf 'echo launched-%s\r' "$$" | xxd -p | tr -d '\n')"
 console=$(tm list-panes -t "$wid" -F '#{pane_id} #{pane_title}' | awk '$2 == "console" { print $1; exit }')
 within "launcher: the line ran in the console" 5 screen_has "$console" "launched-$$"
+# A command that ends: its output in a popup of its size (as zellij's launcher grows), until a key.
+within "launcher: the output in a popup" 5 client_shows "any key: close"
+within "launcher: the popup's title, worktree and line" 2 client_shows "shop/fix-login · acme: echo launched-$$"
+popup_open() { tr -d '\000' <"$TMP/client.out" | tail -c 3000 | grep -q 'any key: close'; }
+: >"$TMP/client.out"
 key 71
-within "launcher: closed" 3 bash -c "! tmux -L $SOCK display -p '#{popup_active}' 2>/dev/null | grep -q 1"
+sleep 1
+ok "launcher: a key closes the output" bash -c "! grep -q 'any key: close' '$TMP/client.out'"
+# A command that runs on: the launcher closes, no output popup.
+key 0772; within "Ctrl g r again" 3 client_shows 'run in shop/fix-login'
+sleep 0.5
+: >"$TMP/client.out"
+key "$(printf 'sleep 30\r' | xxd -p | tr -d '\n')"
+sleep 3
+ok "launcher, a command that runs on: no output popup" bash -c "! grep -q 'any key: close' '$TMP/client.out'"
+within "launcher, a command that runs on: it runs in the console" 3 bash -c "tmux -L $SOCK list-panes -t $wid -F '#{pane_title}' | grep -qx sleep"
 jay run stop api >/dev/null 2>&1
 jay run stop web >/dev/null 2>&1
 ok "run: stopped" bash -c "! lsof -nP -iTCP:$port1 -sTCP:LISTEN"

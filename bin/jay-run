@@ -672,10 +672,23 @@ console_run() {
     clear
     printf '%s\n\e[2many key: close\e[0m' "$out"
     read -r -s -n 1 _ </dev/tty
+  elif [[ -t 1 ]] && jay_mux_popup_text "$out" "$(tab_name "$dir"): $line"; then
+    # tmux: the launcher's popup cannot grow; a popup of the output's size follows it.
+    :
   else
     printf '%s\n' "$out"
   fi
   return 0
+}
+
+# jay-run --show <file>: the text of a file and "any key: close", for a popup of the tmux hub
+# (jay_mux_popup_text); the file goes after the key.
+cmd_show() {
+  local file=${1:?}
+  cat "$file" 2>/dev/null
+  printf '\e[2many key: close\e[0m'
+  read -r -s -n 1 _ </dev/tty
+  rm -f "$file"
 }
 
 cmd_ls() {
@@ -961,6 +974,7 @@ case ${1:-} in
   --switch) cmd_switch ;;
   --launcher) cmd_launcher ;;
   --pick) cmd_pick ;;
+  --show) shift; cmd_show "$@" ;;
   --worktree-tab) shift; cmd_worktree_tab "$@" ;;
   --close-tab) shift; cmd_close_tab "$@" ;;
   ls) shift; cmd_ls "$@" ;;
