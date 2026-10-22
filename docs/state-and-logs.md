@@ -25,6 +25,7 @@ In `~/.local/state/jay/`:
 | `prune.stamp` | time of the last automatic prune |
 | `prune.log` | each agent the list pruned, each turn chain removed, and each respawn (`jay respawn` and the list's: the versions and Claude's answer) |
 | `respawned/<id>` | the version an agent was respawned onto; its time is when (the 10-minute rule); removed after 14 days |
+| `renewed/<id>` | an agent that `jay renew` started in place of an older one: the old agent's creation time (ms), which ranks the orchestrators; removed 14 days after `claude agents` no longer lists the agent |
 | `respawn.stamp` | time of the list's last respawn step (at most one each minute) |
 | `claude-version` | the installed Claude Code version, under the binary's path and mtime (`claude --version` runs again after an update) |
 | `notify.log` | one line per notify hook call, and the output of notice clicks |
@@ -45,12 +46,15 @@ Elsewhere:
 - `refs/wt-turns/<id>/{base,head,live}` in each repo: the turn chains. These refs keep the old
   name: they live in each repo, and a new name would lose the old chains.
 - The task note: worktrunk's state variable `task` (`wt task`, `jay new -t`). Each agent's own
-  note from `jay new -t`: `~/.local/state/jay/notes/<short id>`, one line.
+  note from `jay new -t`: `~/.local/state/jay/notes/<short id>`, one line. `jay renew` moves it
+  to the new id. The list's prune removes it 14 days after `claude agents` no longer lists the
+  agent.
 - `~/.local/share/jay/`: `zjstatus-v0.25.0.wasm` (the bar), `mod/` (the mod, with
   `--with-mod`), `installed.txt` (the files `install.sh` installed), `no-compat` (there after
   `./install.sh --no-compat`).
 - `~/.claude/jobs/<id>/state.json`: Claude's own state of each background agent. The hub reads
-  `respawnFlags` (the orchestrator prompt, the options of a copy), `cwd` and `worktreePath` (a
+  `respawnFlags` (the orchestrator or hub Claude prompt: `⇡` when it is not jay's now; the
+  options of a copy or a renewed agent), `cwd` and `worktreePath` (a
   worktree it entered), `linkScanPath` and `resumeSessionId` (its transcript, whose last cwd
   tells where an agent is that does not run) and `needs` (an agent that waits for its first
   prompt) there. For a respawn: `tempo` (`active` while a turn runs), `inFlight` (background

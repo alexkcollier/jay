@@ -174,10 +174,10 @@ folders), with a short system prompt about the hub's commands (`jay_hub_claude_p
   parallel work in one repo, it tells you to press `n` on the repo's main checkout row. See
   [The hub Claude and orchestrators](orchestrators.md#the-hub-claude-and-orchestrators).
 - `c` on the "◆ hub" row gives it a fresh context (see
-  [Fresh context](orchestrators.md#fresh-context)). To start a new hub Claude, `claude rm <id>`:
-  the next pick starts a new one. A hub Claude started before the rename keeps its old prompt
-  (with `wt new`, `hub-run`): the shims run those commands. A new hub Claude gets the new
-  prompt.
+  [Fresh context](orchestrators.md#fresh-context)). `/clear` keeps its prompt: when jay's prompt
+  is newer (a dim `⇡` on the row), `c` also offers a new hub Claude with the current prompt and
+  the same name (`jay renew hub`; see
+  [A newer prompt: renew](orchestrators.md#a-newer-prompt-renew)).
 
 ## Open your editor
 

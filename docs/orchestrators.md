@@ -462,6 +462,49 @@ context. After a confirm, the list types `/clear` into the agent through a hidde
 `jay clear <id>` exits 0 when the session id changed, 1 when it did not, 2 for a usage error
 and 3 when the agent is missing or not idle.
 
+### A newer prompt: renew
+
+`/clear`, `jay clear` and `claude respawn` all keep the agent's old system prompt: Claude keeps
+`--append-system-prompt` in the job's `state.json` (`respawnFlags`) and starts the agent with it
+again. So an orchestrator or the hub Claude gets a newer prompt from jay (after a pull, say) only
+as a new agent.
+
+- **The sign**: a dim `⇡` after the name of an orchestrator, and on the "◆ hub" row, when the
+  agent's prompt is not the one that jay gives now (`jay_orchestrator_prompt` for its main
+  checkout, `jay_hub_claude_prompt`).
+- **`c` on such a row** asks: `y` gives a fresh context with the current prompt (a new agent,
+  same name; the old one is removed); `k` gives a fresh context and keeps the old prompt
+  (`/clear`, as above). When the prompt is current, `c` only offers `/clear`.
+- **`jay renew <id or name>`** does the same as `y`, from the command line. When the agent has
+  the current prompt already, it changes nothing.
+
+What a renew does:
+
+1. It starts a new background agent in the same folder (an orchestrator's main checkout; for the
+   hub Claude, the first root, with the other roots of `JAY_ROOTS` as added folders), with the
+   current prompt, the same name and the other options of the old agent (a model, say).
+2. It waits until `claude agents` lists the new agent.
+3. It moves to the new id what referred to the old one: `~/.local/state/jay/hub-claude`, the
+   middle column and review (when they showed the old agent; the focus stays), the agent's task
+   note, and its orchestrator rank: a mark `renewed/<new id>` keeps the old agent's creation
+   time, so the `◇` stays cyan also when a second orchestrator is older than the new agent.
+4. It stops the old agent and removes it (`claude rm`). The old conversation stays in its
+   transcript. A line goes into `prune.log`.
+
+The same rules as for `/clear`: only when the agent is idle or unread, and not for an agent in a
+worktree that it entered. There `claude rm` deletes the worktree that Claude recorded for the
+agent (see [When the folder an agent came from goes](working.md#when-the-folder-an-agent-came-from-goes)).
+In a main checkout or a root, an orchestrator or the hub Claude has no such worktree. When the
+new agent does not start, the old one stays as it was. When `claude rm` fails, the old agent is
+stopped and stays, and `jay renew` says so: `claude rm <id>` removes it later.
+
+The new agent has a new short id and session id, so its turn chain starts again. Like `/clear`,
+it forgets the old conversation and its workers.
+
+`jay renew` exits 0 when it renewed the agent or had nothing to do, 1 on a fault, 2 for a usage
+error and 3 when the agent is missing, is no orchestrator or hub Claude, is not idle, or is in a
+worktree it entered.
+
 ## An orchestrator in a worktree it entered
 
 When you tell the orchestrator to make a change itself, it goes into a worktree with

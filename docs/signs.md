@@ -46,6 +46,7 @@ point.
 | `◇` yellow, before the name | a second agent with the orchestrator prompt in the same main checkout; remove it (`d`) |
 | `n: orchestrator` (dim, at the end of the main checkout row) | the repo has two or more workers (agents in its other worktrees, not stopped) and no orchestrator: `n` on this row starts one. It goes when an orchestrator runs or fewer than two workers are left; a narrow list cuts it ([When to start one](orchestrators.md#when-to-start-one)) |
 | `↻` (dim, after the name) | the agent runs an older Claude Code than the installed one; the list respawns it at a quiet moment ([Claude Code updates](working.md#claude-code-updates)). The status line's counts end with their count, `↻ 2` |
+| `⇡` (dim, after the name; on the "◆ hub" row) | the orchestrator or the hub Claude has an older prompt than the one jay gives now (`/clear` and a respawn keep the old one); `c` on the row offers a fresh context with the current prompt ([A newer prompt: renew](orchestrators.md#a-newer-prompt-renew)) |
 | `→ feat` (dim, after the age) | the agent from the main checkout is in that worktree now (`EnterWorktree`); it shows under its main checkout |
 | `home gone` yellow, after the age | the folder the agent came from is gone, so it cannot wake; a pick continues it as a copy in the worktree it is in ([When the folder an agent came from goes](working.md#when-the-folder-an-agent-came-from-goes)) |
 | `lost` red, after the age | the folder it came from and the worktree it was in are gone; a pick offers a copy in the main checkout, or removal |
