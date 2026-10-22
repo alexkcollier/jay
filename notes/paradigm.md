@@ -303,6 +303,7 @@ panes, and it can later carry a desktop or web front through control mode.
    as with the `wt-hub` shims.
 5. **Remove** the zellij backend, zjstatus and the zellij facts in CLAUDE.md, when nothing uses
    them.
+6. Later, optional: **a TUI for the list** on tmux (see the next section).
 
 Step 1 has value alone: it puts the zellij traps in one file, and the scripts say what they
 want ("focus the agent") and not how ("left, left, right").
@@ -318,6 +319,46 @@ only step 2.
 What would change this: a zellij release that adds a tab-by-name key action, a CLI focus that
 moves the client, a way to hide a tiled pane and a tab-switch event. Then stay on zellij and
 keep the layer.
+
+## 6. A TUI on tmux (a later step)
+
+Added 2026-10-22, after Alex accepted the move to tmux. No spike.
+
+The idea: a real TUI (for example Go with Bubble Tea, or Rust with ratatui) replaces only the
+fzf list (`bin/jay-sidebar`). It shows the rows and the agent states, a detail panel, menus and
+confirms. tmux keeps the terminals (agent, review, files, tasks) and detach. The TUI runs in the
+left pane and drives tmux with tmux commands. This is not the custom TUI of section 3: that one
+hosts terminals itself; this one hosts none.
+
+On the 13 jobs:
+
+| Job | With the TUI |
+|---|---|
+| 1, 3, 4, 6, 11, 12 | No change: tmux does them. The TUI runs in a tmux pane, so it survives a detach. |
+| 2, 5, 7 | The TUI calls tmux (`respawn-pane`, `select-pane`, `capture-pane`) directly, or the same `jay_mux_*` commands. No change for the user. |
+| 8 Bar | The bar stays. The counts can come from the TUI's own model, not from a second `jq` pass. |
+| 9 Keys | The list's keys become the TUI's keys. Ctrl g stays a tmux key table. Gain: menus and confirms in a box, not `read -n1` on a cleared pane (`confirm` in `bin/jay-sidebar:522`). |
+| 10 Mouse | Gain: clicks on any part of a row (a button, a sign), a scroll in the detail panel. tmux passes the click that focuses the pane, so one click picks. |
+| 13 Events | Gain: the TUI can keep one control-mode client (`tmux -C`) open for window and pane events, and watch the state files. Now the list polls. |
+
+What gets easier: the fzf work-arounds go: `--listen` and `curl` to move the cursor
+(`jay_list_follow`), `reload-sync` races, `--track`, the footer tricks, the clear on a new row
+count. A detail panel can show what fzf cannot: the agent's last message, its turns, its tasks
+and ports, the worktree's git state.
+
+What gets harder: a second language and a binary to build and ship (a Homebrew formula or
+release binaries; now `install.sh` only copies scripts). The model of rows and states now lives
+in `bin/jay-sidebar` (jq) and in the mod (`mod/hooks/model.ts`). A TUI must not make a third
+copy: at first it reads `jay all --json` and `jay agents --json`, and bash stays the one source
+of the states. Wide glyphs still shift lines: that is the terminal's limit, not fzf's.
+
+Rough cost: `bin/jay-sidebar` is about 850 lines of bash and jq. A Go version with the same
+keys, the detail panel and its tests: one to two weeks. Go with Bubble Tea is the lighter choice
+(one static binary, simple to build); ratatui is good too.
+
+Where it fits: after step 4 (tmux is the default), and not before. It needs a stable base under
+it, and it gains most from tmux's events and direct pane commands. It does not depend on step 5.
+It is optional: the fzf list works on tmux as it is.
 
 ## How to repeat the tests
 
