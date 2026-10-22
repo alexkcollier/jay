@@ -939,7 +939,7 @@ jay_hub_claude() {
 
 # The hub Claude's id when it has one, without starting it.
 jay_hub_claude_id() {
-  cat "$JAY_HUB_CLAUDE_FILE" 2>/dev/null
+  cat "$JAY_HUB_CLAUDE_FILE" 2>/dev/null || true
 }
 
 # Move the cursor of each running list (jay-sidebar's fzf, through its --listen socket) to the
