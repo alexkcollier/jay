@@ -34,7 +34,7 @@ const USAGE = [
   '/jay pane                 show the worktree list in the dock',
   '/jay hub                  open the hub in its tab (a new one if needed): list, agent, review',
   '/jay off                  turn the hub off',
-  '/jay new <branch> [-t "task"] [-- prompt]   new worktree; with a prompt, a background agent',
+  '/jay new <branch> [-t "task"] [-n name] [-- prompt]   new worktree; with a prompt, a background agent',
   '/jay go <agent>           bring an agent in front: id, name or part of a name',
   '/jay open <branch|path>   select or open the worktree\'s Ghostty tab',
   '/jay msg <agent> <text>   send a message to an agent',

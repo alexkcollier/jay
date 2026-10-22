@@ -72,7 +72,7 @@ Not for hand use:
 | `/jay pane` | the worktree list in the dock |
 | `/jay hub` | `jay` (its tab, or a new tab) |
 | `/jay off` | turn them off |
-| `/jay new <branch> [-t "task"] [-- prompt]` | `jay new` |
+| `/jay new <branch> [-t "task"] [-n name] [-- prompt]` | `jay new` |
 | `/jay go <agent>` | `jay go` |
 | `/jay open <branch\|path>` | `jay open` |
 | `/jay msg <agent> <text>` | send a message to an agent |
