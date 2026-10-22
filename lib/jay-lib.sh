@@ -1283,7 +1283,25 @@ jay_renewed() {
 
 # The hub's middle column and review show agent $2 in place of agent $1, when they showed $1:
 # their panes follow while they run (the focus stays), else only their target files change.
+# Both hubs: a zellij hub and a tmux hub can run side by side, each with its own state
+# (JAY_HUB_STATE), and the caller's JAY_MUX names only one of them. A hub left on $1 shows "You
+# left this agent" when $1 stops. The other hub's session name is its default: JAY_SESSION
+# belongs to the caller's hub.
 jay_hub_retarget() {
+  local other=tmux dir
+  jay_hub_retarget_here "$1" "$2"
+  [[ "$JAY_MUX" == tmux ]] && other=zellij
+  dir=$JAY_STATE
+  [[ "$other" == tmux ]] && dir=$JAY_STATE/tmux
+  if [[ "$(cut -f1 "$dir/agent.target" 2>/dev/null)" == "$1" || "$(cut -f2 "$dir/review.target" 2>/dev/null)" == "$1" ]]; then
+    env -u JAY_SESSION -u WT_HUB_SESSION JAY_MUX=$other bash -c \
+      'source "$HOME/.local/lib/jay-lib.sh" && jay_hub_retarget_here "$1" "$2"' _ "$1" "$2"
+  fi
+  return 0
+}
+
+# jay_hub_retarget in the hub of this JAY_MUX.
+jay_hub_retarget_here() {
   local old=$1 new=$2 file id="" cwd="" kind="" name="" top="" aid="" line pane changed
   file=$(jay_hub_target_file agent)
   IFS=$'\t' read -r id cwd kind name 2>/dev/null <"$file"

@@ -485,7 +485,8 @@ What a renew does:
    current prompt, the same name and the other options of the old agent (a model, say).
 2. It waits until `claude agents` lists the new agent.
 3. It moves to the new id what referred to the old one: `~/.local/state/jay/hub-claude`, the
-   middle column and review (when they showed the old agent; the focus stays), the agent's task
+   middle column and review (when they showed the old agent; the focus stays; in both hubs when
+   a zellij hub and a tmux hub run side by side), the agent's task
    note, and its orchestrator rank: a mark `renewed/<new id>` keeps the old agent's creation
    time, so the `◇` stays cyan also when a second orchestrator is older than the new agent.
 4. It stops the old agent and removes it (`claude rm`). The old conversation stays in its
