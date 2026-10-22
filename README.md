@@ -9,8 +9,8 @@ and Claude Code background agents.
 ## What the hub is
 
 ```
+ ◆ JAY › shop/fix-login · Tab: tasks   ● 1 working  ○ 2 idle         ● shop/fix-login web  14:05
 ┌ worktrees ─────────────┬ shop/fix-login ────────────┬ turns · shop   e files · t commits ────┐
-│ ● 1 working  ○ 2 idle  │                            │                                        │
 │ ◆ hub ○                │  the picked agent:         │  review of the agent's turns (tuicr)   │
 │ acme                   │  claude attach <id>        │                                        │
 │  shop                  │                            │            e ⇅ e / q                   │
@@ -20,9 +20,7 @@ and Claude Code background agents.
 │                        │  (it keeps running)        │                                        │
 │ ⏎ open  n new  d remove│                            │                                        │
 │ ? all keys and signs   │                            │                                        │
-├────────────────────────┴────────────────────────────┴────────────────────────────────────────┤
-│ ◆ jay  ● 1 working  ○ 2 idle                                                     hub │ 14:05 │
-└──────────────────────────────────────────────────────────────────────────────────────────────┘
+└────────────────────────┴────────────────────────────┴────────────────────────────────────────┘
   list (jay-sidebar, fzf)    agent viewer (jay-pane agent)    review ⇄ files (jay-pane review/files)
 ```
 
@@ -35,14 +33,15 @@ and Claude Code background agents.
 - **Review** (right). tuicr on the picked agent's turns (one commit per turn), or on the branch's
   commits. **Files** (yazi in the same worktree) opens over review and closes back to it.
   Ctrl g `v` hides review (the agent viewer gets its width) and shows it again.
-- **Banner** (top, zjstatus, blue). `◆ JAY › worktrees` and the picked worktree (on a tasks tab:
-  `◆ JAY › tasks` and its worktree), and where `Ctrl g Tab` goes.
-- **Bar** (bottom, zjstatus). `◆ jay`, the agent counts from the list, the tasks of all worktrees
-  with the project of each (`● shop/fix-login web`; the picked worktree's bright), the zellij
-  mode when it is not locked and the time.
+- **Status line** (one line at the top of each tab; zjstatus in zellij, tmux's own status line in
+  tmux). Left: `◆ JAY ›` and the picked worktree (on a tasks tab: `◆ JAY › tasks ›`, its worktree
+  and the tasks that run elsewhere), and where Ctrl g Tab goes. Middle: the agent counts with
+  their signs. Right: the tasks of all worktrees with the project of each (`● shop/fix-login web`;
+  the picked worktree's bright, the others dim), then the time. When the line is too narrow, the
+  other worktrees' tasks become `+N` first, then the picked worktree's tasks only their signs,
+  then the counts lose their words; the left part is never cut.
 - **tmux** (optional): `JAY_MUX=tmux jay` runs the same hub on jay's own tmux server, beside a
-  zellij hub; banner and bar are its status line at the top. See
-  [The tmux hub](docs/install.md#the-tmux-hub-jay_muxtmux).
+  zellij hub. See [The tmux hub](docs/install.md#the-tmux-hub-jay_muxtmux).
 - **Tasks tabs** (one per worktree, Ctrl g Tab). Shell panes for dev servers, watchers and
   `docker compose up`, which you and the agents both see. See [Tasks](docs/tasks.md).
 
@@ -105,7 +104,7 @@ hub Claude plans and starts workers for it. See [Orchestrators](docs/orchestrato
    Put `~/.local/bin` on PATH. Your repos go under `~/Documents/projects`
    (`<client>/<repo>` or `<repo>`); else set `JAY_ROOTS` in `~/.config/jay/config`. Optional:
    the pane keys that `./install.sh` prints. Details: [Install](docs/install.md).
-2. Start the hub: `jay`. At the first start, click the bar and press `y` (zjstatus asks for
+2. Start the hub: `jay`. At the first start, click the top line and press `y` (zjstatus asks for
    its permissions).
 3. The first agent: press `n` on a worktree row in the list. The agent shows in the middle
    column: type its first prompt. Or, in a shell, `c` in place of `claude`.

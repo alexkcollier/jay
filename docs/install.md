@@ -43,7 +43,7 @@ reads the front app with `lsappinfo`.
 
 | Tool | Without it | Tested with | From | Used for |
 |---|---|---|---|---|
-| zjstatus | zellij's compact bar, no banners | 0.25.0 | `./install.sh` gets it from GitHub: `~/.local/share/jay/zjstatus-v0.25.0.wasm` | the bar and the banners |
+| zjstatus | zellij's compact bar at the bottom, no status line | 0.25.0 | `./install.sh` gets it from GitHub: `~/.local/share/jay/zjstatus-v0.25.0.wasm` | the status line at the top of each tab (zellij hub) |
 | tmux | the zellij hub only | 3.8 (3.5+) | `brew install tmux` | the tmux hub (`JAY_MUX=tmux`), on jay's own server and config; see [The tmux hub](#the-tmux-hub-jay_muxtmux). Required when `JAY_MUX=tmux` is set |
 | Nerd Font | the git signs show as boxes | | Ghostty's built-in font has the Nerd Font symbols; in another terminal, set a Nerd Font | the Octicons in the git signs |
 | Ghostty | no tab control ([Terminals](#terminals)) | 1.3.2 (1.3+) | `brew install --cask ghostty` | tabs through AppleScript: `jay`, `jay go`, `jay open`, `jay edit`, notices |
@@ -136,8 +136,8 @@ it off. Without tab control:
    with "Ready", or with the TODO items. Run it again after a `git pull`: the copies do not
    change when the repo changes.
 3. Optional: the pane keys in `~/.config/zellij/config.kdl` (see [Pane keys](#pane-keys)).
-4. Start the hub: `jay`. At the first start, zellij asks for the bar's permissions: click
-   the bar and press `y`. The first click on a notice (or the first `jay` from a script)
+4. Start the hub: `jay`. At the first start, zellij asks for the status line's permissions:
+   click the top line and press `y`. The first click on a notice (or the first `jay` from a script)
    can make macOS ask for permission to control Ghostty: allow it.
 5. Optional: worktrunk's own Claude Code plugin:
    `claude plugin marketplace add max-sixty/worktrunk && claude plugin install worktrunk@worktrunk`.

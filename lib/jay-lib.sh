@@ -498,6 +498,68 @@ jay_hub_widths() {
   printf '%s %s %s\n' "$list" "$middle" "$((100 - list - middle))"
 }
 
+# --- The status line: one line at the top of each tab, the same in both hubs ---
+# Left: "◆ JAY ›" and the picked worktree (a tasks tab: "◆ JAY › tasks › <worktree>" and the
+# tasks that run elsewhere), and where Ctrl g Tab goes; never cut. Middle: the agent counts
+# with their signs, as the list's first row. Right: the tasks (the picked worktree's bright,
+# the others dim), then the time. The parts come in by jay_mux_bar <part> <text> (agents and
+# tasks from the list's tick, where at a pick, note from jay run's tick); each one is kept in
+# $JAY_BAR, and the backend draws the line again (jay_mux_status) for its width.
+JAY_BAR="$JAY_HUB_STATE/bar"
+
+# Keep part $1 of the status line (agents, tasks, where, note).
+jay_bar_set() {
+  jay_state_dir
+  mkdir -p "$JAY_BAR" 2>/dev/null
+  printf '%s' "$2" >"$JAY_BAR/$1.$$" && mv "$JAY_BAR/$1.$$" "$JAY_BAR/$1"
+}
+
+# The left part, with ANSI colors: $1 hub (worktree $2) or tasks (tab $2, note $3).
+jay_bar_left() {
+  local blue=$'\e[1;34m' dim=$'\e[2m' off=$'\e[0m'
+  if [[ "$1" == hub ]]; then
+    printf '%s %s %s' "${blue}◆ JAY ›${off}" "${2:-}" "${dim}· Tab: tasks${off}"
+  else
+    printf '%s %s%s %s' "${blue}◆ JAY › tasks ›${off}" "${2:-}" "${3:+ · $3}" "${dim}· Tab: hub${off}"
+  fi
+}
+
+# The visible width of text $1 (ANSI colors left out; the line has no wide glyphs).
+jay_bar_cells() {
+  local s
+  s=$(printf '%s' "$1" | perl -pe 's/\e\[[0-9;]*m//g')
+  printf '%s\n' "${#s}"
+}
+
+# The middle (agent counts) and right (tasks) parts for BUDGET $1 cells, two lines, with ANSI
+# colors. Too narrow, in this order: the other worktrees' tasks become "+N", then the picked
+# worktree's tasks only their signs, then the counts lose their words ("● 2"), then the tasks
+# go but "+N", then all tasks, then the counts are cut.
+jay_bar_fit() {
+  local budget=$1 agents tasks picked LC_ALL=en_US.UTF-8
+  agents=$(cat "$JAY_BAR/agents" 2>/dev/null)
+  tasks=$(cat "$JAY_BAR/tasks.json" 2>/dev/null)
+  [[ -n "$tasks" ]] || tasks='[]'
+  picked=$(cut -f1 "$(jay_hub_target_file review)" 2>/dev/null)
+  jq -rn --arg agents "$agents" --argjson tasks "$tasks" --arg picked "$picked" --argjson b "$budget" '
+    def c($x): "\u001b[" + $x + "m";
+    def vis: gsub("\u001b\\[[0-9;]*m"; "") | length;
+    def sign: if .state == "running" then ["32", "●"] elif (.exit // 0) == 0 then ["2", "○"] else ["31", "✗"] end;
+    def join2($a; $b): [$a, $b] | map(select(. != "")) | join("  ");
+    ($agents | gsub("(?<n>[0-9]+) [a-z]+"; "\(.n)")) as $short
+    | [$tasks[]? | select(.state == "running" or .state == "exited") | . + {here: (.top != null and .top == $picked)}] as $t
+    | ($t | map(select(.here))) as $h | ($t | map(select(.here | not))) as $o
+    | ($h | map(sign as [$col, $s] | c($col) + $s + c("0") + " " + .project + " " + (.name | .[0:24])) | join("  ")) as $hfull
+    | ($h | map(sign as [$col, $s] | c($col) + $s + c("0")) | join(" ")) as $hsigns
+    | ($o | map(sign as [$col, $s] | c("2") + $s + " " + .project + " " + (.name | .[0:24]) + c("0")) | join("  ")) as $ofull
+    | (if ($o | length) > 0 then c("2") + "+\($o | length)" + c("0") else "" end) as $oplus
+    | [[$agents, join2($hfull; $ofull)], [$agents, join2($hfull; $oplus)], [$agents, join2($hsigns; $oplus)],
+       [$short, join2($hsigns; $oplus)], [$short, $oplus], [$short, ""]]
+    | (map(select((.[0] | vis) + (.[1] | vis) + 3 <= $b)) | first)
+      // [($short | gsub("\u001b\\[[0-9;]*m"; "") | .[0:([$b, 0] | max)]), ""]
+    | .[0], .[1]'
+}
+
 # The files of role $1 (agent, review, files); the folder is made for the write that may follow.
 jay_hub_target_file() { jay_state_dir; printf '%s/%s.target\n' "$JAY_HUB_STATE" "$1"; }
 jay_hub_pane_file() { jay_state_dir; printf '%s/%s.pane\n' "$JAY_HUB_STATE" "$1"; }

@@ -16,9 +16,9 @@
 
 Each worktree gets its own tasks tab in the hub for long-running commands: `pnpm dev`, watchers,
 `docker compose up`. The tab is named `<repo>/<branch> · <client>` and is made the first time it
-is needed. Each pane in a tasks tab is a task. You and the agents see the same panes. A blue
-banner at the top of each tab says where you are: `◆ JAY › worktrees <picked worktree>` on the
-hub tab, `◆ JAY › tasks <its worktree>` on a tasks tab, with where Ctrl g Tab goes.
+is needed. Each pane in a tasks tab is a task. You and the agents see the same panes. The status
+line at the top of each tab says where you are: `◆ JAY › <picked worktree>` on the hub tab,
+`◆ JAY › tasks › <its worktree>` on a tasks tab, with where Ctrl g Tab goes.
 
 - **Ctrl g Tab**: from the hub tab to the tasks tab of the worktree you picked (agent or
   worktree row; a new tab when it has none); from a tasks tab back to the hub. With an agent
@@ -53,12 +53,14 @@ hub tab, `◆ JAY › tasks <its worktree>` on a tasks tab, with where Ctrl g Ta
 
 ## The bar and the task panes
 
-The bar shows each task that runs or ended: its sign, the project it runs in (the repo for a main
-checkout, `repo/branch` for a worktree) and its name: `● shop/fix-login web` (runs), `✗ shop
-admin` (failed), `○ shop build` (ended with 0). The tasks of the picked worktree come first and
-bright, the others dim. A shell at its prompt is not shown. No ports in the bar: `jay run ls`
-has them, and so do the task panes' titles (`web · :5173`). The list sends the bar text every
-3 s. Each tasks tab's banner says how many tasks run in other worktrees, and where
+The right part of the status line shows each task that runs or ended: its sign, the project it
+runs in (the repo for a main checkout, `repo/branch` for a worktree) and its name:
+`● shop/fix-login web` (runs), `✗ shop admin` (failed), `○ shop build` (ended with 0). The
+tasks of the picked worktree come first and bright, the others dim. A shell at its prompt is not
+shown. No ports in the line: `jay run ls` has them, and so do the task panes' titles
+(`web · :5173`). The list sends the tasks every 3 s. When the line is too narrow, the other
+worktrees' tasks become `+N`, then the picked worktree's tasks only their signs. A tasks tab's
+left part says how many tasks run in other worktrees, and where
 (`2 running elsewhere: shop, acme-api`); in the zellij hub that count is from the picked
 worktree. Ctrl g `t` lists all tasks (project, name, state, ports): Enter goes to the task's tab.
 

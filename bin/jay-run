@@ -922,6 +922,15 @@ cmd_tick() {
   spare_shell "$tasks"
   tidy_shells "$tasks"
   picked=$(cut -f1 "$(jay_hub_target_file review)" 2>/dev/null)
+  # The status line cuts the tasks to its width (jay_bar_fit): it reads them from here. A new
+  # width draws the line again.
+  jay_bar_set tasks.json "$tasks"
+  local width
+  width=$(jay_mux_width)
+  if [[ "$width" != "$(cat "$JAY_BAR/width" 2>/dev/null)" ]]; then
+    jay_bar_set width "$width"
+    jay_mux_status
+  fi
   while IFS=$'\t' read -r tid top; do
     [[ -n "$tid" ]] || continue
     note=$(cmd_note "$tasks" "$top")

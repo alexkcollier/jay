@@ -331,20 +331,50 @@ _jay_tm_style() {
     }ge'
 }
 
-# Part $1 of the bar or banner: agents, tasks, where (the picked worktree).
+# Part $1 of the status line (agents, tasks, where, note; see jay_bar_set): kept, then the line
+# is drawn again.
 jay_mux_bar() {
-  local text c
-  text=$(printf '%s' "$2" | _jay_tm_style)
-  _jay_tm set-option -g "@jay_$1" "$text" >/dev/null 2>&1 || return 0
+  jay_bar_set "$1" "$2"
+  # The launcher's popup title names the picked worktree too.
+  [[ "$1" == where ]] && _jay_tm set-option -g @jay_where "$2" >/dev/null 2>&1
+  jay_mux_status
+}
+
+# Window $1's own note (a tasks window: its tasks that run elsewhere).
+jay_mux_tab_note() {
+  jay_bar_set "note.$1" "$2"
+  jay_mux_status
+}
+
+# The widths of the windows, to tell when the line must be cut again.
+jay_mux_width() {
+  _jay_tm list-windows -t "=$JAY_SESSION" -F '#{window_width}' 2>/dev/null | sort -u | paste -sd' ' -
+}
+
+# Draw the status line of each window: @jay_left, @jay_mid and @jay_right (window options, shown
+# by status-format in config/tmux/jay.conf), cut to the window's width (jay_bar_fit). The width
+# beside the parts: a space before the left part, 3 after it, 2 before " HH:MM ".
+jay_mux_status() {
+  local IFS=$' \t\n' id name w left mid right args=() c
+  while IFS=$'\t' read -r id name w; do
+    [[ -n "$id" && "$name" != _* ]] || continue
+    if [[ "$name" == hub ]]; then
+      left=$(jay_bar_left hub "$(cat "$JAY_BAR/where" 2>/dev/null)")
+    else
+      left=$(jay_bar_left tasks "$name" "$(cat "$JAY_BAR/note.$id" 2>/dev/null)")
+    fi
+    { IFS= read -r mid; IFS= read -r right; } < <(jay_bar_fit "$((w - $(jay_bar_cells "$left") - 13))")
+    ((${#args[@]})) && args+=(\;)
+    args+=(set-option -w -t "$id" @jay_left "$(printf '%s' "$left" | _jay_tm_style)"
+      \; set-option -w -t "$id" @jay_mid "$(printf '%s' "$mid" | _jay_tm_style)"
+      \; set-option -w -t "$id" @jay_right "$(printf '%s' "$right" | _jay_tm_style)")
+  done < <(_jay_tm list-windows -t "=$JAY_SESSION" -F '#{window_id}	#{window_name}	#{window_width}' 2>/dev/null)
+  ((${#args[@]})) || return 0
+  _jay_tm "${args[@]}" >/dev/null 2>&1
   for c in $(_jay_tm list-clients -t "=$JAY_SESSION" -F '#{client_name}' 2>/dev/null); do
     _jay_tm refresh-client -t "$c" -S >/dev/null 2>&1
   done
   return 0
-}
-
-# Window $1's own part of the banner (a tasks window: its tasks elsewhere).
-jay_mux_tab_note() {
-  _jay_tm set-option -w -t "$1" @jay_note "$(printf '%s' "$2" | _jay_tm_style)" >/dev/null 2>&1
 }
 
 # --- Review hidden (Ctrl g v): review moves to a hidden window, the middle takes its width ---

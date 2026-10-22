@@ -10,6 +10,7 @@ stub tmux '
 args=" $* "
 case "$args" in
   *" list-panes "*) cat "$STUB/panes.txt" ;;
+  *" list-windows "*"window_width"*) awk -F"\t" -v OFS="\t" "{ print \$1, \$2, 200 }" "$STUB/windows.txt" ;;
   *" list-windows "*) cat "$STUB/windows.txt" ;;
   *" list-clients "*) [[ -f "$STUB/clients.txt" ]] && cat "$STUB/clients.txt" ;;
   *" has-session "*) [[ -f "$STUB/alive" ]] ;;
@@ -114,12 +115,39 @@ has "uncover: files closed" "kill-pane -t %3" "$(calls)"
 # Hidden review: its window is _review.
 eq "review hidden: its window" "@7" "$(jay_mux_review_hidden %2)"
 
-# Bar: ANSI colors become tmux styles, # doubled.
+# The status line: each window's three parts, ANSI colors as tmux styles (# doubled).
 reset
-jay_mux_bar tasks $'\e[32m●\e[0m shop web  \e[2m○ shop/fix #1\e[0m'
-has "bar: styles" "set-option -g @jay_tasks #[fg=colour2]●#[default] shop web  #[dim]○ shop/fix ##1#[default]" "$(calls)"
+jay_mux_bar where shop/fix-login
+jay_mux_bar agents $'\e[2m○\e[0m 3 idle #1'
+has "status: the hub window's left part" "set-option -w -t @0 @jay_left #[bold,fg=colour4]◆ JAY ›#[default] shop/fix-login #[dim]· Tab: tasks#[default]" "$(calls)"
+has "status: the counts, # doubled" "set-option -w -t @0 @jay_mid #[dim]○#[default] 3 idle ##1" "$(calls)"
+has "status: a tasks window's left part" "set-option -w -t @5 @jay_left #[bold,fg=colour4]◆ JAY › tasks ›#[default] shop/main · acme #[dim]· Tab: hub#[default]" "$(calls)"
+hasnt "status: not the hidden windows" "-t @4 @jay_left" "$(calls)"
+has "status: the launcher's title knows the worktree" "set-option -g @jay_where shop/fix-login" "$(calls)"
+reset
 jay_mux_tab_note @5 "1 running elsewhere: shop"
-has "tab note: the window's own" "set-option -w -t @5 @jay_note 1 running elsewhere: shop" "$(calls)"
+has "tab note: in the window's own left part" "@jay_left #[bold,fg=colour4]◆ JAY › tasks ›#[default] shop/main · acme · 1 running elsewhere: shop #[dim]· Tab: hub#[default]" "$(calls)"
+
+# jay_bar_fit: the middle and right parts for a width, cut in this order: the other worktrees'
+# tasks to "+N", the picked worktree's tasks to their signs, the counts' words, then the rest.
+printf '%s' $'\e[1;33m!\e[0m 1 input  \e[2;32m●\e[0m 2 working  \e[2m○\e[0m 3 idle  \e[2m↻ 1\e[0m' >"$JAY_BAR/agents"
+cat >"$JAY_BAR/tasks.json" <<'JSON'
+[{"name": "web", "project": "shop/fix-login", "top": "/w/shop.fix-login", "state": "running"},
+ {"name": "test", "project": "shop/fix-login", "top": "/w/shop.fix-login", "state": "exited", "exit": 1},
+ {"name": "api", "project": "shop", "top": "/w/shop", "state": "running"},
+ {"name": "db", "project": "acme-api", "top": "/w/acme-api", "state": "running"},
+ {"name": "shell", "project": "shop", "top": "/w/shop", "state": "idle"}]
+JSON
+printf '/w/shop.fix-login\t\n' >"$(jay_hub_target_file review)"
+fit() { jay_bar_fit "$1" | perl -pe 's/\e\[[0-9;]*m//g' | paste -sd'|' -; }
+eq "fit, room for all" "! 1 input  ● 2 working  ○ 3 idle  ↻ 1|● shop/fix-login web  ✗ shop/fix-login test  ● shop api  ● acme-api db" "$(fit 120)"
+eq "fit 1: the other worktrees' tasks to +N" "! 1 input  ● 2 working  ○ 3 idle  ↻ 1|● shop/fix-login web  ✗ shop/fix-login test  +2" "$(fit 100)"
+eq "fit 2: the picked worktree's tasks to their signs" "! 1 input  ● 2 working  ○ 3 idle  ↻ 1|● ✗  +2" "$(fit 60)"
+eq "fit 3: the counts without their words" "! 1  ● 2  ○ 3  ↻ 1|● ✗  +2" "$(fit 40)"
+eq "fit 4: only +N of the tasks" "! 1  ● 2  ○ 3  ↻ 1|+2" "$(fit 26)"
+eq "fit 5: no tasks" "! 1  ● 2  ○ 3  ↻ 1|" "$(fit 22)"
+eq "fit 6: the counts cut" "! 1  ● 2  |" "$(fit 10)"
+eq "fit: the picked worktree's bright, others dim" $'\e[32m●\e[0m shop/fix-login web  \e[31m✗\e[0m shop/fix-login test  \e[2m● shop api\e[0m  \e[2m● acme-api db\e[0m' "$(jay_bar_fit 120 | tail -1)"
 
 # Tasks tab: a window with the worktree as its banner label and a console.
 reset

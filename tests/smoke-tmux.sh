@@ -204,11 +204,39 @@ ls=$(jay run ls 2>&1)
 has "ls: running with its port" "running  $port1" "$ls"
 has "ls: the console" "idle" "$ls"
 hasnt "ls: not the hub's hidden windows" "_cover" "$ls"
-within "bar: the picked worktree's task, bright" 8 option_has @jay_tasks '#[fg=colour2]●#[default] shop/fix-login web'
-within "bar: the main checkout's, dim, the repo as project" 3 option_has @jay_tasks '#[dim]● shop api'
-hasnt "bar: no ports" "$port1" "$(tm show -gv @jay_tasks)"
+# The status line: one line at the top; left (where), middle (agent counts), right (tasks).
+hubw=$(tm list-windows -t =jay -F '#{window_id} #{window_name}' | awk '$2 == "hub" { print $1 }')
 wid=$(tm list-windows -t =jay -F '#{window_id} #{window_name}' | awk '/fix-login/ { print $1 }')
-within "note: the fix-login window names the task elsewhere" 3 bash -c "[[ \"\$(tmux -L $SOCK show -wv -t $wid @jay_note)\" == '1 running elsewhere: shop' ]]"
+wopt() { tm show -wv -t "$1" "$2" 2>/dev/null; }
+wopt_has() { [[ "$(wopt "$1" "$2")" == *"$3"* ]]; }
+plain() { perl -pe 's/#\[[^]]*\]//g'; }
+eq "status: one line" on "$(tm show -gv status)"
+eq "the config loads without errors" "" "$(tm show-messages 2>/dev/null | grep -i 'jay.conf:' | head -3)"
+eq "status: at the top" top "$(tm show -gv status-position)"
+within "status left: the picked worktree and where Tab goes" 5 bash -c "[[ \"\$(tmux -L $SOCK show -wv -t $hubw @jay_left | perl -pe 's/#\[[^]]*\]//g')\" == '◆ JAY › shop/fix-login · Tab: tasks' ]]"
+within "status middle: the agent counts" 5 wopt_has "$hubw" @jay_mid '3 idle'
+within "status right: the picked worktree's task, bright" 8 wopt_has "$hubw" @jay_right '#[fg=colour2]●#[default] shop/fix-login web'
+within "status right: the main checkout's, dim, the repo as project" 3 wopt_has "$hubw" @jay_right '#[dim]● shop api'
+hasnt "status: no ports" "$port1" "$(wopt "$hubw" @jay_right)"
+within "status left of a tasks window: its worktree and the tasks elsewhere" 5 bash -c "[[ \"\$(tmux -L $SOCK show -wv -t $wid @jay_left | perl -pe 's/#\[[^]]*\]//g')\" == '◆ JAY › tasks › shop/fix-login · acme · 1 running elsewhere: shop · Tab: hub' ]]"
+within "status: the client shows the line" 3 client_shows '◆ JAY ›'
+# Cut to the width (a second terminal makes the windows its size): at 140 columns all fits; at
+# 80 the other worktrees' tasks go first ("+1"), then the picked worktree's names (signs only).
+right_plain() { wopt "$hubw" @jay_right | plain; }
+for cols in 140 80; do
+  /usr/bin/python3 -I "$REPO/tests/pty-client.py" "$TMP/client$cols.out" "$cols" 40 tmux -L "$SOCK" attach -t =jay &
+  extra=$!
+  within "status at $cols columns: the window's width" 5 bash -c "[[ \$(tmux -L $SOCK display -p -t $hubw '#{window_width}') == $cols ]]"
+  if ((cols == 140)); then
+    within "status at 140: all tasks with their names" 8 bash -c "[[ \"\$(tmux -L $SOCK show -wv -t $hubw @jay_right | perl -pe 's/#\[[^]]*\]//g')\" == '● shop/fix-login web  ● shop api' ]]"
+    has "status at 140: the counts with their words" "3 idle" "$(wopt "$hubw" @jay_mid | plain)"
+  else
+    within "status at 80: others to +1, the picked worktree's signs only" 8 bash -c "[[ \"\$(tmux -L $SOCK show -wv -t $hubw @jay_right | perl -pe 's/#\[[^]]*\]//g')\" == '●  +1' ]]"
+    has "status at 80: the left part whole" "◆ JAY › shop/fix-login · Tab: tasks" "$(wopt "$hubw" @jay_left | plain)"
+  fi
+  kill "$extra" 2>/dev/null
+  wait "$extra" 2>/dev/null
+done
 eq "tasks window: console and task side by side, as zellij's tab" "1 1" \
   "$(tm list-panes -t "$wid" -F '#{pane_top}' | sort -u | wc -l | tr -d ' ') $(tm list-panes -t "$wid" -F '#{pane_left}' | grep -c '^0$')"
 eq "pane titles centered in the border, as zellij's frames" '#[align=centre] #{pane_title} ' "$(tm show -gv pane-border-format)"
@@ -246,7 +274,7 @@ within "launcher, a command that runs on: it runs in the console" 3 bash -c "tmu
 jay run stop api >/dev/null 2>&1
 jay run stop web >/dev/null 2>&1
 ok "run: stopped" bash -c "! lsof -nP -iTCP:$port1 -sTCP:LISTEN"
-within "bar: the agents" 5 option_has @jay_agents idle
+within "status: the agents" 5 wopt_has "$hubw" @jay_mid idle
 
 # JAY_ORCHESTRATE=web: a pick of web's worktree row (as the list runs it) starts web's
 # orchestrator. The middle column says so, then shows it; the focus stays in the list.

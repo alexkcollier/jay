@@ -33,7 +33,9 @@
   automatic prune of dead agents.
 - macOS notices when an agent finishes a turn or needs input, with a click that shows the agent.
 - Your editor on any file of the worktree (`O` in files).
-- Dev servers in a tasks tab per worktree: their state in the bar (with the project that owns
+- One status line at the top of each tab: where you are, the agent counts, the tasks, the time
+  (in both hubs).
+- Dev servers in a tasks tab per worktree: their state in the status line (with the project that owns
   each one), their ports in `jay run ls` and their pane titles, their output readable by agents
   (`jay run`), no port or repo config ([Tasks](tasks.md)). Ctrl g `t` picks any task.
 - Two multiplexers: zellij (the default) or tmux (`JAY_MUX=tmux`), with the same layout and keys
@@ -335,7 +337,7 @@ its process: the path of the binary under Claude's `claude bg-pty-host` process.
 
 ## Quit
 
-Quit the hub: Ctrl g, then Ctrl q. The bar shows this hint when you press Ctrl g. The agents keep
+Quit the hub: Ctrl g, then Ctrl q. The status line shows "Ctrl g" while zellij waits for the key. The agents keep
 running. Closing the hub's Ghostty tab only detaches it: `jay` attaches it again. The list has
 no quit key.
 

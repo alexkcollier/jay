@@ -147,11 +147,13 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   its client.
 - `set-titles-string '#S | #{pane_title}'` (zellij's title format): tmux sends a new title
   (OSC 2) when the focus moves and when the focused pane is renamed.
-- One status position only (top or bottom) for all status lines: the banner and the bar are
-  both at the top, not banner top and bar bottom as in zellij.
-- User options carry the bar: `set -g @jay_tasks '#[fg=...]text'` (styles in the value work; `#`
-  must be doubled), `set -w -t @5 @jay_note …` for one window; the status line reads pane, then
-  window, then global options.
+- `status` takes `on`, `off` or 2–5, not 1: `set -g status 1` is a config error, and a config
+  error opens tmux's error view in a pane, which takes the keys meant for that pane (the smoke
+  test checks `show-messages` for `jay.conf:` errors).
+- One status position only (top or bottom) for all status lines (jay uses one line, at the top).
+- User options carry the status line: `set -w -t @5 @jay_left '#[fg=...]text'` (styles in the value work; `#`
+  must be doubled), one window's own with `-w`; the status line reads pane, then window, then
+  global options.
 - `extended-keys on` with `terminal-features …:extkeys`: `claude attach` in a pane asks for
   mode 2 (`#{pane_key_mode}` = `Ext 2`); Shift+Enter from the terminal as CSI u (`\e[13;2u`) or
   xterm's `\e[27;2;13~` reaches Claude as a new line. `claude attach` turns on the mouse modes

@@ -123,7 +123,8 @@ to locked mode. `1` `2` `3` `h` `l` `;` `v` Tab `r` need the binds in
 
 The tmux hub (`JAY_MUX=tmux`) runs on jay's own tmux server with its own config
 (`~/.config/jay/tmux.conf`, from `config/tmux/jay.conf`): your `~/.tmux.conf` does not load
-there, and there is no prefix key. Ctrl g, then one key; the bar shows the keys while it waits.
+there, and there is no prefix key. Ctrl g, then one key; the status line shows the keys (in
+place of the agent counts) while it waits.
 
 | Keys | Action |
 |---|---|

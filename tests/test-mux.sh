@@ -67,10 +67,17 @@ jay_mux_tab_close 4
 has "rename" "-s jaytest action rename-pane -p terminal_3 turns · shop" "$(calls)"
 has "type" "-s jaytest action write-chars -p terminal_3 (" "$(calls)"
 has "close" "-s jaytest action close-pane --pane-id terminal_9" "$(calls)"
-has "bar" "-s jaytest pipe zjstatus::pipe::pipe_agents::1 working" "$(calls)"
+has "status line: the counts in the middle pipe" "-s jaytest pipe zjstatus::pipe::pipe_mid::1 working" "$(calls)"
+has "status line: the right pipe" "-s jaytest pipe zjstatus::pipe::pipe_right::" "$(calls)"
 has "tab by name" "-s jaytest action go-to-tab-name hub" "$(calls)"
 has "tab by id" "-s jaytest action go-to-tab-by-id 4" "$(calls)"
 has "close tab" "-s jaytest action close-tab-by-id 4" "$(calls)"
+reset
+jay_mux_bar where shop/fix-login
+has "status line: the picked worktree, left" "-s jaytest pipe zjstatus::pipe::pipe_where::shop/fix-login" "$(calls)"
+reset
+jay_mux_bar note "1 running elsewhere: shop"
+has "status line: the note of the tasks tabs" "-s jaytest pipe zjstatus::pipe::pipe_note:: · 1 running elsewhere: shop" "$(calls)"
 eq "read" "line one
 NORMAL mode" "$(jay_mux_read terminal_3)"
 reset
@@ -163,11 +170,23 @@ printf '30\n' >"$JAY_STATE/sidebar.pct"
 eq "widths" "30 38 32" "$(jay_hub_widths)"
 has "layout: list at its share" 'pane size="30%" name="worktrees"' "$(jay --print-layout)"
 has "layout: the agent pane" 'args "agent"' "$(jay --print-layout)"
+has "layout without zjstatus: the compact bar" 'zellij:compact-bar' "$(jay --print-layout)"
+mkdir -p "$HOME/.local/share/jay" && : >"$HOME/.local/share/jay/zjstatus-v0.25.0.wasm"
+layout=$(jay --print-layout)
+eq "layout: one status line, no other bar" 1 "$(grep -c 'plugin location' <<<"$layout")"
+ok "layout: the status line first, at the top" bash -c "grep -n 'plugin location\|split_direction' <<<'$layout' | head -1 | grep -q plugin"
+has "layout: its left part" '◆ JAY ›#[fg=default,nobold] {pipe_where} #[dim]· Tab: tasks' "$layout"
+has "layout: counts, then tasks and time" '{pipe_mid}' "$layout"
+has "layout: tasks and time on the right" 'format_right  "{pipe_right}  #[fg=#727169]{datetime} "' "$layout"
+tasks_layout=$(jay --print-tasks-tab /w/shop 'shop/main · acme')
+has "tasks tab: its left part" '◆ JAY › tasks ›#[fg=default,nobold] shop/main · acme{pipe_note} #[dim]· Tab: hub' "$tasks_layout"
+eq "tasks tab: one status line" 1 "$(grep -c 'plugin location' <<<"$tasks_layout")"
+rm -f "$HOME/.local/share/jay/zjstatus-v0.25.0.wasm"
 
-# jay run --where: the banner gets the picked worktree.
+# jay run --where: the status line gets the picked worktree.
 repo "$TMP/w/shop"
 reset
 jay-run --where "$TMP/w/shop"
-eq "where: the banner" "-s jaytest pipe zjstatus::pipe::pipe_where::shop/main" "$(calls)"
+has "where: the status line's left part" "-s jaytest pipe zjstatus::pipe::pipe_where::shop/main" "$(calls)"
 
 finish

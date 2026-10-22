@@ -244,41 +244,80 @@ jay_mux_tab_pane() {
     --close-on-exit -- "${@:4}"
 }
 
-# --- The bar and the banner (zjstatus, fed through pipes) ---
+# --- The status line (zjstatus at the top of each tab, fed through pipes) ---
 
-# Part $1 of the bar or banner: agents (the counts), tasks, where (the picked worktree, in the
-# hub tab's banner). Text $2 may have ANSI colors.
+# Part $1 of the status line (agents, tasks, where, note; see jay_bar_set): kept, then the line
+# is drawn again. where and note are pipes of their own (the left part, in the layout).
 jay_mux_bar() {
-  zellij -s "$JAY_SESSION" pipe "zjstatus::pipe::pipe_$1::$2" >/dev/null 2>&1
+  jay_bar_set "$1" "$2"
+  case $1 in
+    where) zellij -s "$JAY_SESSION" pipe "zjstatus::pipe::pipe_where::$2" >/dev/null 2>&1 ;;
+    note) zellij -s "$JAY_SESSION" pipe "zjstatus::pipe::pipe_note::${2:+ · $2}" >/dev/null 2>&1 ;;
+  esac
+  jay_mux_status
 }
 
-# A tab's own part of the banner: zjstatus pipes reach every tab alike, so the tasks tabs' banner
-# has one shared part instead ("note", jay_mux_bar).
+# A tab's own note: zjstatus pipes reach every tab alike, so the tasks tabs share one note, from
+# the picked worktree (jay_mux_bar note).
 jay_mux_tab_note() {
   return 0
 }
 
-# The bar at the bottom of the hub, in kanagawa colors: the agent counts and the tasks (both
-# sent by the list, see jay-sidebar), the zellij mode when it is not locked and the time. No tab
-# list: there is a tab per worktree, and the banner says which one is shown.
-_jay_zj_bar() {
+# The width of the hub tab.
+jay_mux_width() {
+  jay_mux_panes | jq -s '[.[] | select(.tab == "hub" and (.floating | not)) | .x + .cols] | max // empty' 2>/dev/null
+}
+
+# Draw the middle and right parts (pipes mid and right, the same in every tab), cut to the
+# width less the longest left part of the tabs (jay_bar_fit; 13: the gaps and the time; 9: the
+# mode's badge, "Ctrl g", while zellij is not locked).
+jay_mux_status() {
+  local IFS=$' \t\n' w lmax n name mid right
+  w=$(jay_mux_width)
+  [[ -n "$w" ]] || return 0
+  lmax=$(jay_bar_cells "$(jay_bar_left hub "$(cat "$JAY_BAR/where" 2>/dev/null)")")
+  while IFS= read -r name; do
+    n=$(jay_bar_cells "$(jay_bar_left tasks "$name" "$(cat "$JAY_BAR/note" 2>/dev/null)")")
+    ((n > lmax)) && lmax=$n
+  done < <(jay_mux_tabs | jq -r 'select(.name != "hub") | .name')
+  { IFS= read -r mid; IFS= read -r right; } < <(jay_bar_fit "$((w - lmax - 13 - 9))")
+  zellij -s "$JAY_SESSION" pipe "zjstatus::pipe::pipe_mid::$mid" >/dev/null 2>&1
+  zellij -s "$JAY_SESSION" pipe "zjstatus::pipe::pipe_right::$right" >/dev/null 2>&1
+  return 0
+}
+
+# The status line at the top of a tab, in kanagawa colors on the terminal's own background (see
+# jay_bar_left for the words): $1 hub, or tasks with tab name $2. The mode shows when it is not
+# locked. Without zjstatus: zellij's compact bar.
+_jay_zj_status() {
   if [[ ! -f "$JAY_ZJSTATUS" ]]; then
     printf '%s\n' 'plugin location="zellij:compact-bar"'
     return
   fi
-  local tz
+  local tz left
   tz=$(readlink /etc/localtime | sed 's#.*/zoneinfo/##')
+  if [[ "$1" == hub ]]; then
+    left='#[fg=#7E9CD8,bold]◆ JAY ›#[fg=default,nobold] {pipe_where} #[dim]· Tab: tasks'
+  else
+    left="#[fg=#7E9CD8,bold]◆ JAY › tasks ›#[fg=default,nobold] $(sed 's/[\\"]/\\&/g; s/#\[/# [/g' <<<"$2"){pipe_note} #[dim]· Tab: hub"
+  fi
   cat <<KDL
 plugin location="file:$JAY_ZJSTATUS" {
-                format_left   "#[fg=#7E9CD8,bold] ◆ jay  {pipe_agents}   {pipe_tasks}"
-                format_right  "{mode}#[fg=#727169] {datetime} "
+                format_left   " $left#[default] {mode}  {pipe_mid}"
+                format_right  "{pipe_right}  #[fg=#727169]{datetime} "
                 format_space  ""
-                pipe_agents_format     "{output}"
-                pipe_agents_rendermode "raw"
-                pipe_tasks_format      "{output}"
-                pipe_tasks_rendermode  "raw"
+                format_precedence        "lrc"
+                format_hide_on_overlength "true"
+                pipe_where_format      "{output}"
+                pipe_where_rendermode  "static"
+                pipe_note_format       "{output}"
+                pipe_note_rendermode   "static"
+                pipe_mid_format        "{output}"
+                pipe_mid_rendermode    "raw"
+                pipe_right_format      "{output}"
+                pipe_right_rendermode  "raw"
                 mode_locked          ""
-                mode_normal          "#[fg=#1F1F28,bg=#E6C384,bold] {name} #[fg=#727169] Ctrl q: quit hub · Ctrl g: lock  "
+                mode_normal          "#[fg=#1F1F28,bg=#E6C384,bold] Ctrl g #[default] "
                 mode_default_to_mode "normal"
                 datetime          "{format}"
                 datetime_format   "%H:%M"
@@ -287,28 +326,15 @@ plugin location="file:$JAY_ZJSTATUS" {
 KDL
 }
 
-# The banner at the top of each tab, so that each tab says it is the hub's: "◆ JAY › <what the
-# tab is>" ($1), the worktree ($3; without it the picked one, sent at each pick, see
-# jay_hub_target and jay-sidebar) and where Ctrl g Tab goes ($2). Without zjstatus, none.
-# A tasks tab's banner also has the note (jay run's tick): the tasks that run in other worktrees
-# than the picked one.
-_jay_zj_banner() {
+# The status line's pane, one row at the top of a tab (_jay_zj_top); without zjstatus, zellij's
+# compact bar at the bottom (_jay_zj_bottom) in its place.
+_jay_zj_top() {
   [[ -f "$JAY_ZJSTATUS" ]] || return 0
-  local where='{pipe_where}'
-  [[ -n "${3:-}" ]] && where="$(sed 's/[\\"]/\\&/g; s/#\[/# [/g' <<<"$3")   {pipe_note}"
-  cat <<KDL
-pane size=1 borderless=true {
-            plugin location="file:$JAY_ZJSTATUS" {
-                format_left   "#[fg=#1F1F28,bg=#7E9CD8,bold] ◆ JAY › $1 #[fg=#1F1F28,bg=#7E9CD8]  $where"
-                format_right  "#[fg=#1F1F28,bg=#7E9CD8] Ctrl g Tab: $2 "
-                format_space  "#[bg=#7E9CD8]"
-                pipe_where_format     "#[fg=#1F1F28,bg=#7E9CD8]{output}"
-                pipe_where_rendermode "static"
-                pipe_note_format      "#[fg=#1F1F28,bg=#7E9CD8]{output}"
-                pipe_note_rendermode  "static"
-            }
-        }
-KDL
+  printf 'pane size=1 borderless=true {\n            %s\n        }\n' "$(_jay_zj_status "$@")"
+}
+_jay_zj_bottom() {
+  [[ -f "$JAY_ZJSTATUS" ]] && return 0
+  printf 'pane size=1 borderless=true {\n            %s\n        }\n' "$(_jay_zj_status hub)"
 }
 
 # The hub's layout: list | agent | review, the list at its saved share of the width.
@@ -317,14 +343,8 @@ _jay_zj_layout() {
   read -r list middle right < <(jay_hub_widths)
   cat <<KDL
 layout {
-    default_tab_template {
-        children
-        pane size=1 borderless=true {
-            $(_jay_zj_bar)
-        }
-    }
     tab name="hub" focus=true {
-        $(_jay_zj_banner worktrees "its tasks")
+        $(_jay_zj_top hub)
         pane split_direction="vertical" {
             pane size="$list%" name="worktrees" command="$HOME/.local/bin/jay-sidebar"
             pane size="$middle%" name="hub" focus=true command="$HOME/.local/bin/jay-pane" {
@@ -334,21 +354,20 @@ layout {
                 args "review"
             }
         }
+        $(_jay_zj_bottom)
     }
 }
 KDL
 }
 
-# The tasks tab of worktree $1 (escaped for KDL), named $2: the banner, the console (a shell in
-# the worktree, see jay-run), the bar.
+# The tasks tab of worktree $1 (escaped for KDL), named $2: the status line, the console (a shell in
+# the worktree, see jay-run).
 _jay_zj_tasks_layout() {
   cat <<KDL
 layout {
-    $(_jay_zj_banner tasks "back to the hub" "$2")
+    $(_jay_zj_top tasks "$2")
     pane cwd="$1" name="console"
-    pane size=1 borderless=true {
-        $(_jay_zj_bar)
-    }
+    $(_jay_zj_bottom)
 }
 KDL
 }
