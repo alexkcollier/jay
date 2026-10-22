@@ -16,6 +16,8 @@ bin/
   jay-diff               the diff renderer of lazygit review: delta or difftastic, fit to the column
   jay-edit               jay edit: open a file or folder in your editor, in its project
   jay-go                 jay go: bring an agent in front (hub, tab or pane)
+  jay-guard              hook (PreToolUse on Bash): denies an orchestrator's git and gh commands
+                         that change its main checkout
   jay-keys               pty wrapper around tuicr: t (toggle mode), e (files)
   jay-lazygit            lazygit as review (JAY_REVIEW=lazygit): a turn chain's view repo
   jay-new                jay new: worktree, task note, background agent

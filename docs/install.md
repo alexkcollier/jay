@@ -139,13 +139,23 @@ Options of `install.sh`: `--link` (symlinks in place of copies, for work on jay)
 | the hub's lazygit settings (for `JAY_REVIEW=lazygit`) | `~/.config/jay/lazygit` |
 | tuicr's `q_quits = true` | `~/.config/tuicr/config.toml`, made when missing; else checked |
 | the hub's worktrunk settings | `~/.config/worktrunk/config.toml`, copied when missing; else the missing keys are listed |
-| the hooks (SessionStart, Stop, UserPromptSubmit, PostToolUse, Notification) | added to `~/.claude/settings.json`, only the missing ones, after a backup |
+| the hooks (SessionStart, Stop, UserPromptSubmit, PreToolUse, PostToolUse, Notification) | added to `~/.claude/settings.json`, only the missing ones, after a backup |
 | zjstatus v0.25.0 (the bar) | `~/.local/share/jay/`, sha256 checked |
 | the mod (`/jay`), with `--with-mod` | `~/.local/share/jay/mod`, marketplace `jay` |
 | `jay-setup` as worktrunk's `pre-start` hook, with `--with-setup` | `~/.config/worktrunk/config.toml` (see `jay setup` in [Commands](commands.md)) |
 
 The hooks come from `config/claude-settings-hooks.json`. The installer adds a hook only when
 `settings.json` does not have its command for that event yet, so your own hooks stay.
+
+| Hook | Event | What it does |
+|---|---|---|
+| `jay-run --hook` | SessionStart | tells each agent to start dev servers as hub tasks ([Tasks](tasks.md)) |
+| `jay-snapshot` | UserPromptSubmit, PostToolUse, Stop | the turn chains for review by turn ([Review](review.md)) |
+| `jay-notify` | Stop, Notification | the macOS notices ([Working in the hub](working.md)) |
+| `jay-guard` | PreToolUse (Bash) | stops an orchestrator's git commands that change its main checkout ([Orchestrators](orchestrators.md#skills-and-slash-commands)) |
+
+`jay-guard` runs before each Bash call of each session. For a session that is not an
+orchestrator, it exits at once (no `CLAUDE_JOB_DIR`, or no orchestrator prompt in the job).
 
 ## Coming from wt-hub
 

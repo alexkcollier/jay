@@ -510,7 +510,7 @@ install_hooks() {
   else current='{}'; fi
   merged=$(merged_settings <(printf '%s\n' "$current") | jq -S .)
   if [[ "$merged" == "$current" ]]; then
-    ok "$SETTINGS has the hub's hooks (SessionStart, Stop, UserPromptSubmit, PostToolUse, Notification)"
+    ok "$SETTINGS has the hub's hooks (SessionStart, Stop, UserPromptSubmit, PreToolUse, PostToolUse, Notification)"
     return 0
   fi
   old=$(jq --arg old "$OLD_HOOKS" '[.hooks[]?[]?.hooks[]?.command // empty | select(test($old))] | length' <<<"$current")
@@ -706,7 +706,7 @@ uninstall() {
   rm -rf "$SHARE" && did "removed $SHARE (zjstatus, mod copy, list of installed files)"
   n=$(remove_old_links)
   ((n == 0)) || did "removed $n links at the old paths of wt-hub"
-  need "remove the hub's hooks (jay-notify, jay-snapshot, jay-run --hook; wt-hub's were claude-notify, claude-turn-snapshot, hub-run --hook) from $SETTINGS"
+  need "remove the hub's hooks (jay-notify, jay-snapshot, jay-guard, jay-run --hook; wt-hub's were claude-notify, claude-turn-snapshot, hub-run --hook) from $SETTINGS"
   note "kept: ~/.config/jay/config and ~/.config/worktrunk/config.toml (your settings), ~/.local/state/jay (hub state and logs)"
 }
 

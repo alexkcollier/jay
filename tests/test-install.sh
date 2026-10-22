@@ -21,7 +21,7 @@ user='{
 printf '%s\n' "$user" >"$TMP/user.json"
 merged=$(merged_settings "$TMP/user.json")
 eq "other settings stay" opus "$(jq -r .model <<<"$merged")"
-eq "a hook of another event stays" "my-guard" "$(cmds PreToolUse "$merged")"
+eq "the user's PreToolUse hook stays, ours comes after it" "my-guard | \$HOME/.local/bin/jay-guard" "$(cmds PreToolUse "$merged")"
 eq "the user's Stop hook stays, ours come after it" \
   "my-stop-hook | JAY_NOTIFY_LOG=\$HOME/.local/state/jay/notify.log \$HOME/.local/bin/jay-notify | \$HOME/.local/bin/jay-snapshot" \
   "$(cmds Stop "$merged")"

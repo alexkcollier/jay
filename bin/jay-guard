@@ -1,0 +1,439 @@
+#!/usr/bin/env bash
+# jay-guard — Claude Code hook (PreToolUse on Bash) that keeps an orchestrator's main checkout
+# free of work. It acts only for an orchestrator (a background agent whose job state.json has the
+# orchestrator prompt in its respawnFlags) whose main checkout is the main checkout of its repo.
+# There it denies git and gh commands that change the branch, the history or the files (checkout,
+# switch, branch <name>, commit, reset, rebase, push, stash, merge without --ff-only, gh pr
+# create...), and tells Claude to give the step to the worker of that branch. It allows reads
+# (status, log, diff, fetch...) and `git merge --ff-only <branch>`. A command in another folder
+# (a worktree, `cd <worktree> &&`, `git -C <worktree>`) passes. When it cannot tell the folder
+# or the git command, it denies. Every other session: it exits at once.
+set -uo pipefail
+[[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,10s/^# \{0,1\}//p' "$0"; exit 0; }
+
+input=$(cat)
+job=${CLAUDE_JOB_DIR:-}
+[[ -n "$job" && -f "$job/state.json" ]] || exit 0
+# A fast test for $JAY_ORCH_MARK (lib/jay-lib.sh) before jq: most agents are not orchestrators.
+grep -qF "You are the orchestrator" "$job/state.json" 2>/dev/null || exit 0
+source "$HOME/.local/lib/jay-lib.sh"
+unset CDPATH
+
+# The orchestrator's main checkout: the folder it started in (jay_jobs: cwd, also while it is in
+# a worktree it entered). The prompt in a worktree does not make an orchestrator.
+main=$(jq -r --arg mark "$JAY_ORCH_MARK" '
+  select(.respawnFlags // [] | any(.[]; type == "string" and startswith($mark)))
+  | .cwd // .originCwd // empty' "$job/state.json" 2>/dev/null)
+[[ -n "$main" && -d "$main" ]] || exit 0
+main=$(cd "$main" && pwd -P) || exit 0
+primary=$(jay_primary "$main")
+[[ -n "$primary" && "$(cd "$primary" 2>/dev/null && pwd -P)" == "$main" ]] || exit 0
+
+[[ "$(jq -r '.tool_name // ""' <<<"$input")" == Bash ]] || exit 0
+cmd=$(jq -r '.tool_input.command // ""' <<<"$input")
+[[ "$cmd" == *git* || "$cmd" == *gh* ]] || exit 0
+cwd=$(jq -r '.cwd // ""' <<<"$input")
+[[ -n "$cwd" ]] || cwd=$main
+export LC_ALL=C
+
+# --- The command line, cut into tokens (global TOKS): "w:<word>" a word without its quotes,
+# "d:<word>" a word with a $ expansion (the guard cannot tell its value), "s:<text>" the text of a
+# command substitution ($(...) or `...`), "o:;" the end of a command (; & && || | newline),
+# "o:(" and "o:)" a subshell. Redirections and heredoc bodies are dropped.
+
+# The character after a $ that makes an expansion.
+EXPANDS='[[:alnum:]_{@*#?!$-]'
+
+# The end of the parenthesis that opens before index $2 of $1: echo the index of the ")".
+close_paren() {
+  local s=$1 i=$2 n=${#1} depth=1 c rest
+  while ((i < n)); do
+    c=${s:i:1}
+    case $c in
+      \\) i=$((i + 1)) ;;
+      \') rest=${s:i+1}; rest=${rest%%\'*}; i=$((i + ${#rest} + 1)) ;;
+      \() depth=$((depth + 1)) ;;
+      \)) depth=$((depth - 1)); ((depth == 0)) && { echo "$i"; return; } ;;
+    esac
+    i=$((i + 1))
+  done
+  echo "$n"
+}
+
+tokenize() {
+  local s=$1 n=${#1} i=0 c c2 word="" inword=false dyn=false drop="" j rest line
+  local heredocs=() h
+  TOKS=()
+  flush() {
+    if $inword; then
+      case $drop in
+        heredoc) heredocs+=("$word") ;;
+        redir) ;;
+        *) if $dyn; then TOKS+=("d:$word"); else TOKS+=("w:$word"); fi ;;
+      esac
+      drop=""
+    fi
+    word="" inword=false dyn=false
+  }
+  # $(...) at index i: a substitution token, and the word becomes one the guard cannot read.
+  subst() {
+    j=$(close_paren "$s" $((i + 2)))
+    TOKS+=("s:${s:i+2:j-i-2}")
+    word+='$(..)' inword=true dyn=true i=$((j + 1))
+  }
+  backtick() {
+    rest=${s:i+1}; rest=${rest%%\`*}
+    TOKS+=("s:$rest")
+    word+='`..`' inword=true dyn=true i=$((i + ${#rest} + 2))
+  }
+  while ((i < n)); do
+    c=${s:i:1} c2=${s:i:2}
+    case $c in
+      \\)
+        [[ "${s:i+1:1}" == $'\n' ]] || { word+=${s:i+1:1}; inword=true; }
+        i=$((i + 2)) ;;
+      \')
+        rest=${s:i+1}; rest=${rest%%\'*}
+        word+=$rest inword=true i=$((i + ${#rest} + 2)) ;;
+      \")
+        inword=true i=$((i + 1))
+        while ((i < n)); do
+          c=${s:i:1}
+          case $c in
+            \") i=$((i + 1)); break ;;
+            \\) word+=${s:i+1:1}; i=$((i + 2)) ;;
+            \`) backtick ;;
+            \$)
+              if [[ "${s:i+1:1}" == "(" ]]; then subst
+              else [[ "${s:i+1:1}" == $EXPANDS ]] && dyn=true; word+=$c; i=$((i + 1)); fi ;;
+            *) word+=$c; i=$((i + 1)) ;;
+          esac
+        done ;;
+      \`) backtick ;;
+      \$)
+        if [[ "$c2" == '$(' ]]; then subst
+        elif [[ "$c2" == "\$'" ]]; then
+          rest=${s:i+2}; rest=${rest%%\'*}
+          word+=$rest inword=true i=$((i + ${#rest} + 3))
+        else
+          [[ "${s:i+1:1}" == $EXPANDS ]] && dyn=true
+          word+=$c inword=true i=$((i + 1))
+        fi ;;
+      ' ' | $'\t') flush; i=$((i + 1)) ;;
+      $'\n')
+        flush; TOKS+=("o:;"); i=$((i + 1))
+        # The bodies of the heredocs of that line, up to each end word.
+        for h in ${heredocs[@]+"${heredocs[@]}"}; do
+          while ((i < n)); do
+            rest=${s:i}; line=${rest%%$'\n'*}
+            i=$((i + ${#line} + 1))
+            line=${line#"${line%%[!$'\t']*}"}
+            [[ "$line" == "$h" ]] && break
+          done
+        done
+        heredocs=() ;;
+      \; | \& | \|)
+        # >& and &> are redirections, not the end of a command.
+        if [[ "$c2" == '&>' ]]; then flush; drop=redir; i=$((i + 2)); [[ "${s:i:1}" == '>' ]] && i=$((i + 1))
+        else
+          flush; TOKS+=("o:;"); i=$((i + 1))
+          [[ "${s:i:1}" == [\;\&\|] ]] && i=$((i + 1))
+        fi ;;
+      \< | \>)
+        # A file descriptor number before it is part of the redirection.
+        [[ "$word" =~ ^[0-9]+$ ]] && ! $dyn && word="" inword=false
+        flush
+        if [[ "${s:i:3}" == '<<<' ]]; then drop=redir; i=$((i + 3))
+        elif [[ "$c2" == '<<' ]]; then drop=heredoc; i=$((i + 2)); [[ "${s:i:1}" == - ]] && i=$((i + 1))
+        elif [[ "$c2" == '<(' || "$c2" == '>(' ]]; then
+          j=$(close_paren "$s" $((i + 2)))
+          TOKS+=("s:${s:i+2:j-i-2}"); i=$((j + 1))
+        else
+          drop=redir; i=$((i + 1))
+          [[ "${s:i:1}" == [\>\&\|] ]] && i=$((i + 1))
+          # >&2: the target is a descriptor, part of the operator.
+          [[ "${s:i-1:1}" == '&' && "${s:i}" =~ ^[0-9-]+ ]] && { i=$((i + ${#BASH_REMATCH[0]})); drop=""; }
+        fi ;;
+      \() flush; TOKS+=("o:("); i=$((i + 1)) ;;
+      \)) flush; TOKS+=("o:)"); i=$((i + 1)) ;;
+      \#)
+        if $inword; then word+=$c; i=$((i + 1))
+        else rest=${s:i}; rest=${rest%%$'\n'*}; i=$((i + ${#rest})); fi ;;
+      *) word+=$c inword=true i=$((i + 1)) ;;
+    esac
+  done
+  flush
+}
+
+# --- Folders: "?" is one the guard cannot tell.
+
+# $1 joined to folder $2: an absolute path, ~ for $HOME, else relative to $2.
+join_dir() {
+  case $1 in
+    /*) echo "$1" ;;
+    '~' | '~/'*) echo "$HOME${1#\~}" ;;
+    *) if [[ "$2" == "?" ]]; then echo "?"; else echo "$2/$1"; fi ;;
+  esac
+}
+
+# Exit 0 when folder $1 is in the main checkout (also "?"), 1 when not. A folder of another repo
+# or worktree in it (a nested repo, .claude/worktrees/...) is not.
+in_main() {
+  local d=$1 p top part
+  [[ "$d" == "?" ]] && return 0
+  if p=$(cd "$d" 2>/dev/null && pwd -P); then
+    [[ "$p" == "$main" || "$p" == "$main"/* ]] || return 1
+    top=$(git -C "$p" rev-parse --show-toplevel 2>/dev/null) && top=$(cd "$top" && pwd -P)
+    [[ -z "$top" || "$top" == "$main" ]]
+    return
+  fi
+  # Not on disk (made earlier in the same command, say): by the path alone.
+  p=""
+  local IFS=/
+  set -f
+  for part in $d; do
+    case $part in
+      '' | .) ;;
+      ..) p=${p%/*} ;;
+      *) p+="/$part" ;;
+    esac
+  done
+  set +f
+  [[ "$p" == "$main" || "$p" == "$main"/* ]]
+}
+
+# --- What each command does. WHY: empty, or why the git or gh command in $@ is denied.
+
+has_arg() { local a w=$1; shift; for a in "$@"; do [[ "$a" == "$w" ]] && return 0; done; return 1; }
+
+# The words of $@ that are not options, without the values of the options in OPTARGS (a list
+# like " --contains --sort "): global POS. A cluster of short options (-av) is an option.
+positional() {
+  local a skip=false
+  POS=()
+  for a in "$@"; do
+    if $skip; then skip=false; continue; fi
+    case $a in
+      --) ;;
+      --*=*) ;;
+      -*) [[ "$OPTARGS" == *" $a "* ]] && skip=true ;;
+      *) POS+=("$a") ;;
+    esac
+  done
+}
+
+# A short option letter from $1 (like "dDmM") in $@ (also in a cluster, -Dr), or a long one
+# from the list $2 (like " --delete --move ").
+has_flag() {
+  local letters=$1 long=$2 a
+  shift 2
+  for a in "$@"; do
+    case $a in
+      --*) [[ "$long" == *" ${a%%=*} "* ]] && return 0 ;;
+      -?*) [[ -n "$letters" && "${a#-}" == *[$letters]* ]] && return 0 ;;
+    esac
+  done
+  return 1
+}
+
+git_why() {
+  local sub=$1
+  shift
+  WHY=""
+  case $sub in
+    status | log | diff | show | rev-parse | merge-base | for-each-ref | rev-list | blame | annotate \
+      | shortlog | describe | grep | ls-files | ls-tree | ls-remote | cat-file | show-ref | show-branch \
+      | cherry | range-diff | whatchanged | name-rev | verify-commit | verify-tag | check-ignore \
+      | check-attr | check-mailmap | count-objects | var | help | version | diff-tree | diff-files \
+      | diff-index | difftool | archive | fsck | check-ref-format)
+      return ;;
+    fetch)
+      OPTARGS=" --depth --deepen --shallow-since --shallow-exclude --negotiation-tip --refmap -j --jobs --upload-pack -o --server-option "
+      positional "$@"
+      local a
+      for a in ${POS[@]+"${POS[@]}"}; do [[ "$a" == *:* ]] && WHY="a fetch into a local branch"; done
+      has_arg --update-head-ok "$@" && WHY="a fetch into the checked-out branch"
+      return ;;
+    branch)
+      has_flag dDmMcCfut " --delete --move --copy --force --set-upstream-to --unset-upstream --edit-description --track --no-track --create-reflog " "$@" \
+        && { WHY="it changes a branch"; return; }
+      has_flag lar " --list --all --remotes " "$@" && return
+      OPTARGS=" --contains --no-contains --merged --no-merged --points-at --format --sort --color --column --abbrev "
+      positional "$@"
+      ((${#POS[@]} == 0)) || WHY="it makes a branch"
+      return ;;
+    tag)
+      has_flag dasmfuFe " --delete --annotate --sign --message --force --local-user --file --edit " "$@" \
+        && { WHY="it changes a tag"; return; }
+      has_flag lv " --list --verify " "$@" && return
+      OPTARGS=" --contains --no-contains --merged --no-merged --points-at --format --sort --color --column -n "
+      positional "$@"
+      ((${#POS[@]} == 0)) || WHY="it makes a tag"
+      return ;;
+    merge)
+      if has_arg --ff-only "$@" && ! has_flag "" " --squash --no-ff --abort --continue --quit " "$@"; then return; fi
+      WHY="a merge here is only \`git merge --ff-only <branch>\`, when the user says so"
+      return ;;
+    stash) [[ "${1:-}" == list || "${1:-}" == show ]] && return ;;
+    worktree) [[ "${1:-}" == list ]] && return
+      WHY="a new worktree comes from \`jay new\`; a removal from \`wt remove\`, when the user says so"
+      return ;;
+    remote) [[ $# == 0 || "${1:-}" == -v || "${1:-}" == --verbose || "${1:-}" == show || "${1:-}" == get-url ]] && return ;;
+    reflog) [[ $# == 0 || "${1:-}" == show || "${1:-}" == exists || "${1:-}" == --* ]] && return ;;
+    submodule) [[ $# == 0 || "${1:-}" == status || "${1:-}" == summary ]] && return ;;
+    notes) [[ $# == 0 || "${1:-}" == list || "${1:-}" == show ]] && return ;;
+    sparse-checkout) [[ "${1:-}" == list ]] && return ;;
+    bisect) [[ "${1:-}" == log || "${1:-}" == view || "${1:-}" == visualize ]] && return ;;
+    lfs) [[ "${1:-}" == ls-files || "${1:-}" == status || "${1:-}" == env || "${1:-}" == version ]] && return ;;
+    format-patch) has_arg --stdout "$@" && return ;;
+    symbolic-ref)
+      OPTARGS=" -m "
+      positional "$@"
+      ((${#POS[@]} <= 1)) && ! has_flag d " --delete " "$@" && return ;;
+    config)
+      [[ "${1:-}" == get || "${1:-}" == list ]] && return
+      has_flag le " --list --get --get-all --get-regexp --get-urlmatch --get-color --get-colorbool --edit " "$@" \
+        && ! has_flag e " --edit " "$@" && return
+      has_flag "" " --unset --unset-all --add --replace-all --rename-section --remove-section " "$@" || {
+        OPTARGS=" -f --file --blob --type --default "
+        positional "$@"
+        ((${#POS[@]} <= 1)) && return
+      } ;;
+    checkout | switch) (($# == 0)) && return ;;
+  esac
+  [[ -n "$WHY" ]] || case $sub in
+    checkout | switch) WHY="it switches the branch or changes files" ;;
+    commit | reset | rebase | cherry-pick | revert | am) WHY="it changes the history of the branch" ;;
+    pull) WHY="it changes the branch" ;;
+    push) WHY="a push comes from the worker of its branch" ;;
+    stash) WHY="it changes the files, and all worktrees share the stash" ;;
+    restore | clean | rm | mv | add | apply) WHY="it changes the files or the index" ;;
+    config) WHY="it changes the git config" ;;
+    *) WHY="it can change the branch, the history or the files" ;;
+  esac
+}
+
+gh_why() {
+  WHY=""
+  while [[ "${1:-}" == -* ]]; do
+    case $1 in -R | --repo) shift ;; esac
+    shift
+  done
+  case "${1:-} ${2:-}" in
+    "pr checkout" | "pr co") WHY="it switches the branch" ;;
+    "pr create" | "pr new") WHY="a pull request comes from the worker of its branch" ;;
+    "pr merge") WHY="a merge here is only \`git merge --ff-only <branch>\`, when the user says so" ;;
+    "repo sync") WHY="it changes the local branch" ;;
+  esac
+}
+
+# --- The walk: each command of command line $1, run in folder $2. DENY: the first denied
+# command and why.
+DENY="" DENY_WHY=""
+
+check_line() {
+  local dir=$2 t
+  local toks=() stack=() words=()
+  tokenize "$1"
+  toks=(${TOKS[@]+"${TOKS[@]}"})
+  for t in ${toks[@]+"${toks[@]}"}; do
+    [[ -n "$DENY" ]] && return
+    case $t in
+      "o:;") check_simple ${words[@]+"${words[@]}"}; words=() ;;
+      "o:(") check_simple ${words[@]+"${words[@]}"}; words=(); stack+=("$dir") ;;
+      "o:)")
+        check_simple ${words[@]+"${words[@]}"}; words=()
+        if ((${#stack[@]})); then dir=${stack[${#stack[@]} - 1]}; unset "stack[${#stack[@]}-1]"; fi ;;
+      s:*) check_line "${t#s:}" "$dir" ;;
+      *) words+=("$t") ;;
+    esac
+  done
+  [[ -n "$DENY" ]] || check_simple ${words[@]+"${words[@]}"}
+}
+
+# One simple command, its words as tokens (w:/d:). It can change dir (cd), a local of check_line.
+check_simple() {
+  local gitenv=false w0 a target gdir sub text inner=""
+  # VAR=value before the command; keywords and wrappers that run the rest.
+  while (($#)); do
+    case $1 in
+      w:GIT_DIR=* | d:GIT_DIR=* | w:GIT_WORK_TREE=* | d:GIT_WORK_TREE=*) gitenv=true ;;
+      [wd]:[A-Za-z_]*=*) [[ "${1#?:}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || break ;;
+      "w:{" | "w:}" | "w:!" | w:if | w:then | w:else | w:elif | w:do | w:while | w:until | w:time \
+        | w:command | w:builtin | w:exec | w:nohup | w:sudo | w:env | w:-*) ;;
+      w:nice) [[ "${2:-}" == w:-n ]] && shift 2 ;;
+      *) break ;;
+    esac
+    shift
+  done
+  (($#)) || return 0
+  [[ "$1" == d:* ]] && return 0
+  w0=${1#w:}
+  shift
+  case ${w0##*/} in
+    cd | pushd)
+      while [[ "${1:-}" == w:-[LPe] ]]; do shift; done
+      if (($# == 0)); then dir=$HOME
+      elif [[ "$1" == d:* || "$1" == w:- ]]; then dir="?"
+      else dir=$(join_dir "${1#w:}" "$dir"); fi ;;
+    popd) dir="?" ;;
+    bash | sh | zsh | dash)
+      while (($#)); do
+        [[ "$1" == w:-*c* && "$1" != w:--* ]] && { inner=${2:-}; break; }
+        shift
+      done
+      [[ -n "$inner" ]] && check_line "${inner#?:}" "$dir" ;;
+    eval)
+      for a in "$@"; do inner+="${a#?:} "; done
+      check_line "$inner" "$dir" ;;
+    git)
+      gdir=$dir
+      $gitenv && gdir="?"
+      while [[ "${1:-}" == ?:-* ]]; do
+        case ${1#?:} in
+          -C) [[ "${2:-}" == d:* ]] && gdir="?" || gdir=$(join_dir "${2#w:}" "$gdir"); shift ;;
+          -c | --namespace | --config-env) shift ;;
+          --git-dir | --work-tree) gdir="?"; shift ;;
+          --git-dir=* | --work-tree=*) gdir="?" ;;
+          --version | --help | -h | -v) return 0 ;;
+        esac
+        shift
+      done
+      (($#)) || return 0
+      in_main "$gdir" || return 0
+      sub=$1
+      shift
+      text=git
+      for a in "$sub" "$@"; do text+=" ${a#?:}"; done
+      if [[ "$sub" == d:* ]]; then WHY="the guard cannot tell the git command"
+      else
+        local args=()
+        for a in "$@"; do args+=("${a#?:}"); done
+        git_why "${sub#w:}" ${args[@]+"${args[@]}"}
+      fi
+      [[ -n "$WHY" ]] && { DENY=$text DENY_WHY=$WHY; } ;;
+    gh)
+      in_main "$dir" || return 0
+      local args=()
+      for a in "$@"; do args+=("${a#?:}"); done
+      gh_why ${args[@]+"${args[@]}"}
+      text=gh
+      for a in "$@"; do text+=" ${a#?:}"; done
+      [[ -n "$WHY" ]] && { DENY=$text DENY_WHY=$WHY; } ;;
+  esac
+  return 0
+}
+
+check_line "$cmd" "$cwd"
+[[ -n "$DENY" ]] || exit 0
+DENY=${DENY//$'\n'/ }
+((${#DENY} <= 120)) || DENY="${DENY:0:117}..."
+
+reason="jay-guard: \`$DENY\` is denied in the main checkout $main ($DENY_WHY). You are the \
+orchestrator of this repo: here you only read, plan and review, and merge with \`git merge \
+--ff-only <branch>\` when the user says so. Give this step to the worker of that branch \
+(SendMessage), or run it in that branch's worktree. When the step is a skill or command that \
+only the user can start, tell the user which worker is ready for which command."
+jq -nc --arg r "$reason" \
+  '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
+exit 0

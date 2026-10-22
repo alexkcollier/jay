@@ -35,7 +35,7 @@ Commands:
   setup [path]              copy ignored files and install dependencies in a worktree
 
 The hub's internal commands: sidebar, pane, keys, lazygit, diff, and the hooks notify,
-snapshot and run --hook. Worktree operations stay worktrunk's: wt switch, wt list, wt merge,
+snapshot, guard and run --hook. Worktree operations stay worktrunk's: wt switch, wt list, wt merge,
 wt remove.
 EOF
 }
