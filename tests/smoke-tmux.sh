@@ -62,6 +62,8 @@ case "\${1:-} \${2:-}" in
   "attach "*)
     # As claude attach: the process keeps its args. Left arrow: the agent view, by exec (as
     # Claude does), or in the same process when \$STUB/inproc exists.
+    # As claude attach in a tmux pane: it appends ',*:RGB' to the server's terminal-features.
+    [[ -n "\${TMUX:-}" ]] && tmux set -as terminal-features ',*:RGB'
     printf '\nATTACHED %s\n' "\$2"
     while IFS= read -rsn1 c; do
       [[ "\$c" == \$'\e' ]] || continue
@@ -251,6 +253,12 @@ wopt_has() { [[ "$(wopt "$1" "$2")" == *"$3"* ]]; }
 plain() { perl -pe 's/#\[[^]]*\]//g'; }
 eq "status: one line" on "$(tm show -gv status)"
 eq "the config loads without errors" "" "$(tm show-messages 2>/dev/null | grep -i 'jay.conf:' | head -3)"
+features=$'xterm*:clipboard:ccolour:cstyle:focus:title\nscreen*:title\nrxvt*:ignorefkeys
+xterm-ghostty:RGB:extkeys:clipboard:focus:sync:hyperlinks:usstyle\nxterm*:RGB:extkeys'
+ok "terminal-features: claude attach ran (it appends *:RGB)" screen_has "$agent" ATTACHED
+eq "terminal-features: tmux's and jay's, no *:RGB of claude attach" "$features" "$(tm show -sv terminal-features)"
+for _ in 1 2 3; do tm source-file "$HOME/.config/jay/tmux.conf"; done
+eq "terminal-features: three reloads give the same list" "$features" "$(tm show -sv terminal-features)"
 eq "status: at the top" top "$(tm show -gv status-position)"
 within "status left: the tab you are on (hub) and the picked worktree" 5 bash -c "[[ \"\$(tmux -L $SOCK show -wv -t $hubw @jay_left | perl -pe 's/#\[[^]]*\]//g')\" == '◆ JAY › hub › shop/fix-login' ]]"
 within "status middle: the agent counts" 5 wopt_has "$hubw" @jay_mid '3 idle'

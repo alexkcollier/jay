@@ -186,5 +186,10 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   pane at the window's left edge.
 - Under `set -e` (`jay`, `jay go`), a process substitution inherits errexit: any failing command
   in it (a `kill` of a child that just ended, `x=$(cat <missing file>)`) ends it silently.
+- `claude attach` in a tmux pane runs `tmux set -as terminal-features ,*:RGB` (once per process):
+  each agent the hub opens adds an entry. `set -as` in a config adds its entries again on each
+  `source-file`. jay.conf sets the list in full (`set -su`, then `set -asF`) and again in an
+  `after-set-option` hook. A hook sees the command's args: `#{hook_argument_0}` is the option's
+  name, `#{hook_flag_a}` is 1 for `-a`; formats in a hook's `set` need `-F`.
 - `new-session` checks the client's `TERM`: `xterm-ghostty` needs Ghostty's `TERMINFO` (set in
   Ghostty's tabs, not in `env -i`).
