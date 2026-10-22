@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# jay-respawn — move background agents onto the installed Claude Code (`claude respawn`), by the
+# rule of the list (jay_respawn_plan in lib/jay-lib.sh): only an agent at a quiet moment.
+#   jay respawn                list the agents on an old Claude Code, and why each one waits
+#   jay respawn --idle         respawn each of them that the rule lets now
+#   jay respawn <id|name>      respawn that agent when the rule lets it; else say why not
+#   jay respawn --force <id>   respawn it also when it is not quiet; never during a turn, while it
+#                              waits for an answer in a turn, or when its folder is gone
+# With JAY_AUTO_RESPAWN=idle (default) the list does --idle by itself, at most once a minute.
+# Each respawn goes to ~/.local/state/jay/prune.log.
+set -uo pipefail
+source "$HOME/.local/lib/jay-lib.sh"
+
+usage() { sed -n '2,10s/^# \{0,1\}//p' "$0"; }
+
+force="" target="" idle=false
+while (($#)); do
+  case $1 in
+    -h | --help) usage; exit 0 ;;
+    --idle) idle=true ;;
+    --force) force=force ;;
+    -*) echo "jay respawn: unknown option $1 (jay respawn --help)" >&2; exit 2 ;;
+    *) [[ -z "$target" ]] || { echo "jay respawn: one agent at a time" >&2; exit 2; }
+       target=$1 ;;
+  esac
+  shift
+done
+if [[ -n "$force" && -z "$target" ]]; then
+  echo "jay respawn: --force needs an agent: jay respawn --force <id>" >&2
+  exit 2
+fi
+if $idle && [[ -n "$target" ]]; then
+  echo "jay respawn: --idle or an agent, not both" >&2
+  exit 2
+fi
+
+want=$(jay_claude_version)
+if [[ -z "$want" ]]; then
+  echo "jay respawn: no claude on PATH, or claude --version tells no version." >&2
+  exit 1
+fi
+agents=$(claude agents --json --all 2>/dev/null) || { echo "jay respawn: claude agents failed." >&2; exit 1; }
+shown=$(jay_hub_shown)
+agents=$(jay_agent_phases "$agents" "$shown")
+jobs=$(jay_jobs "$agents")
+stale=$(jay_stale "$agents" "$jobs")
+
+# One agent: by id, else by its exact name.
+if [[ -n "$target" ]]; then
+  match=$(jq -c --arg q "$target" '[.[] | select(.kind == "background" and .id != null
+    and (.id == $q or .sessionId == $q or .name == $q))]' <<<"$agents")
+  case $(jq length <<<"$match") in
+    0) echo "jay respawn: no background agent $target (claude agents --json --all)" >&2; exit 1 ;;
+    1) ;;
+    *) echo "jay respawn: more than one agent is named $target; give its id:" >&2
+       jq -r '.[] | "  \(.id)  \(.name // "")"' <<<"$match" >&2
+       exit 1 ;;
+  esac
+  id=$(jq -r '.[0].id' <<<"$match")
+  name=$(jq -r '.[0].name // .[0].id' <<<"$match")
+  if [[ "$(jq -r --arg i "$id" '.[$i] // empty' <<<"$stale")" == "" ]]; then
+    if [[ "$(jq -r '.[0].pid // empty' <<<"$match")" == "" ]]; then
+      echo "\"$name\" ($id) does not run: it wakes on Claude Code $want."
+      exit 0
+    fi
+    if [[ -z "$force" ]]; then
+      echo "\"$name\" ($id) runs Claude Code $want, the installed version. Nothing to do (--force respawns it all the same)."
+      exit 0
+    fi
+    # --force on an agent that runs the installed version: respawn it all the same.
+    stale=$(jq -c --arg i "$id" --arg v "$want" '. + {($i): $v}' <<<"$stale")
+  fi
+  IFS=$'\t' read -r id name from why < <(jay_respawn_plan "$agents" "$jobs" "$stale" "$shown" "$force" \
+    | awk -F'\t' -v i="$id" '$1 == i')
+  [[ -n "${from:-}" ]] || { echo "jay respawn: no respawn rule result for $id" >&2; exit 1; }
+  if [[ -n "$why" ]]; then
+    echo "\"$name\" ($id) runs Claude Code $from, not $want. Not respawned: $why."
+    [[ -z "$force" ]] && echo "jay respawn --force $id skips the checks that are only for a quiet moment."
+    exit 1
+  fi
+  echo "Respawning \"$name\" ($id): Claude Code $from → $want..."
+  jay_respawn "$id" "$name" "$from" || exit 1
+  exit 0
+fi
+
+plan=$(jay_respawn_plan "$agents" "$jobs" "$stale" "$shown")
+if [[ -z "$plan" ]]; then
+  echo "Every running agent runs Claude Code $want, the installed version."
+  exit 0
+fi
+if ! $idle; then
+  echo "Agents on an old Claude Code (installed: $want):"
+  while IFS=$'\t' read -r id name from why; do
+    printf '  %s  %-30s %s  %s\n' "$id" "$name" "$from" "${why:-ready: respawns now with --idle}"
+  done <<<"$plan"
+  exit 0
+fi
+rc=0 n=0
+while IFS=$'\t' read -r id name from why; do
+  if [[ -n "$why" ]]; then
+    printf '%s (%s) waits: %s\n' "$name" "$id" "$why"
+    continue
+  fi
+  printf 'Respawning %s (%s): %s → %s\n' "$name" "$id" "$from" "$want"
+  jay_respawn "$id" "$name" "$from" >/dev/null || { echo "  failed: see ~/.local/state/jay/prune.log" >&2; rc=1; }
+  n=$((n + 1))
+done <<<"$plan"
+((n > 0)) || echo "No agent can respawn now."
+exit $rc

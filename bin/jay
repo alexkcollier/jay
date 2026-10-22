@@ -31,6 +31,8 @@ Commands:
                             also run ls, log, wait, stop, restart, port
   c [prompt]                Claude here as a background agent, attached (c is short for it)
   clear <id>                a fresh context (/clear) for an idle background agent
+  respawn [<id> | --idle]   agents on an old Claude Code: list them, or move them onto the
+                            installed one when they are quiet (--force <id>: also when not)
   snapshot --list | --prune the turn chains of a worktree; remove the old ones
   setup [path]              copy ignored files and install dependencies in a worktree
 

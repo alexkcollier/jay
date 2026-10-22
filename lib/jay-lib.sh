@@ -12,7 +12,7 @@ for _key in ROOTS TERMINAL EDITOR EDITOR_GUI TASK_SHELL LAUNCHER REVIEW REVIEW_D
   [[ -z "${!_new:-}" && -n "${!_old:-}" ]] && export "$_new=${!_old}"
 done
 if [[ -f "$JAY_CONFIG" ]]; then
-  _re='^[[:space:]]*(JAY|WT)_(ROOTS|TERMINAL|EDITOR|EDITOR_GUI|TASK_SHELL|LAUNCHER|REVIEW|REVIEW_DIFF)[[:space:]]*=[[:space:]]*(.*)$'
+  _re='^[[:space:]]*(JAY|WT)_(ROOTS|TERMINAL|EDITOR|EDITOR_GUI|TASK_SHELL|LAUNCHER|REVIEW|REVIEW_DIFF|AUTO_RESPAWN)[[:space:]]*=[[:space:]]*(.*)$'
   while IFS= read -r _line || [[ -n "$_line" ]]; do
     [[ "$_line" =~ $_re ]] || continue
     _key=JAY_${BASH_REMATCH[2]} _val=${BASH_REMATCH[3]}
@@ -24,6 +24,9 @@ if [[ -f "$JAY_CONFIG" ]]; then
 fi
 unset _key _old _new
 JAY_ROOTS=${JAY_ROOTS:-$HOME/Documents/projects}
+# idle: the list respawns an agent on an old Claude Code at a quiet moment (jay_respawn_auto);
+# off: only `jay respawn` does.
+JAY_AUTO_RESPAWN=${JAY_AUTO_RESPAWN:-idle}
 _roots=""
 IFS=: read -ra _dirs <<<"$JAY_ROOTS"
 for _dir in ${_dirs[@]+"${_dirs[@]}"}; do
@@ -680,15 +683,20 @@ EOF
 }
 
 # What the job state.json files tell about the background agents in agents JSON $1 (from
-# `claude agents --json --all`), as a JSON object id: {home, tree, orch}. For an agent in a
+# `claude agents --json --all`), as a JSON object id: {home, tree, orch, cwd, ver, tempo, tasks,
+# created}. For an agent in a
 # worktree it entered (EnterWorktree): home is the folder it came from (state.json cwd), tree the
 # folder it is in now; else both are null. Claude wakes a stopped agent in its home, and `claude
 # agents` gives the home as the folder of one that does not run now. Where it is now:
 # state.json worktreePath for a worktree that EnterWorktree made; else (EnterWorktree with the
 # path of a worktree that was there already leaves worktreePath empty) the folder `claude agents`
 # gives while it runs, or the last folder in its transcript. Such an agent does not go with the
-# worktree. orch: the agent has the orchestrator prompt. An interactive session has no job, so no
-# entry.
+# worktree. orch: the agent has the orchestrator prompt. For the respawn rule (jay_respawn_plan):
+# cwd is the folder Claude wakes and respawns the agent in (state.json cwd, its home); ver the
+# Claude Code version of its last turn (cliVersion: a respawn does not change it, the next turn
+# does); tempo "active" while a turn runs; tasks the count of its background tasks, crons and
+# wakeups (inFlight); created the time Claude made the job, in ms (a respawn keeps it, but
+# changes startedAt). An interactive session has no job, so no entry.
 jay_jobs() {
   local IFS=$' \t\n' id log sid cwd cfg="${CLAUDE_CONFIG_DIR:-$HOME/.claude}" files=() base last
   for id in $(jq -r '.[] | select(.kind == "background") | .id // empty' <<<"$1"); do
@@ -698,7 +706,10 @@ jay_jobs() {
   base=$(jq -nc --arg mark "$JAY_ORCH_MARK" '[inputs | {(input_filename | split("/")[-2]): {
       cwd: (.cwd // .originCwd // ""), wt: .worktreePath, log: (.linkScanPath // ""),
       sid: (.resumeSessionId // .sessionId // ""),
-      orch: (.respawnFlags // [] | any(.[]; type == "string" and startswith($mark)))}}] | add // {}' \
+      orch: (.respawnFlags // [] | any(.[]; type == "string" and startswith($mark))),
+      ver: (.cliVersion // ""), tempo: (.tempo // ""),
+      tasks: ((.inFlight.tasks // 0) + (.inFlight.queued // 0) + (if .inFlight.wake != null then 1 else 0 end)),
+      created: (.createdAt // "" | sub("\\.[0-9]+Z$"; "Z") | (try (fromdateiso8601 * 1000) catch null))}}] | add // {}' \
     "${files[@]}" 2>/dev/null) || base='{}'
   # The last folder in the transcript of each agent that does not run and has no worktreePath.
   # Each line of a transcript has its cwd; the tail of a big one is enough.
@@ -725,7 +736,8 @@ jay_jobs() {
            elif $now == null or $now == "" or $now == $home then null
            elif ($now | startswith($home + "/")) and ($now | test("/\\.claude/worktrees/") | not) then null
            else $now end) as $tree
-        | {home: (if $tree != null then $home else null end), tree: $tree, orch}))' <<<"$base" 2>/dev/null \
+        | {home: (if $tree != null then $home else null end), tree: $tree, orch,
+           cwd: $home, ver, tempo, tasks, created}))' <<<"$base" 2>/dev/null \
     || echo '{}'
 }
 
@@ -733,11 +745,13 @@ jay_jobs() {
 # JSON object session id: {id, name, home, rank}. home is the folder the agent belongs to (the
 # one it came from, when it is in a worktree it entered). One orchestrator for each repo: rank 0
 # is the oldest in its home, the orchestrator; rank 1 and up are extra ones (a resumed copy, say).
-# A stopped agent does not count. The callers check that home is a main checkout.
+# Oldest by the job's creation: a respawn gives an agent a new startedAt. A stopped agent does
+# not count. The callers check that home is a main checkout.
 jay_orch_ranks() {
   jq -c --argjson jobs "$2" '
     [.[] | select(.kind == "background" and .state != "stopped" and ($jobs[.id // ""].orch // false))
-      | {sid: .sessionId, id, name: (.name // .id), home: ($jobs[.id].home // .cwd), t: (.startedAt // 0)}]
+      | {sid: .sessionId, id, name: (.name // .id), home: ($jobs[.id].home // .cwd),
+         t: ($jobs[.id].created // .startedAt // 0)}]
     | group_by(.home) | map(sort_by(.t) | to_entries[] | {(.value.sid): ((.value | del(.sid, .t)) + {rank: .key})})
     | add // {}' <<<"$1"
 }
@@ -1165,4 +1179,180 @@ jay_hub_rehide() {
 jay_hub_keep_hidden() {
   [[ -f "$JAY_HIDDEN" && -n "${1:-}" ]] || return 0
   (trap '' HUP; jay_hub_wait_gone "$1" 3600 && jay_hub_rehide) </dev/null >/dev/null 2>&1 &
+}
+
+# --- Claude Code updates: agents on an old binary move to the new one at a quiet moment ---
+# An update (the native installer, Homebrew's cask) puts a new claude binary in place. New agents
+# and new `claude attach` clients use it at once; a running background agent keeps the binary it
+# started with. `claude respawn <id>` restarts it on the installed binary in about a second, with
+# the same id, name, conversation, system prompt, folder and entered worktree, and a `claude
+# attach` client stays. But it kills a turn that runs (the turn does not resume), the agent's
+# Monitor tasks and the notify_when_idle subscriptions it holds, and it fails while the folder
+# Claude wakes the agent in is gone. So the list respawns an agent only at a quiet moment
+# (jay_respawn_plan); `jay respawn` does the same on demand. See docs/working.md.
+
+# The version of the installed claude, cached in $JAY_STATE/claude-version under the binary's
+# real path and mtime (an update changes them): `claude --version` is slow. Empty without claude.
+jay_claude_version() {
+  local bin real key k="" v="" cache="$JAY_STATE/claude-version"
+  bin=$(command -v claude) || return 0
+  real=$(perl -MCwd=abs_path -e 'print abs_path(shift) // ""' "$bin" 2>/dev/null)
+  [[ -n "$real" ]] || real=$bin
+  key="$real $(stat -f %m "$real" 2>/dev/null)"
+  IFS=$'\t' read -r k v 2>/dev/null <"$cache"
+  if [[ "$k" == "$key" && -n "$v" ]]; then
+    printf '%s\n' "$v"
+    return 0
+  fi
+  v=$(claude --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  [[ -n "$v" ]] || return 0
+  jay_state_dir
+  printf '%s\t%s\n' "$key" "$v" >"$cache.$$" && mv "$cache.$$" "$cache"
+  printf '%s\n' "$v"
+}
+
+# The version that each running background agent in agents JSON $1 runs, as a JSON object id:
+# version. Claude's daemon runs an agent (.pid) under `claude bg-pty-host ... -- <binary> ...`,
+# and the binary's path has the version: .../claude/versions/<v> (native), .../Caskroom/
+# claude-code/<v>/claude (Homebrew). state.json cliVersion is no help here: it is the version of
+# the agent's last turn, and a restart does not change it. No entry when no path tells.
+jay_running_versions() {
+  local pids
+  pids=$(jq -r '[.[] | select(.kind == "background" and .id != null and .pid != null)
+    | "\(.pid)=\(.id)"] | join(" ")' <<<"$1")
+  [[ -n "$pids" ]] || { echo '{}'; return 0; }
+  ps -axo pid=,ppid=,command= 2>/dev/null | awk -v want="$pids" '
+    # The binary of a command line: the word after "--", else the first word.
+    function bin(c,   n, a, i) { n = split(c, a, " "); for (i = 1; i < n; i++) if (a[i] == "--") return a[i + 1]; return a[1] }
+    # The last x.y.z in the path of a claude binary (not, say, the path of node).
+    function ver(b,   m) { m = ""; if (b !~ /claude/) return ""
+      while (match(b, /[0-9]+\.[0-9]+\.[0-9]+/)) { m = substr(b, RSTART, RLENGTH); b = substr(b, RSTART + RLENGTH) }
+      return m }
+    BEGIN { n = split(want, w, " "); for (i = 1; i <= n; i++) { split(w[i], kv, "="); id[kv[1]] = kv[2] } }
+    { p = $1; pp[p] = $2; $1 = ""; $2 = ""; sub(/^ +/, ""); cmd[p] = $0 }
+    END { for (p in id) if (p in cmd) {
+      v = ver(bin(cmd[p]))
+      if (v == "" && (pp[p] in cmd)) v = ver(bin(cmd[pp[p]]))
+      if (v != "") print id[p] "\t" v } }' \
+    | jq -Rsc 'split("\n") | map(select(. != "") | split("\t") | {(.[0]): .[1]}) | add // {}'
+}
+
+# The respawns the hub made, as a JSON object id: {to, t}: the version it respawned the agent
+# onto and when (seconds). One file each, $JAY_STATE/respawned/<id>.
+jay_respawned() {
+  local f
+  for f in "$JAY_STATE"/respawned/*; do
+    [[ -f "$f" ]] || continue
+    printf '%s\t%s\t%s\n' "${f##*/}" "$(head -1 "$f")" "$(stat -f %m "$f")"
+  done | jq -Rsc 'split("\n") | map(select(. != "") | split("\t") | {(.[0]): {to: .[1], t: (.[2] | tonumber)}})
+    | add // {}'
+}
+
+# The running background agents in agents JSON $1 (jobs JSON $2, from jay_jobs) on another Claude
+# Code version than the installed one, as a JSON object id: the version they run. The version is
+# the process's (jay_running_versions); when that tells none, cliVersion, unless the hub
+# respawned the agent onto the installed version since (cliVersion changes only at its next turn).
+# An agent that does not run is not in it: it wakes on the installed binary.
+jay_stale() {
+  local want
+  want=$(jay_claude_version)
+  [[ -n "$want" ]] || { echo '{}'; return 0; }
+  jq -c --arg want "$want" --argjson jobs "$2" --argjson run "$(jay_running_versions "$1")" \
+    --argjson done "$(jay_respawned)" '
+    [.[] | select(.kind == "background" and .id != null and .pid != null)
+      | ($run[.id] // (if $done[.id].to == $want then $want else $jobs[.id].ver // "" end)) as $v
+      | select($v != "" and $v != $want) | {(.id): $v}] | add // {}' <<<"$1"
+}
+
+# The ids and names that `claude attach` processes name, as a JSON array: a client is attached to
+# those agents (a terminal tab, the hub's middle column, jay-clear).
+jay_attached() {
+  ps -axo command= 2>/dev/null | awk '$1 ~ /(^|\/)claude$/ && $2 == "attach" && $3 != "" { print $3 }' \
+    | jq -Rsc 'split("\n") | map(select(. != ""))'
+}
+
+# The respawn rule. One line for each background agent in agents JSON $1 (with phases, see
+# jay_agent_phases) that stale JSON $3 (from jay_stale) names: id<TAB>name<TAB>version it
+# runs<TAB>why not. An empty "why not": it may respawn now. $2: jobs JSON (jay_jobs); $4: the id
+# shown in the hub's middle column; $5 = force: only the reasons that `jay respawn --force` keeps.
+# Always: it runs, it is no replaced entry (jay_continue_in), the folder Claude wakes it in is on
+# disk (else `claude respawn` fails), and no turn runs, also none that waits for a permission or
+# an answer (status waiting; a respawn ends the turn for good). Not forced: it is idle or unread
+# (not input: it asked you something at the end of its turn), its process too (status
+# idle), it has no background tasks, crons or wakeups (state.json inFlight; a respawn kills its
+# Monitors), it is not in the middle column and no `claude attach` shows it (a draft in its input
+# box would go), and the hub did not respawn it in the last 10 minutes. A respawn also drops the
+# notify_when_idle subscriptions the agent holds: an orchestrator waits until no other agent of
+# its repo works or waits, the hub Claude until no other agent does.
+jay_respawn_plan() {
+  local IFS=$' \t\n' dirs gone
+  dirs=$(jq -r --argjson jobs "$2" --argjson stale "$3" \
+    '.[] | select(.id != null and $stale[.id] != null) | $jobs[.id].cwd // .cwd // empty' <<<"$1")
+  gone=$(while IFS= read -r d; do [[ -z "$d" || -d "$d" ]] || printf '%s\n' "$d"; done <<<"$dirs" \
+    | jq -Rsc 'split("\n") | map(select(. != ""))')
+  jq -r --argjson jobs "$2" --argjson stale "$3" --arg shown "${4:-}" --arg force "${5:-}" \
+    --arg hub "$(jay_hub_claude_id)" --argjson attached "$(jay_attached)" --argjson done "$(jay_respawned)" \
+    --argjson replaced "$(jay_replaced_ids)" --argjson gone "$gone" --argjson now "$(date +%s)" '
+    . as $agents
+    | def busy: .phase == "working" or .phase == "input";
+      def inrepo($h): (.cwd // "") as $c | $c == $h or ($c | startswith($h + "/")) or ($c | startswith($h + "."));
+    .[] | select(.kind == "background" and .id != null and $stale[.id] != null)
+    | . as $a | ($jobs[.id] // {}) as $j | ($j.cwd // .cwd // "") as $dir
+    | [ (if .pid == null then "it does not run: it wakes on the new version" else empty end),
+        (if $replaced | index([$a.id]) then "a copy replaced it" else empty end),
+        (if $gone | index([$dir]) then "its folder is gone: \($dir)" else empty end),
+        (if $j.tempo == "active" or (($j.tempo // "") == "" and .phase == "working") then "a turn runs" else empty end),
+        (if .status == "waiting" then "it waits for an answer in a turn" else empty end),
+        (if $force == "force" then empty else
+          (if .phase == "input" then "it asked you something" else empty end),
+          (if .phase == "failed" then "it failed" else empty end),
+          (if ($j.tasks // 0) > 0 then "it has background tasks, crons or wakeups" else empty end),
+          (if .status != null and .status != "idle" then "it works" else empty end),
+          (if $shown != "" and (.id == $shown or .sessionId == $shown) then "it is in the hub'"'"'s middle column" else empty end),
+          (if $attached | index([$a.id]) or ($a.name != null and ($attached | index([$a.name]))) then "a claude attach client shows it" else empty end),
+          (($done[.id].t // 0) as $t | if $now - $t < 600 then "respawned \(($now - $t) / 60 | floor) min ago" else empty end),
+          (if $j.orch and any($agents[]; .id != $a.id and busy and inrepo($j.home // $dir))
+           then "an orchestrator, and agents of its repo work" else empty end),
+          (if .id == $hub and any($agents[]; .id != $a.id and busy) then "the hub Claude, and other agents work" else empty end)
+        end) ] as $why
+    | [.id, (.name // .id), $stale[.id], ($why[0] // "")] | @tsv' <<<"$1"
+}
+
+# Respawn background agent $1 (name $2, on version $3) onto the installed Claude Code, with
+# `claude respawn` and without the caller's CLAUDE*/ANTHROPIC* variables. Notes it in
+# $JAY_STATE/respawned/<id> (also when it fails: the next try waits 10 minutes) and in prune.log.
+# Prints Claude's output, and fails when `claude respawn` fails.
+jay_respawn() {
+  local id=$1 name=${2:-$1} from=${3:-?} want out new rc=0 var strip=()
+  want=$(jay_claude_version)
+  jay_state_dir
+  mkdir -p "$JAY_STATE/respawned" && printf '%s\n' "${want:-?}" >"$JAY_STATE/respawned/$id"
+  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
+  out=$(env ${strip[@]+"${strip[@]}"} claude respawn "$id" 2>&1) || rc=$?
+  printf '%s %s (%s): respawn %s → %s: %s\n' "$(date '+%F %T')" "$id" "$name" "$from" "${want:-?}" \
+    "$(tr '\n' ' ' <<<"$out" | sed 's/ *$//')" >>"$JAY_STATE/prune.log"
+  # Claude can give the agent a new short id ("respawned <id> → <new id>").
+  new=$(grep -oE '→ [0-9a-f]{8}' <<<"$out" | grep -oE '[0-9a-f]{8}' | tail -1)
+  if ((rc == 0)) && [[ -n "$new" && "$new" != "$id" ]]; then
+    [[ "$(jay_hub_claude_id)" == "$id" ]] && printf '%s\n' "$new" >"$JAY_HUB_CLAUDE_FILE"
+    printf '%s\n' "${want:-?}" >"$JAY_STATE/respawned/$new"
+  fi
+  printf '%s\n' "$out"
+  return $rc
+}
+
+# With JAY_AUTO_RESPAWN=idle, at most once a minute: respawn each agent that the rule lets
+# (jay_respawn_plan). The list's loop calls it with its agents JSON $1 (with phases), jobs JSON
+# $2, the id shown in the middle column $3 and stale JSON $4 (jay_stale).
+jay_respawn_auto() {
+  local stamp="$JAY_STATE/respawn.stamp" id name from why
+  [[ "$JAY_AUTO_RESPAWN" == idle && -n "${4:-}" && "$4" != '{}' ]] || return 0
+  (($(date +%s) - $(stat -f %m "$stamp" 2>/dev/null || echo 0) < 60)) && return 0
+  jay_state_dir
+  touch "$stamp"
+  while IFS=$'\t' read -r id name from why; do
+    [[ -n "$id" && -z "$why" ]] && jay_respawn "$id" "$name" "$from" >/dev/null
+  done < <(jay_respawn_plan "$1" "$2" "$4" "$3")
+  find "$JAY_STATE/respawned" -type f -mtime +14 -delete 2>/dev/null
+  return 0
 }
