@@ -66,7 +66,7 @@ rows() {
   local agents jobs stranded stale shown=""
   # The agent in the hub's middle column, marked with ▸ beside it.
   jay_hub_role agent >/dev/null && shown=$(cut -f1 "$(jay_hub_target_file agent)" 2>/dev/null)
-  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  agents=$(jay_claude_agents) || agents='[]'
   agents=$(jay_agent_phases "$agents" "$shown") || agents='[]'
   jobs=$(jay_jobs "$agents")
   # The agents whose home is gone (see jay_stranded), as id: {fix, tree, runs}.
@@ -262,7 +262,7 @@ focus_column() {
 
 # The JSON of the agent with session id $1 (empty when it is gone).
 agent_json() {
-  claude agents --json --all 2>/dev/null | jq -c --arg s "$1" 'first(.[] | select(.sessionId == $s)) // empty'
+  jay_claude_agents | jq -c --arg s "$1" 'first(.[] | select(.sessionId == $s)) // empty'
 }
 
 # Ctrl g v (toggle: hide or show review) and Ctrl g 3 (show: a hidden review comes back with
@@ -365,7 +365,7 @@ orchestrate() {
     fi
     [[ "$kind" == ag ]] && exit 0
     for i in $(seq 20); do
-      name=$(claude agents --json --all 2>/dev/null | jq -r --arg i "$agent" 'first(.[] | select(.id == $i) | .name // .id) // empty')
+      name=$(jay_claude_agents | jq -r --arg i "$agent" 'first(.[] | select(.id == $i) | .name // .id) // empty')
       [[ -n "$name" ]] && break
       sleep 0.5
     done
@@ -419,7 +419,7 @@ pick_action() {
 # `claude rm`.
 repair() {
   local sid=$1 agents agent id line name home tree fix runs main out answer
-  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  agents=$(jay_claude_agents) || agents='[]'
   agent=$(jq -c --arg s "$sid" 'first(.[] | select(.sessionId == $s)) // empty' <<<"$agents")
   id=$(jq -r '.id // empty' <<<"${agent:-null}")
   [[ -n "$id" ]] && line=$(jay_stranded "$agents" "$(jay_jobs "$agents")" | awk -F'\t' -v i="$id" '$1 == i')
@@ -491,7 +491,7 @@ $out"
 path_of() {
   case $1 in
     wt|repo) printf '%s\n' "$2" ;;
-    ag) claude agents --json --all 2>/dev/null | jq -r --arg s "$2" 'first(.[] | select(.sessionId == $s) | .cwd) // empty' ;;
+    ag) jay_claude_agents | jq -r --arg s "$2" 'first(.[] | select(.sessionId == $s) | .cwd) // empty' ;;
   esac
 }
 
@@ -636,7 +636,7 @@ claude --bg --resume $sid tries again."
 clear_context() {
   local kind=$1 id=$2 agents agent short name jobs away out
   local what="c gives a fresh context to an orchestrator (◇) or to the hub Claude (◆ hub). For another agent, type /clear in it."
-  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  agents=$(jay_claude_agents) || agents='[]'
   case $kind in
     hub)
       short=$(jay_hub_claude_id)
@@ -777,7 +777,7 @@ pause() {
 # (from the agent row), which the worktree removal takes along.
 remove() {
   local kind=$1 id=$2 agents agent out name short top main branch here idle pane tasks tab tree
-  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  agents=$(jay_claude_agents) || agents='[]'
   case $kind in
     ag)
       agent=$(jq -c --arg s "$id" 'first(.[] | select(.sessionId == $s)) // empty' <<<"$agents")
@@ -989,7 +989,7 @@ auto_prune() {
 # Remove the dead agents, after a confirm. `claude rm` deletes the session.
 prune() {
   local agents dead id name failed="" out
-  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  agents=$(jay_claude_agents) || agents='[]'
   dead=$(dead_agents "$agents")
   if [[ -z "$dead" ]]; then
     pause "No dead agents: every agent's folder exists, or the agent still runs."
@@ -1014,7 +1014,7 @@ case ${1:-} in
   --pick) shift; pick_action "$@"; exit 0 ;;
   --repair) shift; repair "$@"; exit 0 ;;
   # For the tests: the agents that d on folder $2 finds (agents_in).
-  --agents-in) agents_in "$(claude agents --json --all 2>/dev/null || echo '[]')" "$2" "${3:-}"; exit 0 ;;
+  --agents-in) agents_in "$(jay_claude_agents || echo '[]')" "$2" "${3:-}"; exit 0 ;;
   --view) shift; view "$@"; exit 0 ;;
   --remove) shift; remove "$@"; exit 0 ;;
   --new) shift; new_agent "$@"; exit 0 ;;

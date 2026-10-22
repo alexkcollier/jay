@@ -26,7 +26,7 @@ Commands:
   new <branch|pr:N> [-b base] [-t task] [-a] [-- prompt]
                             a worktree for a change, and a background agent in it
   go <agent>                bring an agent in front (id, name, part of a name; hub: the hub Claude)
-  agents [path]             the Claude sessions in fzf (--json, --orchestrators)
+  agents [path]             the Claude sessions in JAY_ROOTS in fzf (--json, --orchestrators)
   all [-a] | --json         the worktrees of every repo, with agents and task notes
   pick [-a]                 the same in fzf; Enter: jay open
   open [branch|path]        the worktree's own zellij session in a Ghostty tab

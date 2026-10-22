@@ -5,6 +5,8 @@
 # and --prune.
 source "$(dirname "$0")/lib.sh"
 link_install
+# The hub sees only the agents in JAY_ROOTS; the test's folders are under $TMP.
+export JAY_ROOTS=$TMP
 
 main="$TMP/shop" feat="$TMP/shop.feat"
 repo "$main"
@@ -88,6 +90,25 @@ jq -nc --arg c "$main" '{hook_event_name: "UserPromptSubmit", cwd: $c, prompt: "
 ok "a background agent's chain is named after its job" rev refs/wt-turns/feedf00d/base
 eq "not after its session id" "" "$(rev refs/wt-turns/5678ef00/base)"
 
+# A session outside JAY_ROOTS gets no chain: the hub does not see it.
+jq -nc --arg c "$main" '{hook_event_name: "UserPromptSubmit", cwd: $c, prompt: "hi",
+  session_id: "0a0a0a0a-0000-0000-0000-000000000000"}' | JAY_ROOTS="$TMP/other" jay-snapshot
+eq "outside JAY_ROOTS: no chain" "" "$(rev refs/wt-turns/0a0a0a0a/base)"
+no "outside JAY_ROOTS: no state file" test -e "$state/0a0a0a0a.worktree"
+# A root is a folder, not the start of a name: $TMP/sho is not a root of $TMP/shop.
+jq -nc --arg c "$main" '{hook_event_name: "UserPromptSubmit", cwd: $c, prompt: "hi",
+  session_id: "0b0b0b0b-0000-0000-0000-000000000000"}' | JAY_ROOTS="$TMP/sho" jay-snapshot
+eq "a root that is only the start of the folder's name: no chain" "" "$(rev refs/wt-turns/0b0b0b0b/base)"
+# The hub Claude gets its chain wherever it is.
+job hub00001 '{"sessionId": "0c0c0c0c-0000-0000-0000-000000000000"}'
+printf 'hub00001\n' >"$HOME/.local/state/jay/hub-claude"
+jq -nc --arg c "$main" '{hook_event_name: "UserPromptSubmit", cwd: $c, prompt: "hi",
+  session_id: "0c0c0c0c-0000-0000-0000-000000000000"}' \
+  | JAY_ROOTS="$TMP/other" CLAUDE_JOB_DIR="$HOME/.claude/jobs/hub00001" jay-snapshot
+ok "the hub Claude outside JAY_ROOTS: its chain" rev refs/wt-turns/hub00001/base
+rm -f "$HOME/.local/state/jay/hub-claude"
+g update-ref -d refs/wt-turns/hub00001/base
+
 # --prune: chains of agents that `claude agents --all` no longer lists, when their worktree is
 # gone or their last turn is older than 7 days.
 g update-ref refs/wt-turns/dead0001/base HEAD
@@ -96,8 +117,14 @@ old=$(printf 'old\n' | GIT_COMMITTER_DATE="2020-01-01T00:00:00" g commit-tree "$
 g update-ref refs/wt-turns/old00002/head "$old"
 printf '%s\n' "$main" >"$state/old00002.worktree"
 jq -nc --arg p "$main" '{path: $p, main: true}' >"$HOME/.local/state/jay/worktrees.ndjson"
-stub_agents '[{"kind": "background", "id": "feedf00d", "sessionId": "5678ef00-0000-0000-0000-000000000000"},
-  {"kind": "interactive", "sessionId": "1234abcd-0000-0000-0000-000000000000"}]'
+# An agent outside JAY_ROOTS that `claude agents` lists keeps its chain: the hub does not see
+# it, but it is not gone.
+old3=$(printf 'old\n' | GIT_COMMITTER_DATE="2020-01-01T00:00:00" g commit-tree "$(rev 'HEAD^{tree}')")
+g update-ref refs/wt-turns/out00003/head "$old3"
+printf '%s\n' "$TMP/elsewhere-gone" >"$state/out00003.worktree"
+stub_agents '[{"kind": "background", "id": "feedf00d", "sessionId": "5678ef00-0000-0000-0000-000000000000", "cwd": "'"$main"'"},
+  {"kind": "interactive", "sessionId": "1234abcd-0000-0000-0000-000000000000", "cwd": "'"$main"'"},
+  {"kind": "background", "id": "out00003", "sessionId": "0d0d0d0d-0000-0000-0000-000000000000", "cwd": "/elsewhere"}]'
 : >"$STUB/agents.fail"
 jay-snapshot --prune >/dev/null
 ok "--prune without an agent list: nothing goes" rev refs/wt-turns/dead0001/base
@@ -112,5 +139,7 @@ eq "--prune: a chain with an old last turn goes" "" "$(rev refs/wt-turns/old0000
 no "--prune: their state files go" test -e "$state/dead0001.worktree"
 ok "--prune: a listed agent's chain stays" rev refs/wt-turns/feedf00d/base
 ok "--prune: a listed session's chain stays" rev $C/head
+ok "--prune: the chain of an agent outside JAY_ROOTS stays" rev refs/wt-turns/out00003/head
+ok "--prune: and its state file" test -e "$state/out00003.worktree"
 
 finish

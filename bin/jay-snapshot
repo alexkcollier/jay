@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # jay-snapshot — Claude Code hook (UserPromptSubmit, Stop, PostToolUse) that records the
-# worktree as a hidden commit chain per agent, one commit per agent turn. <id> is a background
+# worktree as a hidden commit chain per agent, one commit per agent turn (only for the agents the
+# hub sees: a folder in JAY_ROOTS, or the hub Claude). <id> is a background
 # agent's short id (it stays after a resume or /clear), else the first 8 characters of the
 # session id:
 #   refs/wt-turns/<id>/base   HEAD when the agent's first snapshot was taken
@@ -25,7 +26,8 @@ if [[ "${1:-}" == --prune ]]; then
   state="$STATE/turns"
   cache="$STATE/worktrees.ndjson"
   week=$((7 * 86400)) now=$(date +%s)
-  # Never prune on missing data: no agent list or no repo list, no prune.
+  # Never prune on missing data: no agent list or no repo list, no prune. All agents, not only
+  # the ones in JAY_ROOTS (jay_claude_agents): an agent outside them keeps its chain.
   agents=$(claude agents --json --all 2>/dev/null) || exit 0
   listed=$(jq -r '.[] | (.id // empty), .sessionId[0:8]' <<<"$agents" | sort -u)
   [[ -s "$cache" ]] || exit 0
@@ -105,6 +107,9 @@ cwd=$(jq -r '.cwd // ""' <<<"$input")
 sid=$(jq -r '.session_id // ""' <<<"$input")
 tool=$(jq -r '.tool_name // ""' <<<"$input")
 [[ -n "$cwd" && -n "$sid" ]] || exit 0
+# Only the agents the hub sees (jay_agents_in_roots): no chain for a session outside JAY_ROOTS.
+source "$HOME/.local/lib/jay-lib.sh"
+jay_hook_sees "$cwd" || exit 0
 top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
 
 # A background agent keeps its id when its session id changes (a resume, /clear), so its chain

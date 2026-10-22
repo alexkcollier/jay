@@ -3,6 +3,8 @@
 # (jay-notify) that make an agent unread.
 source "$(dirname "$0")/lib.sh"
 link_install
+# The hub sees only the agents in JAY_ROOTS; the test's folders are under $TMP.
+export JAY_ROOTS=$TMP
 source "$HOME/.local/lib/jay-lib.sh"
 
 # mark_at KIND KEY TIME: mark KIND (seen, ended) of KEY at TIME (touch -t format).

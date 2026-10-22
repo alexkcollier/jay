@@ -30,7 +30,7 @@ fi
 # case). Several name matches: the live ones win, but never over an agent with the same name (the
 # hub gives each new agent its own name, but `claude --bg --name` outside it can repeat one).
 # Still several is an error that lists their ids.
-agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+agents=$(jay_claude_agents) || agents='[]'
 matches=$(jq -c --arg q "$query" '
   ($q | ascii_downcase) as $l
   | def lname: .name // "" | ascii_downcase;

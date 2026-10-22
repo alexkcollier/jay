@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # jay-notify — Claude Code hook (Stop, Notification) that posts a macOS notice
 # naming client › repo · branch, the task note and the agent's message.
+# Only for the agents that the hub sees: a folder in JAY_ROOTS, or the hub Claude.
 # No notice while Ghostty is in front with a selected tab that shows the agent: its own tab,
 # or the hub's tab. Without terminal-notifier it does nothing.
 # Click: `jay go <session>` brings the agent in front. JAY_NOTIFY_LOG: a log of each call.
@@ -14,6 +15,8 @@ event=$(jq -r '.hook_event_name // ""' <<<"$input")
 cwd=$(jq -r '.cwd // ""' <<<"$input")
 sid=$(jq -r '.session_id // ""' <<<"$input")
 type="" key=""
+# Only the agents the hub sees (jay_agents_in_roots): no mark and no notice for the others.
+jay_hook_sees "${cwd:-$PWD}" || exit 0
 
 case $event in
   Notification)

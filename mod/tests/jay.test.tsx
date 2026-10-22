@@ -36,9 +36,9 @@ function host(on: On, agents: { current: RawAgent[] }) {
     calls.push([...e.argv])
     const [program = ''] = e.argv
     const ok = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
-    if (program === '/bin/sh' && String(e.argv[2] ?? '').includes('command -v claude')) return ok(`${HOME}\t`)
+    if (program === '/bin/sh' && String(e.argv[2] ?? '').includes('"$HOME"')) return ok(HOME)
     if (program.endsWith('/jay-all')) return ok(worktreeLines)
-    if (program.endsWith('/jay-agents') || program.endsWith('/claude')) return ok(JSON.stringify(agents.current))
+    if (program.endsWith('/jay-agents')) return ok(JSON.stringify(agents.current))
     return ok('')
   })
   on('ui.toast', (_$, e) => {

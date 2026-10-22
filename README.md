@@ -25,8 +25,10 @@ and Claude Code background agents.
 ```
 
 - **List** (left, about 22 % of the width). Every repo, worktree and agent, grouped by client.
-  Agent rows update every few seconds, git signs every 30 s. A pick here drives the other two
-  columns.
+  The hub sees only the Claude agents (background and interactive) whose folder is in one of
+  the `JAY_ROOTS` folders, and the hub Claude: the list and its counts, `jay agents`, `jay all`,
+  `jay go`, the mod, the notices and the turn chains ignore all others. Agent rows update every
+  few seconds, git signs every 30 s. A pick here drives the other two columns.
 - **Agent viewer** (middle). `claude attach` on the picked background agent. You talk to the agent
   here. The pane title is the agent's name. A fresh hub opens on the hub Claude (see
   [The hub Claude](docs/working.md#the-hub-claude)); the "◆ hub" row in the list brings it back.

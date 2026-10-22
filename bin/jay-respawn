@@ -39,7 +39,7 @@ if [[ -z "$want" ]]; then
   echo "jay respawn: no claude on PATH, or claude --version tells no version." >&2
   exit 1
 fi
-agents=$(claude agents --json --all 2>/dev/null) || { echo "jay respawn: claude agents failed." >&2; exit 1; }
+agents=$(jay_claude_agents) || { echo "jay respawn: claude agents failed." >&2; exit 1; }
 shown=$(jay_hub_shown)
 agents=$(jay_agent_phases "$agents" "$shown")
 jobs=$(jay_jobs "$agents")
@@ -50,7 +50,7 @@ if [[ -n "$target" ]]; then
   match=$(jq -c --arg q "$target" '[.[] | select(.kind == "background" and .id != null
     and (.id == $q or .sessionId == $q or .name == $q))]' <<<"$agents")
   case $(jq length <<<"$match") in
-    0) echo "jay respawn: no background agent $target (claude agents --json --all)" >&2; exit 1 ;;
+    0) echo "jay respawn: no background agent $target in JAY_ROOTS (jay agents --json)" >&2; exit 1 ;;
     1) ;;
     *) echo "jay respawn: more than one agent is named $target; give its id:" >&2
        jq -r '.[] | "  \(.id)  \(.name // "")"' <<<"$match" >&2

@@ -56,6 +56,8 @@ starts=false
 if ((${#prompt[@]})) || [[ "$agent" == true ]]; then starts=true; fi
 agents='[]' others=0
 if [[ "$starts" == true ]]; then
+  # Every agent, not only the ones in JAY_ROOTS (jay_claude_agents): the caller that gets the
+  # report can be outside them, and a new name must be free among all (jay_unique_name).
   agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
   # The live agents that work in this worktree already.
   others=$(jq --arg p "$path" '[.[] | select(.state != "stopped" and (.cwd == $p or (.cwd // "" | startswith($p + "/"))))] | length' <<<"$agents" 2>/dev/null) || others=0

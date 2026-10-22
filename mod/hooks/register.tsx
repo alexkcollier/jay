@@ -41,9 +41,9 @@ const USAGE = [
   '/jay refresh              reload worktrees and agents now',
 ].join('\n')
 
-type Env = { home: string; claude: string }
+type Env = { home: string }
 
-let env: Env = { home: '', claude: '' }
+let env: Env = { home: '' }
 let timers: Array<{ cancel: () => void }> = []
 
 const bin = (name: string) => `${env.home}/.local/bin/${name}`
@@ -66,9 +66,9 @@ async function refreshWorktrees($: EngineInterface) {
 }
 
 async function refreshAgents($: EngineInterface) {
-  // With each agent's phase (the list's rule); `claude agents` alone when jay-agents fails.
-  let { exitCode, stdout } = await run($, [bin('jay-agents'), '--json'], 10000)
-  if (exitCode !== 0) ({ exitCode, stdout } = await run($, [env.claude || `${env.home}/.local/bin/claude`, 'agents', '--json', '--all'], 10000))
+  // With each agent's phase (the list's rule), and only the agents in JAY_ROOTS: never plain
+  // `claude agents`, which lists the agents outside them too.
+  const { exitCode, stdout } = await run($, [bin('jay-agents'), '--json'], 10000)
   if (exitCode !== 0) return
   const next = parseAgents(stdout)
   const before = await read($, agents)
@@ -85,13 +85,8 @@ async function refreshAgents($: EngineInterface) {
 }
 
 async function readEnv($: EngineInterface) {
-  const { stdout } = await run($, [
-    '/bin/sh',
-    '-c',
-    'printf "%s\\t%s" "$HOME" "$(command -v claude)"',
-  ])
-  const [home = '', claude = ''] = stdout.split('\t')
-  env = { home, claude: claude.trim() }
+  const { stdout } = await run($, ['/bin/sh', '-c', 'printf "%s" "$HOME"'])
+  env = { home: stdout }
 }
 
 async function startHub($: EngineInterface) {

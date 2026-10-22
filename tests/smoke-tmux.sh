@@ -39,7 +39,9 @@ stub_agents "[
  {\"kind\":\"background\",\"id\":\"aaaa0002\",\"sessionId\":\"aaaa0002-0000-0000-0000-000000000002\",\"name\":\"orch\",
   \"cwd\":\"$TMP/projects/acme/shop\",\"state\":\"working\",\"status\":\"idle\",\"startedAt\":$now,\"pid\":1},
  {\"kind\":\"background\",\"id\":\"bbbb0001\",\"sessionId\":\"bbbb0001-0000-0000-0000-000000000001\",\"name\":\"hub\",
-  \"cwd\":\"$TMP/projects\",\"state\":\"working\",\"status\":\"idle\",\"startedAt\":$now,\"pid\":1}]"
+  \"cwd\":\"$TMP/projects\",\"state\":\"working\",\"status\":\"idle\",\"startedAt\":$now,\"pid\":1},
+ {\"kind\":\"background\",\"id\":\"dddd0001\",\"sessionId\":\"dddd0001-0000-0000-0000-000000000001\",\"name\":\"outsider\",
+  \"cwd\":\"$TMP/projects-old\",\"state\":\"working\",\"status\":\"busy\",\"startedAt\":$now,\"pid\":1}]"
 mkdir -p "$HOME/.local/state/jay"
 printf 'bbbb0001\n' >"$HOME/.local/state/jay/hub-claude"
 # jay-pane puts mise's shims first on its PATH: the stubs go there too.
@@ -123,6 +125,7 @@ eq "the panes from the left" "hub.0 hub.1 hub.2" "$(place_of "$list") $(place_of
 within "a client" 3 has_client
 within "the agent pane opens the hub Claude" 10 screen_has "$agent" 'ATTACHED bbbb0001'
 within "the list shows the agents" 15 screen_has "$list" fix-login
+ok "an agent outside JAY_ROOTS has no row" screen_hasnt "$list" outsider
 first_row_is_hub() { tm capture-pane -p -t "$list" | grep -v '^[[:space:]]*$' | head -1 | grep -q '◆ hub'; }
 within "the list has no counts row: its first row is ◆ hub" 5 first_row_is_hub
 
@@ -251,6 +254,8 @@ eq "the config loads without errors" "" "$(tm show-messages 2>/dev/null | grep -
 eq "status: at the top" top "$(tm show -gv status-position)"
 within "status left: the tab you are on (hub) and the picked worktree" 5 bash -c "[[ \"\$(tmux -L $SOCK show -wv -t $hubw @jay_left | perl -pe 's/#\[[^]]*\]//g')\" == '◆ JAY › hub › shop/fix-login' ]]"
 within "status middle: the agent counts" 5 wopt_has "$hubw" @jay_mid '3 idle'
+ok "status middle: no count for the agent outside JAY_ROOTS (it works)" \
+  bash -c "! tmux -L $SOCK show -wv -t $hubw @jay_mid | grep -q working"
 within "status right: the picked worktree's task, bright" 8 wopt_has "$hubw" @jay_right '#[fg=colour2]●#[default] shop/fix-login web'
 within "status right: the main checkout's, dim, the repo as project" 3 wopt_has "$hubw" @jay_right '#[dim]● shop api'
 hasnt "status: no ports" "$port1" "$(wopt "$hubw" @jay_right)"

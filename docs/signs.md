@@ -6,7 +6,9 @@
 ## Rows
 
 The list shows each repo with a `.git` folder 1–2 levels under `$JAY_ROOTS` (default
-`~/Documents/projects`; more roots with `:`).
+`~/Documents/projects`; more roots with `:`). It shows only the Claude agents whose folder is a
+root or is under one, and the hub Claude: an agent in `~/Downloads` or in `~/Documents/projects-old`
+has no row and no count.
 
 - `<root>/<client>/<repo>` goes under an orange heading for its client.
 - `<root>/<repo>` goes under "Other" at the bottom.
@@ -14,7 +16,8 @@ The list shows each repo with a `.git` folder 1–2 levels under `$JAY_ROOTS` (d
   worktree, its agents. A repo row acts as its main checkout (`N`, `o`, click).
 - A removed worktree that still has agents shows as a dim `<branch> (gone)` row of its repo.
   `d` on it removes those agents.
-- Agents in no repo show under "no repo" at the bottom, with their folder.
+- Agents in no repo (but in a root, say the root itself) show under "no repo" at the bottom,
+  with their folder.
 - A main checkout without an agent is idle, and so is a repo with only an idle main checkout:
   both are dim. `a` hides the idle repos. The main checkout row of a repo that shows always
   stays, also when it is idle: it is the anchor of the repo's other rows (home sign, git state,

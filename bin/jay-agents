@@ -3,6 +3,7 @@
 # Enter: `jay go` — attach to a background agent, or select an interactive one's tab and pane.
 # jay agents --json  `claude agents --json --all` with each agent's .phase (input, failed,
 #                    unread, working, idle; see jay_agent_phases), for jay all and the mod.
+# Only the sessions whose folder is in JAY_ROOTS, and the hub Claude (jay_claude_agents).
 # jay agents --orchestrators [main checkout]  The orchestrator of each repo (◇ in the hub list),
 # one line each: main checkout<TAB>id<TAB>name.
 set -euo pipefail
@@ -13,7 +14,7 @@ if [[ "${1:-}" == --orchestrators ]]; then
   exit 0
 fi
 
-agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+agents=$(jay_claude_agents) || agents='[]'
 agents=$(jay_agent_phases "$agents")
 if [[ "${1:-}" == --json ]]; then
   printf '%s\n' "$agents"

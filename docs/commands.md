@@ -25,8 +25,8 @@ worktrunk's `wt <name>` dispatch.
 | `jay all [-a]` | Worktrees of every repo, grouped by client, with agent counts (input, failed, unread, working, idle: the signs of the list) and task notes. `-a`: also repos with only a main checkout and no agent. |
 | `jay all --json` | One JSON object per worktree (the list's data; implies `-a`). |
 | `jay pick [-a]` | The same list in fzf, with git status and log in a preview. Enter: `jay open` on the row. Ctrl-A: `jay agents` for that worktree. |
-| `jay agents [path]` | Claude sessions (all, or one worktree) in fzf, the ones that need input first. Enter: `jay go`. |
-| `jay agents --json` | `claude agents --json --all` with each agent's `phase` (input, failed, unread, working, idle), for `jay all` and the mod. |
+| `jay agents [path]` | Claude sessions (all in `JAY_ROOTS`, or one worktree) in fzf, the ones that need input first. Enter: `jay go`. |
+| `jay agents --json` | `claude agents --json --all` with each agent's `phase` (input, failed, unread, working, idle), for `jay all` and the mod: only the agents whose folder is in `JAY_ROOTS`, and the hub Claude, as everywhere in the hub. |
 | `jay agents --orchestrators [main checkout]` | The orchestrator of each repo, one line each: main checkout, id, name (see [Orchestrators](orchestrators.md)). |
 | `jay clear <id>` | Type `/clear` into idle background agent `<id>` through a hidden `claude attach` (`c` in the list). Exit 0 when its session id changed. See [Fresh context](orchestrators.md#fresh-context). |
 | `jay respawn` | The background agents that run an older Claude Code than the installed one, with the version they run and why each one waits (or "ready"). See [Claude Code updates](working.md#claude-code-updates). |

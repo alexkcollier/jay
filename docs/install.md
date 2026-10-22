@@ -243,7 +243,7 @@ hooks in background agents and a notice click.
 
 | Key | Default | What |
 |---|---|---|
-| `JAY_ROOTS` | `~/Documents/projects` | the folders with your repos, `:` between them; the list shows each repo 1–2 levels under them |
+| `JAY_ROOTS` | `~/Documents/projects` | the folders with your repos, `:` between them; the list shows each repo 1–2 levels under them, and the hub sees only the Claude agents in them (and the hub Claude) |
 | `JAY_EDITOR` | `$VISUAL`, else `$EDITOR`, else `nvim` | the editor for `O` in files and `jay edit` |
 | `JAY_EDITOR_GUI` | a guess from the editor's name | `1`: a GUI editor, `0`: a terminal editor |
 | `JAY_TERMINAL` | on when Ghostty runs | `ghostty`: tab control on; another value: off |

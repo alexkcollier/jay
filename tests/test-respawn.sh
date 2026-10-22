@@ -5,6 +5,8 @@
 # mark, and `jay respawn`.
 source "$(dirname "$0")/lib.sh"
 link_install
+# The hub sees only the agents in JAY_ROOTS; the test's folders are under $TMP.
+export JAY_ROOTS=$TMP
 source "$HOME/.local/lib/jay-lib.sh"
 
 # claude: its version from $STUB/version; `respawn` answers from $STUB/respawn.out (default

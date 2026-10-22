@@ -4,6 +4,8 @@
 # (made outside the hub): jay go lists their ids, the list shows the id after the name.
 source "$(dirname "$0")/lib.sh"
 link_install
+# The hub sees only the agents in JAY_ROOTS; the test's folders are under $TMP.
+export JAY_ROOTS=$TMP
 source "$HOME/.local/lib/jay-lib.sh"
 
 # A claude that also starts agents: `claude --bg [--name N] ...` adds a blocked background agent

@@ -324,6 +324,58 @@ jay_agent_notes() {
         | index(":") as $i | select($i != null) | {(.[:$i]): .[$i + 1:]}) | add // {}'
 }
 
+# --- The agents the hub sees: the Claude agents whose folder is in JAY_ROOTS ---
+# A folder is in the roots when it is a root or under one (root + "/": /a/bc is not under /a/b),
+# through a symlink too. The hub Claude (JAY_HUB_CLAUDE_FILE) always counts. The list and its
+# counts, jay agents (so jay all and the mod), jay go, jay respawn, the notices (jay-notify) and
+# the turn chains (jay-snapshot) see only these agents. `claude agents` itself stays for what must
+# know every agent: a free name (jay_unique_name), the hub Claude's start, and jay snapshot
+# --prune, which must not remove the chains of an agent that is only outside the roots.
+
+# The roots, one per line, each also as its real path when a symlink makes that differ.
+jay_roots_real() {
+  local IFS=: root real
+  for root in $JAY_ROOTS; do
+    [[ -n "$root" ]] || continue
+    [[ "$root" == / ]] || root=${root%/}
+    printf '%s\n' "$root"
+    real=$(cd -P "$root" 2>/dev/null && pwd) && [[ "$real" != "$root" ]] && printf '%s\n' "$real"
+  done
+  return 0
+}
+
+# Folder $1 is in the roots.
+jay_in_roots() {
+  local root
+  while IFS= read -r root; do
+    [[ "$1" == "$root" || "$1" == "${root%/}"/* ]] && return 0
+  done < <(jay_roots_real)
+  return 1
+}
+
+# For a hook (jay-notify, jay-snapshot): the hub sees the session in folder $1 (its cwd), as
+# jay_agents_in_roots does: the folder is in the roots, or the session is the hub Claude.
+jay_hook_sees() {
+  jay_in_roots "$1" && return 0
+  [[ -n "${CLAUDE_JOB_DIR:-}" && "${CLAUDE_JOB_DIR##*/}" == "$(jay_hub_claude_id)" ]]
+}
+
+# The agents in agents JSON $1 that the hub sees: .cwd in the roots, and the hub Claude.
+jay_agents_in_roots() {
+  local IFS=$' \t\n'
+  jq -c --arg roots "$(jay_roots_real)" --arg hub "$(jay_hub_claude_id)" '
+    ($roots | split("\n") | map(select(. != ""))) as $r
+    | def under($c): any($r[]; . as $root | $c == $root or ($c | startswith(($root | rtrimstr("/")) + "/")));
+      map(select(($hub != "" and (.id // "") == $hub) or under(.cwd // "")))' <<<"$1"
+}
+
+# `claude agents --json --all`, only the agents the hub sees. Fails when claude fails.
+jay_claude_agents() {
+  local out
+  out=$(claude agents --json --all 2>/dev/null) && [[ -n "$out" ]] || return 1
+  jay_agents_in_roots "$out"
+}
+
 # --- Agent names: one name for each agent, where the hub can see to it ---
 # The name for a new agent: $1 when no agent in agents JSON $2 (default: `claude agents --json
 # --all`) has it, else $1-2, $1-3, ... Every agent that `claude agents` lists counts, also a
@@ -969,7 +1021,7 @@ jay_orch_ranks() {
 # Optional $1: only the one of that main checkout.
 jay_orchestrators() {
   local agents home id name
-  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  agents=$(jay_claude_agents) || agents='[]'
   while IFS=$'\t' read -r home id name; do
     [[ -n "$home" && ( -z "${1:-}" || "$home" == "$1" ) ]] || continue
     [[ "$(jay_primary "$home")" == "$home" ]] && printf '%s\t%s\t%s\n' "$home" "$id" "$name"
