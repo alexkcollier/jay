@@ -255,7 +255,8 @@ What it denies in the main checkout:
   tell (`cd "$WT"`, `git -C "$(...)"`): when in doubt, it denies.
 
 What it allows: `git status`, `log`, `diff`, `show`, `branch` (a list), `tag` (a list),
-`rev-parse`, `merge-base`, `fetch`, `worktree list`, `for-each-ref`, `stash list`, `remote -v`,
+`rev-parse`, `merge-base`, `merge-tree` (a conflict check: it writes only objects), `fetch`,
+`worktree list`, `for-each-ref`, `stash list`, `remote -v`,
 `config --get` and other reads; `git merge --ff-only <branch>`; all `gh` commands except the
 ones above; all other programs.
 

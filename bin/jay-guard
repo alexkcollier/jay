@@ -245,7 +245,7 @@ git_why() {
       | shortlog | describe | grep | ls-files | ls-tree | ls-remote | cat-file | show-ref | show-branch \
       | cherry | range-diff | whatchanged | name-rev | verify-commit | verify-tag | check-ignore \
       | check-attr | check-mailmap | count-objects | var | help | version | diff-tree | diff-files \
-      | diff-index | difftool | archive | fsck | check-ref-format)
+      | diff-index | difftool | archive | fsck | check-ref-format | merge-tree)
       return ;;
     fetch)
       OPTARGS=" --depth --deepen --shallow-since --shallow-exclude --negotiation-tip --refmap -j --jobs --upload-pack -o --server-option "

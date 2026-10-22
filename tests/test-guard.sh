@@ -51,7 +51,8 @@ for cmd in "git status" "git status --short" "git log --oneline -5" "git diff ma
   "git branch" "git branch -a" "git branch -vv" "git branch --show-current" "git branch --list 'f*'" \
   "git branch --contains abc" "git branch --merged main" "git rev-parse HEAD" "git merge-base main feat" \
   "git fetch" "git fetch origin" "git worktree list --porcelain" "git for-each-ref refs/heads" \
-  "git merge --ff-only feat" "git tag" "git tag -l 'v*'" "git stash list" "git config --get user.name" \
+  "git merge --ff-only feat" "git merge-tree --write-tree main feat" \
+  "git merge-tree --write-tree --name-only main feat" "git merge-tree abc main feat" "git tag" "git tag -l 'v*'" "git stash list" "git config --get user.name" \
   "git config user.name" "git remote -v" "git -C ../shop.feat log" "git --no-pager log" "git" \
   "gh pr view 12" "gh pr list" "gh pr diff 12" "ls; echo git" "jay new fix -t x -- do it"; do
   allows orch0001 "$shop" "$cmd"
