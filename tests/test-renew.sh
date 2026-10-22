@@ -95,6 +95,7 @@ $(agent 000000o3 web/main "$web")
 $(agent 000000p1 shop/feat "$root/shop.feat")
 $(agent 000000hb hub "$HOME/Documents/projects")
 $(agent 000000o4 web/main-2 "$root/web.fix")
+$(agent 000000x9 far/main "$TMP/far")
 EOF
 )"
 mkdir -p "$JAY_STATE"
@@ -144,6 +145,10 @@ out=$(jay-renew shop/feat 2>&1)
 has "refused: no orchestrator or hub Claude" "jay renew is for those" "$out"
 out=$(jay-renew nobody 2>&1)
 has "refused: no such agent" "no running background agent nobody" "$out"
+# x9: an orchestrator outside JAY_ROOTS: the hub does not see it (jay_claude_agents).
+mkdir -p "$TMP/far"
+job 000000x9 "{\"cwd\": \"$TMP/far\", \"sessionId\": \"sid-000000x9\", \"respawnFlags\": $(orch_flags far/main "$old_orch")}"
+has "refused: an agent outside JAY_ROOTS" "no running background agent 000000x9 in the hub" "$(jay-renew 000000x9 2>&1)"
 eq "jay renew without an agent: usage, exit 2" 2 "$(jay-renew >/dev/null 2>&1; echo $?)"
 # o1 works now: not renewed.
 stub_agents "$(jq -c 'map(if .id == "000000o1" then .state = "working" | .status = "busy" else . end)' <<<"$agents")"

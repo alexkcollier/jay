@@ -1014,8 +1014,9 @@ auto_prune() {
   # first only when a newer turn made the agent unread already.
   jay-snapshot --prune >>"$STATE/prune.log" 2>&1
   find "$JAY_MARKS/seen" "$JAY_MARKS/ended" -type f -mtime +14 -delete 2>/dev/null
-  # The task notes and renewed marks of agents that are gone, after 14 days too.
-  jay_prune_agent_files "$1"
+  # The task notes and renewed marks of agents that are gone, after 14 days too. Every agent
+  # counts, also one outside JAY_ROOTS: it is not gone.
+  jay_prune_agent_files "$(claude agents --json --all 2>/dev/null)"
   return 0
 }
 

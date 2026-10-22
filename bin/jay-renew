@@ -23,11 +23,14 @@ esac
 (($# == 1)) || { echo "usage: jay renew <id|name>" >&2; exit 2; }
 
 cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
-agents=$(claude agents --json --all 2>/dev/null) || { echo "jay renew: claude agents failed." >&2; exit 1; }
+# The agent: one that the hub sees (jay_claude_agents: in JAY_ROOTS, or the hub Claude). The new
+# name counts every agent (jay_unique_name), also one outside the roots.
+all=$(claude agents --json --all 2>/dev/null) && [[ -n "$all" ]] || { echo "jay renew: claude agents failed." >&2; exit 1; }
+agents=$(jay_agents_in_roots "$all")
 match=$(jq -c --arg q "$1" '[.[] | select(.kind == "background" and .id != null and .state != "stopped"
   and (.id == $q or .sessionId == $q or .name == $q))]' <<<"$agents")
 case $(jq length <<<"$match") in
-  0) echo "jay renew: no running background agent $1 (claude agents --json --all)" >&2; exit 3 ;;
+  0) echo "jay renew: no running background agent $1 in the hub (jay agents)" >&2; exit 3 ;;
   1) ;;
   *) echo "jay renew: more than one agent is named $1; give its id:" >&2
      jq -r '.[] | "  \(.id)  \(.name // "")"' <<<"$match" >&2
@@ -100,7 +103,7 @@ eval "flags=($(jq -r --arg hub "$kind" '.respawnFlags // [] | map(select(type ==
       elif $hub == "hub" and ($f | startswith("--add-dir=")) then .dirs = false
       else .dirs = false | .out += [$f] end) | .out | @sh' "$state" 2>/dev/null))"
 # The same name: the old agent is left out of the names that count (its session id).
-flags=(--name "$(jay_unique_name "$name" "$agents" "$sid")" ${flags[@]+"${flags[@]}"}
+flags=(--name "$(jay_unique_name "$name" "$all" "$sid")" ${flags[@]+"${flags[@]}"}
   ${add[@]+"${add[@]}"} --append-system-prompt "$now")
 strip=()
 for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
