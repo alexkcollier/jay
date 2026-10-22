@@ -487,6 +487,11 @@ install_settings() {
 # The hub's multiplexer: zellij (default) or tmux (jay's own tmux server, beside a zellij hub;
 # tmux 3.5 or newer). JAY_MUX=tmux jay tries it without this line.
 # JAY_MUX=zellij
+
+# The repos that always get an orchestrator, ':' between them: a repo's name as the list shows
+# it (shop), or client/repo (acme/shop). When such a repo has none, a pick of one of its rows
+# starts one. Default: none (the hub Claude plans and starts workers; n starts an orchestrator).
+# JAY_ORCHESTRATE=shop:acme/web
 CONF
       did "$SETTINGS_FILE (settings, all at their defaults)"
     fi

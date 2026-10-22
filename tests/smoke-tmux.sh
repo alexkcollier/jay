@@ -27,6 +27,10 @@ rm -f "$HOME/.local/bin/curl" # the list's fzf takes its reloads through curl (a
 # acme/shop with a worktree shop.fix-login; two agents and the hub Claude.
 repo "$TMP/projects/acme/shop"
 git -C "$TMP/projects/acme/shop" worktree add -q -b fix-login "$TMP/projects/acme/shop.fix-login"
+# acme/web with a worktree web.fix, in JAY_ORCHESTRATE: a pick of its rows starts its orchestrator.
+repo "$TMP/projects/acme/web"
+git -C "$TMP/projects/acme/web" worktree add -q -b fix "$TMP/projects/acme/web.fix"
+printf 'JAY_ORCHESTRATE=web\n' >"$HOME/.config/jay/config"
 now=$(($(date +%s) * 1000))
 stub_agents "[
  {\"kind\":\"background\",\"id\":\"aaaa0001\",\"sessionId\":\"aaaa0001-0000-0000-0000-000000000001\",\"name\":\"fix-login\",
@@ -43,6 +47,14 @@ for d in "$HOME/.local/bin" "$HOME/.local/share/mise/shims"; do
 #!/bin/bash
 case "\${1:-} \${2:-}" in
   "agents --json") cat "$STUB/agents.json" ;;
+  # A new background agent (the orchestrator of a pick): it comes into the agents a second later.
+  "--bg "*)
+    printf '%s\n' "\$*" >>"$STUB/bg.calls"
+    sleep 1
+    jq -c --arg c "\$PWD" '. + [{kind: "background", id: "cccc0001", sessionId: "cccc0001-0000-0000-0000-000000000001",
+      name: "web/main", cwd: \$c, state: "blocked", status: "idle", startedAt: 0, pid: 1}]' "$STUB/agents.json" >"$STUB/agents.new" \
+      && mv "$STUB/agents.new" "$STUB/agents.json"
+    echo "backgrounded · cccc0001" ;;
   "agents "*) printf 'AGENT VIEW enter to return · space to reply\n'; sleep 100000 ;;
   "attach "*)
     # As claude attach: the process keeps its args. Left arrow: the agent view, by exec (as
@@ -211,6 +223,17 @@ jay run stop api >/dev/null 2>&1
 jay run stop web >/dev/null 2>&1
 ok "run: stopped" bash -c "! lsof -nP -iTCP:$port1 -sTCP:LISTEN"
 within "bar: the agents" 5 option_has @jay_agents idle
+
+# JAY_ORCHESTRATE=web: a pick of web's worktree row (as the list runs it) starts web's
+# orchestrator. The middle column says so, then shows it; the focus stays in the list.
+tm select-pane -t "$list"
+TMUX="$TMUX_TMPDIR/tmux-$(id -u)/$SOCK,1,0" jay-sidebar --act wt "$TMP/projects/acme/web.fix"
+within "orchestrate: the note in the middle" 3 screen_has "$agent" 'Starting the orchestrator of web (JAY_ORCHESTRATE)'
+within "orchestrate: then the orchestrator" 8 screen_has "$agent" 'ATTACHED cccc0001'
+eq "orchestrate: its title" web/main "$(tm display -p -t "$agent" '#{pane_title}')"
+ok "orchestrate: the focus stays in the list" is_pane "$list"
+has "orchestrate: the orchestrator prompt" "--name web/main --append-system-prompt You are the orchestrator of the repo web" "$(cat "$STUB/bg.calls")"
+within "orchestrate: review on the picked worktree" 5 screen_has "$review" 'TUICR .*web.fix'
 
 # Ctrl g q: the client goes, the hub runs on.
 key 0771
