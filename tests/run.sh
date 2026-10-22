@@ -2,10 +2,14 @@
 # tests/run.sh [name...] — run the shell tests (tests/test-*.sh), each under /bin/bash (3.2 on
 # macOS) in a fake HOME, with stubs for claude, zellij, wt and curl: no network, and nothing of
 # your own install or sessions is touched. With names, only the test files whose name has one
-# of them. VERBOSE=1 also lists the checks that pass. Exit 1 when a check fails.
+# of them, and the smoke tests (tests/smoke-*.sh: a throwaway hub) whose name has one:
+# tests/run.sh smoke. VERBOSE=1 also lists the checks that pass. Exit 1 when a check fails.
 cd "$(dirname "$0")" || exit 2
 failed=0 ran=0
-for test in test-*.sh; do
+# smoke-*.sh (a throwaway hub, about a minute each) run only when a name picks them.
+smoke=""
+(($#)) && smoke=$(ls smoke-*.sh 2>/dev/null)
+for test in test-*.sh $smoke; do
   if (($#)); then
     match=false
     for name in "$@"; do [[ "$test" == *"$name"* ]] && match=true; done
