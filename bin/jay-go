@@ -17,24 +17,36 @@ if [[ "$query" == hub ]]; then
   hubid=$(jay_hub_claude) || { echo "Could not start the hub Claude." >&2; exit 1; }
   query=$hubid
 fi
-# Match order: id or session id (prefix), exact name, then a part of a name (any case).
-# Several name matches: the live ones win; still several is an error that lists them.
-matches=$(claude agents --json --all 2>/dev/null | jq -c --arg q "$query" '
+# Match order: id or session id (exact, then prefix), exact name, then a part of a name (any
+# case). Several name matches: the live ones win, but never over an agent with the same name (the
+# hub gives each new agent its own name, but `claude --bg --name` outside it can repeat one).
+# Still several is an error that lists their ids.
+agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+matches=$(jq -c --arg q "$query" '
   ($q | ascii_downcase) as $l
-  | [.[] | select(.id == $q or .sessionId == $q or (.sessionId | startswith($q)))] as $ids
-  | [.[] | select((.name // "" | ascii_downcase) == $l)] as $exact
-  | [.[] | select(.name // "" | ascii_downcase | contains($l))] as $part
-  | (if ($ids | length) > 0 then $ids[:1] elif ($exact | length) > 0 then $exact else $part end) as $found
+  | def lname: .name // "" | ascii_downcase;
+  [.[] | select(.id == $q or .sessionId == $q)] as $same
+  | [.[] | select(.sessionId // "" | startswith($q))] as $prefix
+  | [.[] | select(lname == $l)] as $exact
+  | [.[] | select(lname | contains($l))] as $part
+  | (if ($same | length) > 0 then $same[:1] elif ($prefix | length) > 0 then $prefix
+     elif ($exact | length) > 0 then $exact else $part end) as $found
   | ([$found[] | select(.state != "done" and .state != "failed")]) as $live
-  | if ($found | length) > 1 and ($live | length) > 0 then $live else $found end
-  | .[]')
+  | ([$found[] | select(.state == "done" or .state == "failed") | lname]) as $ended
+  | if ($found | length) > 1 and ($live | length) > 0
+       and all($live[]; lname as $n | $ended | index([$n]) | not) then $live else $found end
+  | .[]' <<<"$agents")
 [[ -n "$matches" ]] || { echo "No Claude session matches \"$query\"" >&2; exit 1; }
 if (( $(wc -l <<<"$matches") > 1 )); then
-  echo "Several Claude sessions match \"$query\":" >&2
-  jq -r '"  \(.id // .sessionId[0:8])  \(.name // "")"' <<<"$matches" >&2
+  echo "Several Claude sessions match \"$query\". Give an id: jay go <id>" >&2
+  jq -r '"  \(.id // .sessionId[0:8])  \(.name // "")  \(.state // .status // "")  \(.cwd // "" | sub("^" + env.HOME; "~"))"' <<<"$matches" >&2
   exit 1
 fi
 agent=$matches
+# Another agent with the same name (made outside the hub): its title in the hub has the id too.
+title=$(jq -r --argjson a "$agent" '($a.name // "" | ascii_downcase) as $n
+  | ($a.name // $a.id // $a.sessionId[0:8]) + (if $n != "" and ([.[] | select((.name // "" | ascii_downcase) == $n)] | length) > 1
+                         then " " + ($a.id // $a.sessionId[0:8]) else "" end)' <<<"$agents")
 
 kind=$(jq -r .kind <<<"$agent")
 id=$(jq -r '.id // empty' <<<"$agent")
@@ -46,7 +58,7 @@ if [[ "$kind" == background ]] && { jay_in_hub || jay_hub_live; }; then
   # The turn chain of a background agent is named after its id (see jay-snapshot). The
   # hub Claude works in no worktree: review stays on what it shows.
   hub_pick() {
-    jay_hub_show "$id" "$(jq -r '.name // .id' <<<"$agent")" "$cwd" || return
+    jay_hub_show "$id" "$title" "$cwd" || return
     [[ "$id" == "$hubid" ]] || jay_hub_target "$cwd" "$id"
   }
   jay_hub_locked hub_pick || { echo "Could not show $id in the hub." >&2; exit 1; }

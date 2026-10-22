@@ -187,15 +187,32 @@ export function ageOf(startedAt: number, now: number) {
 
 export const unquote = (value: string) => value.replace(/^(["'])(.*)\1$/, '$2')
 
-// Id or session id (prefix), then the exact name, then the one agent whose name holds the
-// query, in any case. Several left: undefined, and jay-go picks or lists them.
-export function findAgent(agents: readonly AgentRow[], query: string) {
-  const byId = agents.find(agent => agent.shortId === query || agent.sessionId.startsWith(query))
-  if (byId) return byId
+// The agents a query names: id or session id (exact, then prefix), then the exact name, then
+// the names that hold the query, in any case. Two agents can share a name when one was made
+// outside the hub (the hub gives each new agent its own, see jay_unique_name).
+export function matchAgents(agents: readonly AgentRow[], query: string) {
+  const same = agents.filter(agent => agent.shortId === query || agent.sessionId === query)
+  if (same.length > 0) return same.slice(0, 1)
+  const prefix = agents.filter(agent => agent.sessionId.startsWith(query))
+  if (prefix.length > 0) return prefix
   const wanted = query.toLowerCase()
   const exact = agents.filter(agent => agent.name.toLowerCase() === wanted)
-  const named = exact.length > 0 ? exact : agents.filter(agent => agent.name.toLowerCase().includes(wanted))
-  return named.length === 1 ? named[0] : undefined
+  return exact.length > 0 ? exact : agents.filter(agent => agent.name.toLowerCase().includes(wanted))
+}
+
+// The one agent a query names. Several: undefined, and jay-go lists them.
+export function findAgent(agents: readonly AgentRow[], query: string) {
+  const found = matchAgents(agents, query)
+  return found.length === 1 ? found[0] : undefined
+}
+
+export const idOf = (agent: AgentRow) => agent.shortId ?? agent.sessionId.slice(0, 8)
+
+// The agent's name, with its id after it when another agent in the list has the same name.
+export function nameOf(agent: AgentRow, agents: readonly AgentRow[]) {
+  const wanted = agent.name.toLowerCase()
+  const shared = agents.some(other => other.sessionId !== agent.sessionId && other.name.toLowerCase() === wanted)
+  return shared ? `${agent.name} ${idOf(agent)}` : agent.name
 }
 
 export function eventLine(event: HubEvent) {

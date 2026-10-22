@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { findAgent, groupsOf, parseAgents, parseWorktrees, phaseOf, summaryOf, transitions } from '../hooks/model'
+import { findAgent, groupsOf, matchAgents, nameOf, parseAgents, parseWorktrees, phaseOf, summaryOf, transitions } from '../hooks/model'
 
 const PLUGIN = 'jay'
 const HOME = '/Users/me'
@@ -132,6 +132,30 @@ describe('model', () => {
     expect(findAgent(rows, 'shop/log')).toBeUndefined()
     expect(findAgent(rows, 'nothing')).toBeUndefined()
   })
+
+  test('two agents with one name: the name finds neither, the id finds each, and both show the id', () => {
+    const copy = { ...worker('working'), sessionId: 'cccc5555-6666', id: 'cccc5555' }
+    const rows = parseAgents(JSON.stringify([hub, worker('working'), copy]))
+    expect(matchAgents(rows, 'shop/login').map(agent => agent.shortId)).toEqual(['aaaa1111', 'cccc5555'])
+    expect(findAgent(rows, 'shop/login')).toBeUndefined()
+    expect(findAgent(rows, 'cccc5555')?.sessionId).toBe('cccc5555-6666')
+    expect(rows.map(agent => nameOf(agent, rows))).toEqual(['hub', 'shop/login aaaa1111', 'shop/login cccc5555'])
+    expect(matchAgents(rows, 'aaaa1111-2222').map(agent => agent.shortId)).toEqual(['aaaa1111'])
+  })
+})
+
+test('/jay msg to a name that two agents share lists their ids and sends nothing', async ($, on) => {
+  mock.clock(on, { now: T0 })
+  const copy = { ...worker('working'), sessionId: 'cccc5555-6666', id: 'cccc5555' }
+  const seen = host(on, { current: [hub, worker('working'), copy] })
+  await $.session.start({ cwd: SHOP, surface: 'terminal', isInteractive: true })
+  await jay($, 'refresh')
+  const msg = await jay($, 'msg shop/login hello')
+  expect(msg.text).toBe('Several agents match "shop/login": aaaa1111 shop/login, cccc5555 shop/login. Give an id.')
+  expect(seen.sent).toEqual([])
+  const one = await jay($, 'msg cccc5555 hello')
+  expect(one.text).toBe('Sent to shop/login.')
+  expect(seen.sent).toEqual([{ to: 'cccc5555-6666', text: 'hello' }])
 })
 
 test('/jay go passes the whole name, without quotes, to jay-go', async ($, on) => {

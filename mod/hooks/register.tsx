@@ -8,6 +8,9 @@ import {
   findAgent,
   glyphOf,
   groupsOf,
+  idOf,
+  matchAgents,
+  nameOf,
   parseAgents,
   parseWorktrees,
   shortBranch,
@@ -186,7 +189,12 @@ export const register: Register = on => {
         return { text: tail ? await openWorktree($, tail) : USAGE }
       case 'msg': {
         const [query = '', ...words] = rest
-        const agent = findAgent(await read($, agents), query)
+        const found = matchAgents(await read($, agents), query)
+        if (found.length > 1) {
+          const ids = found.map(one => `${idOf(one)} ${one.name}`).join(', ')
+          return { text: `Several agents match "${query}": ${ids}. Give an id.` }
+        }
+        const agent = found[0]
         if (!agent || words.length === 0) return { text: agent ? USAGE : `No agent matches "${query}".` }
         const sent = await $.session.send({ to: { sessionId: agent.sessionId }, text: words.join(' ') })
         return { text: sent.isDelivered ? `Sent to ${agent.name}.` : `Not delivered to ${agent.name}: ${sent.reason}` }
@@ -234,7 +242,7 @@ export const register: Register = on => {
                     <Text color={{ input: 'warning', failed: 'error', unread: 'suggestion', working: 'success', idle: 'inactive' }[agent.phase]} bold={agent.phase === 'input' || agent.phase === 'unread'} dimColor={agent.phase === 'working'}>
                       {glyphOf(agent.phase)}
                     </Text>{' '}
-                    {agent.sessionId === me ? `${agent.name} (this)` : agent.name}{' '}
+                    {agent.sessionId === me ? `${nameOf(agent, list)} (this)` : nameOf(agent, list)}{' '}
                     <Text dimColor>
                       {agent.kind === 'background' ? 'bg ' : ''}
                       {ageOf(agent.startedAt, now)}

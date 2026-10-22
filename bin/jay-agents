@@ -23,10 +23,14 @@ fi
 filter=${1:-}
 [[ -n "$filter" ]] && filter=$(jay_toplevel "$filter")
 
+# Two agents with the same name (made outside the hub, see jay_unique_name): the id after it.
 list=$(jq -r --arg f "$filter" '
-  .[] | select($f == "" or .cwd == $f or (.cwd | startswith($f + "/")))
+  def lname: .name // "" | ascii_downcase;
+  (map(lname) | group_by(.) | map(select(length > 1 and .[0] != "") | .[0])) as $dup
+  | .[] | select($f == "" or .cwd == $f or (.cwd | startswith($f + "/")))
   | ({input: 0, failed: 1, unread: 2, working: 3}[.phase] // 4) as $rank
-  | [$rank, .phase, .kind, (.id // ""), .sessionId, .cwd, (.name // "")] | @tsv' <<<"$agents" | sort -n)
+  | [$rank, .phase, .kind, (.id // ""), .sessionId, .cwd,
+     ((.name // "") + (if lname | IN($dup[]) then " " + (.id // .sessionId[0:8]) else "" end))] | @tsv' <<<"$agents" | sort -n)
 
 [[ -n "$list" ]] || { echo "No Claude sessions${filter:+ in $filter}."; exit 0; }
 
