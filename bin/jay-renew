@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# jay renew <id|name> — a fresh context with jay's current prompt, for an orchestrator (◇) or the
+# hub Claude. /clear (jay clear) and `claude respawn` keep the agent's old system prompt: Claude
+# keeps --append-system-prompt in the job's respawnFlags. So jay renew starts a new background
+# agent in the same folder, with the current prompt, the same name and the other options it had,
+# waits until `claude agents` lists it, moves what refers to the old id to it (the hub Claude's
+# id file, the hub's middle column and review, the agent's task note, its orchestrator rank),
+# then stops and removes the old agent (claude rm; its transcript stays).
+# Only an idle agent (the phase rule of the list, as for jay clear), and not one in a worktree it
+# entered: claude rm deletes the worktree that Claude recorded for an agent. When the agent has
+# jay's current prompt already, nothing changes: jay clear gives it a fresh context.
+# Exit 0 when renewed or nothing to do, 1 on a fault, 2 for usage, 3 when the agent is missing,
+# not an orchestrator or the hub Claude, not idle, or in a worktree it entered.
+set -uo pipefail
+source "$HOME/.local/lib/jay-lib.sh"
+
+usage() { sed -n '2,13s/^# \{0,1\}//p' "$0"; }
+
+case ${1:-} in
+  -h | --help) usage; exit 0 ;;
+  "" | -*) echo "usage: jay renew <id|name>" >&2; exit 2 ;;
+esac
+(($# == 1)) || { echo "usage: jay renew <id|name>" >&2; exit 2; }
+
+cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+agents=$(claude agents --json --all 2>/dev/null) || { echo "jay renew: claude agents failed." >&2; exit 1; }
+match=$(jq -c --arg q "$1" '[.[] | select(.kind == "background" and .id != null and .state != "stopped"
+  and (.id == $q or .sessionId == $q or .name == $q))]' <<<"$agents")
+case $(jq length <<<"$match") in
+  0) echo "jay renew: no running background agent $1 (claude agents --json --all)" >&2; exit 3 ;;
+  1) ;;
+  *) echo "jay renew: more than one agent is named $1; give its id:" >&2
+     jq -r '.[] | "  \(.id)  \(.name // "")"' <<<"$match" >&2
+     exit 3 ;;
+esac
+agent=$(jq -c '.[0]' <<<"$match")
+id=$(jq -r .id <<<"$agent")
+sid=$(jq -r '.sessionId // empty' <<<"$agent")
+name=$(jq -r '.name // .id' <<<"$agent")
+state="$cfg/jobs/$id/state.json"
+
+stored=$(jay_prompt_stored "$id")
+case $stored in
+  "$JAY_HUB_MARK"*) kind=hub ;;
+  "$JAY_ORCH_MARK"*) kind=orch ;;
+  *) echo "\"$name\" ($id) is no orchestrator and not the hub Claude: jay renew is for those. For another agent, type /clear in it." >&2
+     exit 3 ;;
+esac
+
+# claude rm deletes the worktree that Claude recorded for the agent (worktreePath), and an agent in
+# a worktree it entered would leave its work there.
+jobs=$(jay_jobs "$agents")
+tree=$(jq -r --arg i "$id" '.[$i].tree // empty' <<<"$jobs")
+wt=$(jq -r '.worktreePath // empty' "$state" 2>/dev/null)
+[[ -n "$tree" ]] || { [[ -n "$wt" && -d "$wt" ]] && tree=$wt; }
+if [[ -n "$tree" ]]; then
+  echo "\"$name\" ($id) is in a worktree it entered: ${tree/#$HOME/~}. Tell it to leave it first (ExitWorktree), then try again." >&2
+  exit 3
+fi
+
+# The phase rule of the list (jay_agent_phases), as for c and jay clear.
+case $(jay_agent_phases "[$agent]" "" | jq -r '.[0].phase') in
+  input) echo "\"$name\" ($id) waits for you: it asks something, or it waits for a permission. Answer it first." >&2; exit 3 ;;
+  failed) echo "\"$name\" ($id) failed. Look at it first." >&2; exit 3 ;;
+  working) echo "\"$name\" ($id) is working. Try again when it is idle." >&2; exit 3 ;;
+esac
+
+now=$(jay_prompt_now "$id") || { echo "jay renew: no current prompt for \"$name\" ($id)." >&2; exit 1; }
+if [[ "$stored" == "$now" ]]; then
+  echo "\"$name\" ($id) has jay's current prompt. jay clear $id gives it a fresh context."
+  exit 0
+fi
+
+# The folder: an orchestrator's main checkout (state.json cwd); for the hub Claude, the first root
+# (jay_hub_claude), with the other roots as added folders.
+roots=() add=()
+if [[ "$kind" == hub ]]; then
+  IFS=: read -ra roots <<<"$JAY_ROOTS"
+  dir=${roots[0]:-$HOME}
+  for ((i = 1; i < ${#roots[@]}; i++)); do add+=(--add-dir "${roots[i]}"); done
+else
+  dir=$(jq -r '.cwd // .originCwd // empty' "$state" 2>/dev/null)
+fi
+if [[ -z "$dir" || ! -d "$dir" ]]; then
+  echo "jay renew: the folder of \"$name\" ($id) is gone: $dir" >&2
+  exit 1
+fi
+
+# The options it had (a model, say), without its name, prompt and session; for the hub Claude
+# also without the added folders, which come from JAY_ROOTS again.
+eval "flags=($(jq -r --arg hub "$kind" '.respawnFlags // [] | map(select(type == "string"))
+  | (["--name", "-n", "--append-system-prompt", "--resume", "-r", "--session-id"]) as $valued
+  | reduce .[] as $f ({out: [], skip: 0, dirs: false};
+      if .skip > 0 then .skip -= 1
+      elif .dirs and ($f | startswith("-") | not) then .
+      elif $valued | index([$f]) then .skip = 1 | .dirs = false
+      elif $f == "--continue" or $f == "-c" then .dirs = false
+      elif any($valued[]; . as $v | $f | startswith($v + "=")) then .dirs = false
+      elif $hub == "hub" and $f == "--add-dir" then .dirs = true
+      elif $hub == "hub" and ($f | startswith("--add-dir=")) then .dirs = false
+      else .dirs = false | .out += [$f] end) | .out | @sh' "$state" 2>/dev/null))"
+# The same name: the old agent is left out of the names that count (its session id).
+flags=(--name "$(jay_unique_name "$name" "$agents" "$sid")" ${flags[@]+"${flags[@]}"}
+  ${add[@]+"${add[@]}"} --append-system-prompt "$now")
+strip=()
+for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
+echo "Renewing \"$name\" ($id): a new agent with jay's current prompt..."
+out=$(cd "$dir" && env ${strip[@]+"${strip[@]}"} claude --bg "${flags[@]}" 2>&1)
+new=$(jay_bg_id "$out")
+if [[ -z "$new" ]]; then
+  printf 'jay renew: the new agent did not start. "%s" (%s) stays as it was.\n%s\n' "$name" "$id" "$out" >&2
+  exit 1
+fi
+listed=false
+for i in $(seq 20); do
+  claude agents --json --all 2>/dev/null | jq -e --arg i "$new" 'any(.[]; .id == $i)' >/dev/null && { listed=true; break; }
+  sleep 0.5
+done
+if ! $listed; then
+  echo "jay renew: the new agent $new started, but claude agents does not list it. \"$name\" ($id) stays: remove one of the two (claude rm <id>)." >&2
+  exit 1
+fi
+
+# What refers to the old id.
+jay_state_dir
+[[ "$(jay_hub_claude_id)" == "$id" ]] && printf '%s\n' "$new" >"$JAY_HUB_CLAUDE_FILE"
+jay_hub_retarget "$id" "$new"
+[[ -f "$JAY_NOTES/$id" ]] && mv -f "$JAY_NOTES/$id" "$JAY_NOTES/$new"
+created=$(jay_renewed | jq -r --arg i "$id" '.[$i] // empty')
+[[ -n "$created" ]] || created=$(jq -r --arg i "$id" '.[$i].created // empty' <<<"$jobs")
+if [[ -n "$created" ]]; then
+  mkdir -p "$JAY_RENEWED" && printf '%s\n' "$created" >"$JAY_RENEWED/$new"
+fi
+rm -f "$JAY_RENEWED/$id"
+
+# The old agent goes. Its recorded worktree is checked again just before claude rm.
+jay_stop_agent "$id" || true
+wt=$(jq -r '.worktreePath // empty' "$state" 2>/dev/null)
+if [[ -n "$wt" && -d "$wt" ]]; then
+  echo "jay renew: \"$name\" is $new now. The old agent $id is stopped, not removed: claude rm would delete ${wt/#$HOME/~}." >&2
+  exit 1
+fi
+if ! out=$(env ${strip[@]+"${strip[@]}"} claude rm "$id" 2>&1); then
+  echo "jay renew: \"$name\" is $new now. The old agent $id is stopped, not removed: $out" >&2
+  exit 1
+fi
+printf '%s %s (%s): renew → %s\n' "$(date '+%F %T')" "$id" "$name" "$new" >>"$JAY_STATE/prune.log"
+echo "\"$name\" is $new now, with jay's current prompt. The old conversation stays in its transcript."

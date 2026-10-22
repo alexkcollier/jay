@@ -1006,13 +1006,14 @@ jay_jobs() {
 # JSON object session id: {id, name, home, rank}. home is the folder the agent belongs to (the
 # one it came from, when it is in a worktree it entered). One orchestrator for each repo: rank 0
 # is the oldest in its home, the orchestrator; rank 1 and up are extra ones (a resumed copy, say).
-# Oldest by the job's creation: a respawn gives an agent a new startedAt. A stopped agent does
-# not count. The callers check that home is a main checkout.
+# Oldest by the job's creation: a respawn gives an agent a new startedAt. A renewed one (jay renew)
+# has the creation of the agent it renewed (jay_renewed). A stopped agent does not count. The
+# callers check that home is a main checkout.
 jay_orch_ranks() {
-  jq -c --argjson jobs "$2" '
+  jq -c --argjson jobs "$2" --argjson renewed "$(jay_renewed)" '
     [.[] | select(.kind == "background" and .state != "stopped" and ($jobs[.id // ""].orch // false))
       | {sid: .sessionId, id, name: (.name // .id), home: ($jobs[.id].home // .cwd),
-         t: ($jobs[.id].created // .startedAt // 0)}]
+         t: ($renewed[.id] // $jobs[.id].created // .startedAt // 0)}]
     | group_by(.home) | map(sort_by(.t) | to_entries[] | {(.value.sid): ((.value | del(.sid, .t)) + {rank: .key})})
     | add // {}' <<<"$1"
 }
@@ -1215,6 +1216,108 @@ jay_hub_claude() {
 # The hub Claude's id when it has one, without starting it.
 jay_hub_claude_id() {
   cat "$JAY_HUB_CLAUDE_FILE" 2>/dev/null || true
+}
+
+# --- Renew: a fresh context with jay's current prompt. /clear (jay clear) and `claude respawn`
+# keep an agent's system prompt: Claude keeps --append-system-prompt in the job's respawnFlags. So
+# an orchestrator or the hub Claude gets a newer prompt from jay only as a new agent: jay renew
+# (bin/jay-renew) starts it with the same name and options, moves what refers to the old id to
+# it, and removes the old agent. A mark $JAY_RENEWED/<new id> keeps the old agent's createdAt.
+
+JAY_RENEWED=${JAY_RENEWED:-$JAY_STATE/renewed}
+
+# The system prompt that background agent $1 (short id) got from jay: the value of
+# --append-system-prompt in its state.json respawnFlags. Empty when it has none.
+jay_prompt_stored() {
+  jq -r '.respawnFlags // [] | map(select(type == "string")) | index("--append-system-prompt") as $i
+    | if $i != null then .[$i + 1] // ""
+      else first(.[] | select(startswith("--append-system-prompt=")) | ltrimstr("--append-system-prompt=")) // "" end' \
+    "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$1/state.json" 2>/dev/null
+}
+
+# The prompt jay gives now to agent $1 (short id): the hub Claude's (jay_hub_claude_prompt), or an
+# orchestrator's (jay_orchestrator_prompt for the main checkout in its state.json cwd), by the
+# first words of its stored prompt. Fails for another agent.
+jay_prompt_now() {
+  local stored cwd
+  stored=$(jay_prompt_stored "$1")
+  case $stored in
+    "$JAY_HUB_MARK"*) jay_hub_claude_prompt ;;
+    "$JAY_ORCH_MARK"*)
+      cwd=$(jq -r '.cwd // .originCwd // empty' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$1/state.json" 2>/dev/null)
+      [[ -n "$cwd" ]] || return 1
+      jay_orchestrator_prompt "${cwd##*/}" "$cwd" ;;
+    *) return 1 ;;
+  esac
+}
+
+# Agent $1 (short id) is the hub Claude or an orchestrator, and its prompt is not jay's now.
+jay_prompt_old() {
+  local now
+  now=$(jay_prompt_now "$1") || return 1
+  [[ "$(jay_prompt_stored "$1")" != "$now" ]]
+}
+
+# The hub Claude and the orchestrators in agents JSON $1 (jobs JSON $2, from jay_jobs) whose
+# prompt is not jay's now (jay_prompt_old), as a JSON object id: true. The list marks them.
+jay_old_prompts() {
+  local IFS=$' \t\n' id old=()
+  for id in $(jq -r --argjson jobs "$2" --arg hub "$(jay_hub_claude_id)" '.[]
+      | select(.kind == "background" and .id != null and .state != "stopped")
+      | select(.id == $hub or ($jobs[.id].orch // false)) | .id' <<<"$1" 2>/dev/null); do
+    jay_prompt_old "$id" && old+=("$id")
+  done
+  jq -nc '$ARGS.positional | map({(.): true}) | add // {}' --args ${old[@]+"${old[@]}"}
+}
+
+# The renewed agents, as a JSON object new id: the createdAt (ms) of the agent it renewed.
+# jay_orch_ranks ranks a renewed orchestrator by that time, so it keeps its place.
+jay_renewed() {
+  local f
+  for f in "$JAY_RENEWED"/*; do
+    [[ -f "$f" ]] || continue
+    printf '%s\t%s\n' "${f##*/}" "$(head -1 "$f")"
+  done | jq -Rsc 'split("\n") | map(select(. != "") | split("\t") | select(.[1] // "" | test("^[0-9]+$"))
+    | {(.[0]): (.[1] | tonumber)}) | add // {}'
+}
+
+# The hub's middle column and review show agent $2 in place of agent $1, when they showed $1:
+# their panes follow while they run (the focus stays), else only their target files change.
+jay_hub_retarget() {
+  local old=$1 new=$2 file id="" cwd="" kind="" name="" top="" aid="" line pane changed
+  file=$(jay_hub_target_file agent)
+  IFS=$'\t' read -r id cwd kind name 2>/dev/null <"$file"
+  if [[ -n "$id" && "$id" == "$old" ]]; then
+    line=$(printf '%s\t%s\t%s\t%s' "$new" "$cwd" "$kind" "$name")
+    if IFS=$'\t' read -r pane changed < <(jay_hub_locked jay_hub_point agent "$line"); then
+      [[ "$changed" == 1 ]] && jay_mux_rename "$pane" "$name"
+    else
+      printf '%s\n' "$line" >"$file.$$" && mv "$file.$$" "$file"
+    fi
+  fi
+  file=$(jay_hub_target_file review)
+  IFS=$'\t' read -r top aid 2>/dev/null <"$file"
+  if [[ -n "$aid" && "$aid" == "$old" ]]; then
+    if jay_hub_role review >/dev/null 2>&1; then
+      jay_hub_locked jay_hub_target "$top" "$new"
+    else
+      printf '%s\t%s\n' "$top" "$new" >"$file.$$" && mv "$file.$$" "$file"
+    fi
+  fi
+  return 0
+}
+
+# Remove the task notes (jay_agent_note) and renewed marks of the agents that agents JSON $1
+# (from `claude agents --json --all`) does not list, after 14 days, as the seen and ended marks.
+# Not with an empty list: `claude agents` may have failed.
+jay_prune_agent_files() {
+  local IFS=$' \t\n' ids f
+  ids=$(jq -c '[.[] | .id // empty]' <<<"$1" 2>/dev/null) || return 0
+  [[ -n "$ids" && "$ids" != '[]' ]] || return 0
+  find "$JAY_NOTES" "$JAY_RENEWED" -type f -mtime +14 2>/dev/null | while IFS= read -r f; do
+    jq -e --arg i "${f##*/}" 'index([$i]) != null' <<<"$ids" >/dev/null || rm -f "$f"
+  done
+  return 0
 }
 
 # Move the cursor of each running list (jay-sidebar's fzf, through its --listen socket) to the

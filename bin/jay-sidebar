@@ -8,7 +8,8 @@
 # agent that cannot wake ("home gone", "lost") goes on as a copy instead (asks first).
 # n/N: new agent here (on a main checkout: the repo's orchestrator, ◇; when the repo has one,
 # the hub shows it) / in a new worktree
-# c: a fresh context (/clear) for an orchestrator or the hub Claude (asks first; idle only)
+# c: a fresh context (/clear) for an orchestrator or the hub Claude (asks first; idle only); with
+# an old prompt (dim ⇡), also as a new agent with jay's current prompt (jay renew)
 # o: own Ghostty tab. Keys act in the list only: review's mode (t) and files (e) are keys of the
 # review pane.
 # d: remove the agent, or the worktree with its idle agents (asks first; agents that came from
@@ -76,6 +77,9 @@ rows() {
   # The agents on an old Claude Code (↻), and their respawn at a quiet moment (jay_respawn_auto).
   stale=$(jay_stale "$agents" "$jobs") || stale='{}'
   (jay_respawn_auto "$agents" "$jobs" "$shown" "$stale" &) >/dev/null 2>&1
+  # The orchestrators and the hub Claude with an older prompt than jay's (⇡, see jay_prompt_old).
+  local oldp
+  oldp=$(jay_old_prompts "$agents" "$jobs") || oldp='{}'
   local hideidle=false width
   [[ -f "$HIDE_IDLE" ]] && hideidle=true
   # The text width: fzf's (it sets FZF_COLUMNS for reloads) less the pointer column.
@@ -85,7 +89,7 @@ rows() {
     --argjson hideidle "$hideidle" --arg roots "$JAY_ROOTS" --argjson gone "$(gone_dirs "$agents")" \
     --argjson jobs "$jobs" --argjson orchs "$(jay_orch_ranks "$agents" "$jobs")" \
     --argjson stranded "$stranded" --argjson replaced "$(jay_replaced_ids)" --argjson stale "$stale" \
-    --argjson notes "$(jay_agent_notes)" \
+    --argjson notes "$(jay_agent_notes)" --argjson oldp "$oldp" \
     --argjson gl "$(jq -nc --arg diff "$G_DIFF" --arg up "$G_UP" --arg alert "$G_ALERT" --arg ok "$G_OK" \
       --arg merge "$G_MERGE" --arg push "$G_PUSH" --arg pull "$G_PULL" --arg home "$G_HOME" '$ARGS.named')" \
     --argjson width "$width" --argjson now "$(date +%s)" '
@@ -97,7 +101,10 @@ rows() {
     # When Claude made the agent: a respawn (jay_respawn_auto) gives it a new startedAt.
     def born: $jobs[.id // ""].created // .startedAt // 0;
     # A dim ↻ after an agent that runs an old Claude Code: the list respawns it when it is quiet.
-    def stalemark: if .stale then " " + c("2") + "↻" + c("0") else "" end;
+    def stalemark: if .stale then " " + c("2") + "↻" + c("0") else "" end
+      # A dim ⇡ after an orchestrator or the hub Claude whose prompt is older than the one jay
+      # gives now (jay_old_prompts): c renews it.
+      + if .oldprompt then " " + c("2") + "⇡" + c("0") else "" end;
     def glyph: {input: (c("1;33") + "!"), failed: (c("31") + "✗"), unread: (c("1;35") + "✓"),
       working: (c("2;32") + "●"), idle: (c("2") + "○")}[.] + c("0");
     def narrow: [8986,8987,9001,9002,9193,9194,9195,9196,9200,9203,9725,9726,9748,9749,9800,9801,9802,9803,9804,9805,9806,9807,9808,9809,9810,9811,9855,9875,9889,9898,9899,9917,9918,9924,9925,9934,9940,9962,9970,9971,9973,9978,9981,9989,9994,9995,10024,10060,10062,10067,10068,10069,10071,10133,10134,10135,10160,10175,11035,11036,11088,11093,11904,11905,11906,11907,11908,11909,11910,11911,11912,11913,11914,11915,11916,11917,11918,11919,11920,11921,11922,11923,11924,11925,11926,11927,11928,11929,11931,11932,11933,11934,11935,11936,11937,11938,11939,11940,11941,11942,11943,11944,11945,11946,11947,11948,11949,11950,11951,11952,11953,11954,11955,11956,11957,11958,11959,11960,11961,11962,11963,11964,11965,11966,11967,11968,11969,11970,11971,11972,11973,11974,11975,11976,11977,11978,11979,11980,11981,11982,11983,11984,11985,11986,11987,11988,11989,11990,11991,11992,11993,11994,11995,11996,11997,11998,11999,12000,12001,12002,12003,12004,12005,12006,12007,12008,12009,12010,12011,12012,12013,12014,12015,12016,12017,12018,12019,12032,12033,12034,12035,12036,12037,12038,12039,12040,12041,12042,12043,12044,12045,12046,12047,12048,12049,12050,12051,12052,12053,12054,12055,12056,12057,12058,12059,12060,12061,12062,12063,12064,12065,12066,12067,12068,12069,12070,12071,12072,12073,12074,12075,12076,12077,12078,12079,12080,12081,12082,12083,12084,12085,12086,12087,12088,12089,12090,12091,12092,12093,12094,12095,12096,12097,12098,12099,12100,12101,12102,12103,12104,12105,12106,12107,12108,12109,12110,12111,12112,12113,12114,12115,12116,12117,12118,12119,12120,12121,12122,12123,12124,12125,12126,12127,12128,12129,12130,12131,12132,12133,12134,12135,12136,12137,12138,12139,12140,12141,12142,12143,12144,12145,12146,12147,12148,12149,12150,12151,12152,12153,12154,12155,12156,12157,12158,12159,12160,12161,12162,12163,12164,12165,12166,12167,12168,12169,12170,12171,12172,12173,12174,12175,12176,12177,12178,12179,12180,12181,12182,12183,12184,12185,12186,12187,12188,12189,12190,12191,12192,12193,12194,12195,12196,12197,12198,12199,12200,12201,12202,12203,12204,12205,12206,12207,12208,12209,12210,12211,12212,12213,12214,12215,12216,12217,12218,12219,12220,12221,12222,12223,12224,12225,12226,12227,12228,12229,12230,12231,12232,12233,12234,12235,12236,12237,12238,12239,12240,12241,12242,12243,12244,12245,12272,12273,12274,12275,12276,12277,12278,12279,12280,12281,12282,12283] as $wide | explode | map(select(. < 4352 or (. > 4447 and . < 11904) or (. > 42191 and . < 44032) or (. > 55203 and . < 63744) or (. > 64255 and . < 65040) or (. > 65049 and . < 65072) or (. > 65135 and . < 65280) or (. > 65376 and . < 65504) or (. > 65510 and . < 126976)) | select(. != 65039) | select(. as $c | $wide | index([$c]) | not)) | implode;
@@ -134,7 +141,8 @@ rows() {
                stranded: $s, stale: ($stale[.id // ""] != null),
                away: (if $o then $jobs[.id].tree else "" end), phase: phase,
                orch: (if $r == null or ($mains | index([$r.home]) == null) then ""
-                      elif $r.rank == 0 then "main" else "extra" end)})) as $all
+                      elif $r.rank == 0 then "main" else "extra" end)}
+        | .oldprompt = ($oldp[.id // ""] != null and (.orch != "" or .id == $hubid)))) as $all
     # The hub Claude has its own row at the top ("◆ hub"), not one in its folder.
     | (first($all[] | select(.id == $hubid)) // null) as $hubag
     | ($all | map(select(.id != $hubid))) as $ag
@@ -631,10 +639,12 @@ claude --bg --resume $sid tries again."
 # A fresh context for the orchestrator (◇) in row kind $1 with id $2, or for the hub Claude (the
 # "◆ hub" row), after a confirm and only when it is idle. jay-clear types /clear into it:
 # Claude keeps the system prompt (the orchestrator or hub prompt), the name and the short id, so
-# the turn chain, JAY_HUB_CLAUDE_FILE and the middle column stay right. Not for an orchestrator in
-# a worktree it entered: that worktree would stay its folder after the /clear.
+# the turn chain, JAY_HUB_CLAUDE_FILE and the middle column stay right. When that prompt is older
+# than jay's (jay_prompt_old), the confirm also offers jay-renew: a new agent with the current
+# prompt and the same name in place of the old one. Not for an orchestrator in a worktree it
+# entered: that worktree would stay its folder after the /clear.
 clear_context() {
-  local kind=$1 id=$2 agents agent short name jobs away out
+  local kind=$1 id=$2 agents agent short name jobs away out answer
   local what="c gives a fresh context to an orchestrator (◇) or to the hub Claude (◆ hub). For another agent, type /clear in it."
   agents=$(jay_claude_agents) || agents='[]'
   case $kind in
@@ -671,9 +681,29 @@ clear_context() {
     failed) pause "\"$name\" failed. Look at it first (Enter on its row)."; return 0 ;;
     working) pause "\"$name\" is working. Try again when it is idle."; return 0 ;;
   esac
-  confirm "Give \"$name\" ($short) a fresh context?
+  if jay_prompt_old "$short"; then
+    say "Give \"$name\" ($short) a fresh context?
+
+Its system prompt is older than jay's prompt now, and /clear keeps it. The old conversation stays in its transcript.
+
+y: fresh context with the current prompt (a new agent, same name; the old one is removed)
+k: fresh context, keep the old prompt (/clear)
+other key: cancel"
+    read -rsn1 answer </dev/tty
+    case $answer in
+      y) say "Renewing \"$name\"..."
+         out=$(jay-renew "$short" 2>&1) || pause "\"$name\" was not renewed:
+
+$out"
+         return 0 ;;
+      k) ;;
+      *) return 0 ;;
+    esac
+  else
+    confirm "Give \"$name\" ($short) a fresh context?
 
 The list types /clear into it. It starts a new conversation with the same system prompt, name and id. The old conversation stays in its transcript." "y: clear" || return 0
+  fi
   say "Clearing the context of \"$name\"..."
   out=$(jay-clear "$short" 2>&1) || pause "The context of \"$name\" did not change:
 
@@ -725,6 +755,7 @@ ${DIM}○${OFF} idle: seen, or new
 ${ROW}▸${OFF} agent in the middle pane
 ${ROW}◆ hub${OFF} row: the hub Claude
 ${DIM}↻${OFF} old Claude Code, respawns
+${DIM}⇡${OFF} old prompt: c renews it
 ${CYN}◇${OFF} orchestrator of the repo
 ${YEL}◇${OFF} second orchestrator (d it)
 ${DIM}n: orchestrator${OFF} 2+ workers
@@ -983,6 +1014,8 @@ auto_prune() {
   # first only when a newer turn made the agent unread already.
   jay-snapshot --prune >>"$STATE/prune.log" 2>&1
   find "$JAY_MARKS/seen" "$JAY_MARKS/ended" -type f -mtime +14 -delete 2>/dev/null
+  # The task notes and renewed marks of agents that are gone, after 14 days too.
+  jay_prune_agent_files "$1"
   return 0
 }
 
