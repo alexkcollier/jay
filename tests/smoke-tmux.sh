@@ -151,6 +151,8 @@ click_at "$list" '○ fix-login' 2
 within "double click: the agent opens" 5 screen_has "$agent" 'ATTACHED aaaa0001'
 within "double click: the focus in the middle, as Enter" 3 is_pane "$agent"
 within "double click: review in its worktree" 5 screen_has "$review" 'TUICR .*shop.fix-login'
+# fzf takes a click right after a double click (its pick still running) as nothing: a pause.
+sleep 1
 click_at "$list" '◆ hub'
 within "click on ◆ hub: selected" 3 cursor_on '◆ hub'
 sleep 1
