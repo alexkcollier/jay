@@ -71,10 +71,117 @@ jay_mux_start() {
     "$HOME/.local/bin/jay-pane" agent)
   p2=$(_jay_tm split-window -h -d -t "$p1" -l "$((right * 100 / (middle + right)))%" -c "$root" \
     -P -F '#{pane_id}' "$HOME/.local/bin/jay-pane" review)
+  _jay_tm_keep "$p0" list
+  _jay_tm_keep "$p1" agent
+  _jay_tm_keep "$p2" review
   # select-pane -T only sets the title; the last select-pane gives the agent the focus.
   _jay_tm select-pane -t "$p0" -T worktrees \; select-pane -t "$p2" -T review \; select-pane -t "$p1" -T hub \
     \; select-pane -t "$p1"
   exec tmux -L "$JAY_TMUX_SOCKET" -f "$JAY_TMUX_CONF" attach -t "=$JAY_SESSION"
+}
+
+# Pane $1 has role $2 of the hub (list, agent or review): @jay_role finds it wherever it is, and
+# when its program ends (killed, crashed) tmux keeps the pane and starts the program again a
+# second later (remain-on-exit and a pane-died hook of the pane's own; the delay keeps a program
+# that fails at once from spinning).
+_jay_tm_keep() {
+  _jay_tm set-option -p -t "$1" @jay_role "$2" \; set-option -p -t "$1" remain-on-exit on \; \
+    set-hook -p -t "$1" pane-died "run-shell -b -d 1 -C 'respawn-pane -t #{hook_pane}'" >/dev/null 2>&1
+}
+
+# The role of a hub pane with start command $1 (a pane of a hub that started before roles).
+_jay_tm_role_of() {
+  case $1 in
+    *jay-sidebar | *jay-sidebar\") printf 'list\n' ;;
+    *jay-pane*" agent") printf 'agent\n' ;;
+    *jay-pane*" review") printf 'review\n' ;;
+  esac
+}
+
+# Bring back the hub's panes that are gone (a closed pane, the closed hub window), each in its
+# column (list | agent | review) at its saved width, titled $1, $2 and $3, and start again a role
+# pane whose program ended. Files over a review that is gone closes; a review left in the hidden
+# window of files that is gone comes back; a hidden review (Ctrl g v) stays hidden. Prints the
+# roles it brought back.
+jay_mux_repair() {
+  local root=${JAY_ROOTS%%:*} id win role dead covers start list="" agent="" review="" rwin="" files="" fcovers=""
+  local w lw mw rw made="" restarted="" right
+  read -r lw mw rw < <(jay_hub_widths)
+  while IFS=$'\t' read -r id win role dead covers start; do
+    case $win in hub | _review | _cover) ;; *) continue ;; esac
+    if [[ -z "$role" ]]; then
+      role=$(_jay_tm_role_of "$start")
+      [[ -n "$role" ]] && _jay_tm_keep "$id" "$role"
+    fi
+    case $role in
+      list) [[ -z "$list" ]] && list=$id || continue ;;
+      agent) [[ -z "$agent" ]] && agent=$id || continue ;;
+      review) [[ -z "$review" ]] && review=$id rwin=$win || continue ;;
+      *) [[ -n "$covers" && "$win" == hub ]] && files=$id fcovers=$covers
+         continue ;;
+    esac
+    if [[ "$dead" == 1 ]]; then
+      _jay_tm respawn-pane -t "$id" >/dev/null 2>&1 && restarted+="$role "
+    fi
+  done < <(_jay_tm list-panes -s -t "=$JAY_SESSION" \
+    -F '#{pane_id}	#{window_name}	#{@jay_role}	#{pane_dead}	#{@jay_covers}	#{pane_start_command}' 2>/dev/null)
+  if [[ -n "$files" && "$fcovers" != "$review" ]]; then
+    _jay_tm kill-pane -t "$files" >/dev/null 2>&1
+    files=""
+  fi
+  if [[ -z "$list" ]]; then
+    if _jay_tm list-windows -t "=$JAY_SESSION" -F '#{window_name}' 2>/dev/null | grep -qx hub; then
+      w=$(_jay_tm display-message -p -t "=$JAY_SESSION:hub" '#{window_width}' 2>/dev/null)
+      list=$(_jay_tm split-window -h -b -f -d -t "=$JAY_SESSION:hub" -l "$((${w:-200} * lw / 100))" -c "$root" \
+        -P -F '#{pane_id}' "$HOME/.local/bin/jay-sidebar")
+    else
+      list=$(_jay_tm new-window -d -b -t "=$JAY_SESSION:^" -n hub -c "$root" -P -F '#{pane_id}' "$HOME/.local/bin/jay-sidebar")
+    fi
+    [[ -n "$list" ]] || return 1
+    _jay_tm_keep "$list" list
+    _jay_tm select-pane -t "$list" -T "$1" >/dev/null 2>&1
+    made+="list "
+  fi
+  w=$(_jay_tm display-message -p -t "$list" '#{window_width}' 2>/dev/null)
+  w=${w:-200}
+  # The column right of the agent: review, or files over it.
+  right=$files
+  [[ "$rwin" == hub ]] && right=$review
+  if [[ -z "$agent" ]]; then
+    if [[ -n "$right" ]]; then
+      agent=$(_jay_tm split-window -h -b -d -t "$right" -l "$((w * mw / 100))" -c "$root" \
+        -P -F '#{pane_id}' "$HOME/.local/bin/jay-pane" agent)
+    else
+      agent=$(_jay_tm split-window -h -d -t "$list" -l "$((w * (100 - lw) / 100))" -c "$root" \
+        -P -F '#{pane_id}' "$HOME/.local/bin/jay-pane" agent)
+    fi
+    [[ -n "$agent" ]] || return 1
+    _jay_tm_keep "$agent" agent
+    _jay_tm select-pane -t "$agent" -T "$2" >/dev/null 2>&1
+    made+="agent "
+  fi
+  if [[ -z "$review" ]]; then
+    rm -f "$JAY_HIDDEN"
+    review=$(_jay_tm split-window -h -d -t "$agent" -l "$((w * rw / 100))" -c "$root" \
+      -P -F '#{pane_id}' "$HOME/.local/bin/jay-pane" review \; set-option -gu @jay_hidden)
+    [[ -n "$review" ]] || return 1
+    _jay_tm_keep "$review" review
+    _jay_tm select-pane -t "$review" -T "$3" >/dev/null 2>&1
+    rwin=hub right=$review
+    made+="review "
+  elif [[ "$rwin" == _cover && -z "$files" ]]; then
+    _jay_tm join-pane -d -h -l "$((w * rw / 100))" -s "$review" -t "$agent" >/dev/null 2>&1
+    rwin=hub right=$review
+    made+="review "
+  fi
+  # A pane that came back: the columns at their saved widths (the agent's right edge only while
+  # a column is right of it).
+  if [[ -n "$made" ]]; then
+    _jay_tm resize-pane -t "$list" -x "$((w * lw / 100))" >/dev/null 2>&1
+    [[ -n "$right" ]] && _jay_tm resize-pane -t "$agent" -x "$((w * mw / 100))" >/dev/null 2>&1
+  fi
+  made+=$restarted
+  [[ -z "$made" ]] || printf '%s\n' "${made% }"
 }
 
 jay_mux_attach() {
@@ -106,6 +213,8 @@ jay_mux_print_layout() {
 new-session -d -s $JAY_SESSION -n hub $HOME/.local/bin/jay-sidebar           # list, $list%
 split-window -h -l $((100 - list))% $HOME/.local/bin/jay-pane agent          # agent, $middle%
 split-window -h -l $((right * 100 / (middle + right)))% $HOME/.local/bin/jay-pane review   # review, $right%
+# each of the three: set-option -p @jay_role list|agent|review, remain-on-exit on, and a
+# pane-died hook: run-shell -b -d 1 -C 'respawn-pane -t #{hook_pane}'
 EOF
 }
 
@@ -208,12 +317,22 @@ jay_mux_wait_gone() {
   return 1
 }
 
-# The terminal's focus to column $1 of the hub window (panes 0, 1, 2 from the left). tmux moves
-# the client's own focus, from anywhere: $2 is not needed.
+# The terminal's focus to column $1 of the hub window: the pane of that role (review: the pane
+# right of the agent, review or files over it); in a hub without roles, panes 0, 1, 2 from the
+# left. tmux moves the client's own focus, from anywhere: $2 is not needed.
 jay_mux_focus() {
-  local i
-  case $1 in list) i=0 ;; agent) i=1 ;; *) i=2 ;; esac
-  _jay_tm select-window -t "=$JAY_SESSION:hub" \; select-pane -t "=$JAY_SESSION:hub.$i" >/dev/null 2>&1
+  local panes pane
+  panes=$(_jay_tm list-panes -t "=$JAY_SESSION:hub" -F '#{pane_id} #{@jay_role}' 2>/dev/null)
+  case $1 in
+    list | agent) pane=$(awk -v r="$1" '$2 == r { print $1; exit }' <<<"$panes") ;;
+    *) pane=$(awk 'f { print $1; exit } $2 == "agent" { f = 1 }' <<<"$panes") ;;
+  esac
+  if [[ -z "$pane" ]] && ! grep -q ' [a-z]' <<<"$panes"; then
+    case $1 in list) pane=0 ;; agent) pane=1 ;; *) pane=2 ;; esac
+    pane="=$JAY_SESSION:hub.$pane"
+  fi
+  [[ -n "$pane" ]] || return 0
+  _jay_tm select-window -t "=$JAY_SESSION:hub" \; select-pane -t "$pane" >/dev/null 2>&1
   return 0
 }
 

@@ -22,9 +22,12 @@
 # Claude Code (↻) is respawned at a quiet moment (jay_respawn_auto, JAY_AUTO_RESPAWN), same log.
 # r: reload this agent list (git signs now; the list starts again: new code and keys too)
 # h/l: narrower/wider
-# ?: keys. No quit key: the list belongs to the hub.
+# ?: keys. No quit key: the list belongs to the hub. fzf's own quit keys (Esc, Ctrl-C, Ctrl-G,
+# Ctrl-Q, Ctrl-D) do nothing, and when fzf ends anyway (killed, failed) the list starts again.
 # jay-sidebar --files: show files over review (e in the review pane, through jay-keys).
 # jay-sidebar --review toggle|show: hide or show review (Ctrl g v), show it (Ctrl g 3).
+# jay-sidebar --focus list|agent|review: bring back the hub's panes that are gone, then the focus
+# to that column (Ctrl g 1 2 3 of the tmux hub, when a pane is missing).
 set -uo pipefail
 source "$HOME/.local/lib/jay-lib.sh"
 
@@ -267,6 +270,17 @@ review_key() {
       show) [[ -f "$JAY_HIDDEN" ]] && jay_hub_locked jay_hub_unhide_review --focus ;;
     esac
   ) </dev/null >/dev/null 2>&1 &
+}
+
+# Ctrl g 1 2 3 when a pane of the hub is missing (tmux, config/tmux/jay.conf): bring it back, then
+# the focus to column $1 (a hidden review is shown).
+focus_key() {
+  jay_hub_locked jay_hub_repair >/dev/null
+  if [[ "$1" == review && -f "$JAY_HIDDEN" ]]; then
+    jay_hub_locked jay_hub_unhide_review --focus
+  else
+    jay_mux_focus "$1"
+  fi
 }
 
 # Pick row kind $1 with id $2. An agent always moves the focus to the middle
@@ -1000,9 +1014,10 @@ case ${1:-} in
   --clear) shift; clear_context "$@"; exit 0 ;;
   --files) jay_hub_locked jay_hub_show_files; exit 0 ;;
   --review) review_key "${2:-}"; exit 0 ;;
+  --focus) focus_key "${2:-list}"; exit 0 ;;
   --idle) if [[ -f "$HIDE_IDLE" ]]; then rm -f "$HIDE_IDLE"; else : >"$HIDE_IDLE"; fi; exit 0 ;;
   --footer) shift; footer "$@"; exit 0 ;;
-  -h|--help) sed -n '2,27s/^# \{0,1\}//p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,30s/^# \{0,1\}//p' "$0"; exit 0 ;;
   # An option this version does not have (say a bind of a list started before an update) must
   # not start a second list.
   -*) printf 'jay-sidebar: unknown option %s\n' "$1" >&2; exit 2 ;;
@@ -1100,15 +1115,30 @@ rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=
   --bind 'p:execute(jay-sidebar --prune)+reload-sync(jay-sidebar --rows)+clear-screen' \
   --bind 'h:execute-silent(jay-mux resize_list decrease)' \
   --bind 'l:execute-silent(jay-mux resize_list increase)' \
-  --bind 'j:down,k:up,q:ignore,esc:ignore'
+  --bind 'j:down,k:up,q:ignore,esc:ignore,ctrl-c:ignore,ctrl-g:ignore,ctrl-q:ignore,ctrl-d:ignore'
+rc=$?
 
 # r: start again as the newest version of this script, with fresh git signs (same pid, so the
-# state files keep their names).
+# state files keep their names). fzf that ended any other way (killed, an error) starts again
+# too, after a pause that shows why: the list belongs to the hub. A close of the pane (HUP) or a
+# kill of this script ends it before this point. Not when the hub is gone (the multiplexer
+# ended: no parent, no terminal), and not after 5 quick ends in a row: then the pane keeps the
+# error (tmux starts the pane's program again a second later, see jay_mux_repair).
+trap - EXIT
+cleanup
 if [[ -f "$JAY_SIDEBAR_RESTART" ]]; then
-  trap - EXIT
-  cleanup
   clear
   printf '\n  Reloading...\n'
   refresh_worktrees
-  exec "$0"
+  unset JAY_SIDEBAR_FAILS
+else
+  fails=0
+  ((SECONDS < 5)) && fails=$((${JAY_SIDEBAR_FAILS:-0} + 1))
+  [[ "$(ps -o ppid= -p $$ 2>/dev/null | tr -d ' ')" == 1 ]] && exit 1
+  { : </dev/tty; } 2>/dev/null || exit 1
+  printf '\n  The list ended (fzf exit %s). Starting it again...\n' "$rc"
+  ((fails < 5)) || { printf '  It ended 5 times in a row: see the error above.\n'; exit 1; }
+  export JAY_SIDEBAR_FAILS=$fails
+  sleep 2
 fi
+exec "$0"

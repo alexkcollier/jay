@@ -3,7 +3,8 @@
 # the live worktree list (left), the picked agent (middle; at start the hub Claude) and review +
 # files (right); a tasks tab per worktree for dev servers (jay run). Goes to the hub's Ghostty
 # tab when it has one, else opens the hub in this terminal; a new tab only without a terminal
-# or from inside another session of the same multiplexer.
+# or from inside another session of the same multiplexer. A running hub gets back its list,
+# agent or review pane when that is gone.
 # --here: in this terminal.  --tab: in a new tab.  --print-layout: the layout it starts.
 # --print-tasks-tab <worktree> <name>: the zellij layout of a worktree's tasks tab.
 # jay <command> [args]: runs jay-<command> (jay --help lists them).
@@ -15,7 +16,8 @@ jay: a worktree and agent hub (it was wt-hub).
 
   jay                       open the hub (session "jay"): its Ghostty tab, else this
                             terminal, else a new tab. JAY_MUX=tmux: the tmux hub
-                            (beside a zellij one); tmux -L jay kill-server ends it
+                            (beside a zellij one); tmux -L jay kill-server ends it.
+                            A list, agent or review pane that is gone comes back
   jay --here | --tab        open it in this terminal | in a new Ghostty tab
   jay --print-layout        print the hub's layout
   jay <command> [args]      run jay-<command>; jay <command> -h shows its help
@@ -93,6 +95,12 @@ if [[ "${1:-}" == --print-tasks-tab ]]; then
 fi
 
 where=${1:-}
+
+# A running hub whose list, agent or review pane is gone (closed, or its program ended) gets it
+# back first, in its column (jay_hub_repair).
+if jay_mux_alive; then
+  jay_hub_locked jay_hub_repair >/dev/null || true
+fi
 
 # A hub that runs in a Ghostty tab: go to that tab.
 if [[ "$where" != --here ]] && jay_mux_alive && tab=$(jay_mux_gh_tab); then

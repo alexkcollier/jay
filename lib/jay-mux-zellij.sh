@@ -67,6 +67,10 @@ jay_mux_gh_tab() {
   jay_gh_tab_for_session "$JAY_SESSION"
 }
 
+jay_mux_repair() {
+  return 0
+}
+
 # What `jay --print-layout` prints.
 jay_mux_print_layout() {
   _jay_zj_layout

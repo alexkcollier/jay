@@ -9,6 +9,7 @@ export JAY_MUX=tmux JAY_SESSION=jaytest JAY_TMUX_SOCKET=jaytest-sock
 stub tmux '
 args=" $* "
 case "$args" in
+  *" list-panes -t "*":hub -F "*) cat "$STUB/roles.txt" 2>/dev/null ;;
   *" list-panes "*) cat "$STUB/panes.txt" ;;
   *" list-windows "*"window_width"*) awk -F"\t" -v OFS="\t" "{ print \$1, \$2, 200 }" "$STUB/windows.txt" ;;
   *" list-windows "*) cat "$STUB/windows.txt" ;;
@@ -97,7 +98,16 @@ has "rename" "select-pane -t %1 -T fix-login" "$(calls)"
 has "type: literal" "send-keys -t %5 -l" "$(calls)"
 has "read --full: the scrollback" "capture-pane -p -t %5 -S -" "$(calls)"
 has "close" "kill-pane -t %6" "$(calls)"
-has "focus: the hub window's middle pane" "select-window -t =jaytest:hub ; select-pane -t =jaytest:hub.1" "$(calls)"
+has "focus, a hub without roles: the hub window's middle pane" "select-window -t =jaytest:hub ; select-pane -t =jaytest:hub.1" "$(calls)"
+printf '%%0 list\n%%1 agent\n%%3 \n' >"$STUB/roles.txt"
+reset; jay_mux_focus agent
+has "focus: the pane of the role" "select-window -t =jaytest:hub ; select-pane -t %1" "$(calls)"
+reset; jay_mux_focus review
+has "focus review: the pane right of the agent (files over review)" "select-pane -t %3" "$(calls)"
+printf '%%1 agent\n%%2 review\n' >"$STUB/roles.txt"
+reset; jay_mux_focus list
+hasnt "focus: no list pane, no move" "select-pane" "$(calls)"
+rm -f "$STUB/roles.txt"
 reset
 jay_mux_rename "" x
 eq "rename of no pane: no call (tmux would take the active one)" "" "$(calls)"

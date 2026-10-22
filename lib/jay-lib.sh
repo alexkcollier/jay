@@ -450,7 +450,7 @@ JAY_SESSION=${JAY_SESSION:-jay}
 # backend's own strings; scripts pass them on and never take them apart.
 #   session  jay_mux_in_hub, jay_mux_alive, jay_mux_has_client, jay_mux_server_pid, jay_mux_kill,
 #            jay_mux_old_hub, jay_mux_start, jay_mux_attach, jay_mux_attach_cmd, jay_mux_gh_tab,
-#            jay_mux_print_layout
+#            jay_mux_print_layout, jay_mux_repair <list title> <agent title> <review title>
 #   panes    jay_mux_panes (JSON lines), jay_mux_self, jay_mux_rename, jay_mux_read, jay_mux_type,
 #            jay_mux_close, jay_mux_cover / jay_mux_uncover (a pane over a pane and back),
 #            jay_mux_wait_shown, jay_mux_wait_gone, jay_mux_focus <list|agent|review>,
@@ -640,6 +640,18 @@ jay_hub_shown() {
     cut -f1 "$(jay_hub_target_file agent)" 2>/dev/null
   fi
   return 0
+}
+
+# Bring back the hub's list, agent or review pane when it is gone or its program ended
+# (jay_mux_repair), titled as before: the agent after its target, review after its worktree.
+# `jay` on a running hub and Ctrl g 1 2 3 (jay-sidebar --focus) do it. Prints the roles it
+# brought back.
+jay_hub_repair() {
+  local name top review=review
+  name=$(cut -f4 "$(jay_hub_target_file agent)" 2>/dev/null)
+  top=$(cut -f1 "$(jay_hub_target_file review)" 2>/dev/null)
+  [[ -n "$top" ]] && review=$(jay_hub_pane_title review "$(jay_hub_title "$top")")
+  jay_mux_repair worktrees "${name:-hub}" "$review"
 }
 
 # Wait up to 2 s for the new jay-pane of role $1 to start.

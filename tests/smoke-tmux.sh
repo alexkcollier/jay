@@ -3,7 +3,8 @@
 # socket of its own, in the fake HOME, with a stub claude (attach keeps its args, ← is the agent
 # view), stub tuicr and yazi. It checks the layout, a pick (also over Claude's agent view), the
 # focus keys, files over review and back, hide and show review, tasks windows, the bar and its
-# note, the tasks picker and Ctrl g q. The server is killed at the end. About a minute.
+# note, the tasks picker, panes that cannot be lost (fzf's quit keys, killed programs, closed
+# panes and window: Ctrl g 1 2 3 and jay bring them back) and Ctrl g q. The server is killed at the end. About a minute.
 # Run it with: tests/run.sh smoke
 # The fake HOME goes in /tmp: the list's fzf socket and tmux's socket live in it, and macOS
 # allows 104 bytes for a socket path (the default temp folder is too deep).
@@ -317,6 +318,95 @@ eq "orchestrate: its title" web/main "$(tm display -p -t "$agent" '#{pane_title}
 ok "orchestrate: the focus stays in the list" is_pane "$list"
 has "orchestrate: the orchestrator prompt" "--name web/main --append-system-prompt You are the orchestrator of the repo web" "$(cat "$STUB/bg.calls")"
 within "orchestrate: review on the picked worktree" 5 screen_has "$review" 'TUICR .*web.fix'
+
+# The list, agent and review panes cannot be lost: fzf's quit keys do nothing, a program that
+# ends starts again in its pane, and a pane that is closed comes back with Ctrl g 1 2 3 or jay.
+list_fzf() { pgrep -P "$(tm display -p -t "$list" '#{pane_pid}')" -x fzf; }
+pane_of() { tm list-panes -t =jay:hub -F '#{pane_id} #{@jay_role}' | awk -v r="$1" '$2 == r { print $1 }'; }
+cols_are() { [[ "$(tm list-panes -t =jay:hub -F '#{@jay_role}' | tr '\n' ' ')" == "$1" ]]; }
+respawned() { [[ "$(tm display -p -t "$1" '#{pane_dead}')" == 0 && "$(tm display -p -t "$1" '#{pane_pid}')" != "$2" ]]; }
+width_near() { local w; w=$(tm display -p -t "$1" '#{pane_width}'); ((w >= $2 - 2 && w <= $2 + 2)); }
+eq "roles of the hub window's panes" "list agent review " "$(tm list-panes -t =jay:hub -F '#{@jay_role}' | tr '\n' ' ')"
+eq "role panes: remain-on-exit" "on on on" "$(tm list-panes -t =jay:hub -F '#{remain-on-exit}' | tr '\n' ' ' | sed 's/ $//')"
+fzf_pid=$(list_fzf)
+key 0731; within "Ctrl g 1: the list" 2 is_pane "$list"
+key 1b; key 03; key 11; key 04; key 0707
+sleep 1
+eq "esc, Ctrl-C, Ctrl-Q, Ctrl-D, Ctrl g Ctrl g: fzf runs on" "$fzf_pid" "$(list_fzf)"
+kill -9 "$fzf_pid"
+within "fzf killed: the list says so" 3 screen_has "$list" 'The list ended'
+within "fzf killed: the list starts again in its pane" 8 bash -c "[[ -n \"\$(pgrep -P \$(tmux -L $SOCK display -p -t $list '#{pane_pid}') -x fzf)\" ]]"
+within "fzf killed: rows again" 10 screen_has "$list" fix-login
+pid=$(tm display -p -t "$list" '#{pane_pid}')
+pkill -9 -P "$pid"; kill -9 "$pid"
+within "list program killed: the pane starts it again" 8 respawned "$list" "$pid"
+within "list program killed: rows again" 10 screen_has "$list" fix-login
+eq "list program killed: its title" worktrees "$(tm display -p -t "$list" '#{pane_title}')"
+share=$(cat "$HOME/.local/state/jay/sidebar.pct" 2>/dev/null || echo 22)
+tm kill-pane -t "$list"
+key 0731
+within "list closed, Ctrl g 1: a list again, left" 5 cols_are "list agent review "
+list=$(pane_of list)
+within "Ctrl g 1: the focus in the new list" 2 is_pane "$list"
+eq "the new list: its title" worktrees "$(tm display -p -t "$list" '#{pane_title}')"
+ok "the new list: its saved width" width_near "$list" $((200 * share / 100))
+within "the new list: rows" 15 screen_has "$list" fix-login
+tm kill-pane -t "$list"
+jay >/dev/null 2>&1
+within "list closed, jay: a list again, left" 5 cols_are "list agent review "
+list=$(pane_of list)
+within "jay: rows in the new list" 15 screen_has "$list" fix-login
+# The agent: its program killed, its pane closed (Ctrl g 2, jay); it opens its agent again.
+pid=$(tm display -p -t "$agent" '#{pane_pid}')
+pkill -9 -P "$pid"; kill -9 "$pid"
+within "agent program killed: the pane starts it again" 8 respawned "$agent" "$pid"
+within "agent program killed: it opens the agent again" 8 screen_has "$agent" 'ATTACHED cccc0001'
+tm kill-pane -t "$agent"
+key 0732
+within "agent closed, Ctrl g 2: an agent pane again, in the middle" 5 cols_are "list agent review "
+agent=$(pane_of agent)
+within "Ctrl g 2: the focus in it" 2 is_pane "$agent"
+within "the new agent pane: the agent it showed" 8 screen_has "$agent" 'ATTACHED cccc0001'
+eq "the new agent pane: its title" web/main "$(tm display -p -t "$agent" '#{pane_title}')"
+tm kill-pane -t "$agent"
+jay >/dev/null 2>&1
+within "agent closed, jay: back in the middle" 5 cols_are "list agent review "
+agent=$(pane_of agent)
+within "jay: the agent it showed" 8 screen_has "$agent" 'ATTACHED cccc0001'
+# Review: the same, also under files and while hidden.
+pid=$(tm display -p -t "$review" '#{pane_pid}')
+pkill -9 -P "$pid"; kill -9 "$pid"
+within "review program killed: the pane starts it again" 8 respawned "$review" "$pid"
+within "review program killed: tuicr again" 8 screen_has "$review" 'TUICR .*web.fix'
+tm kill-pane -t "$review"
+key 0733
+within "review closed, Ctrl g 3: review again, right" 5 cols_are "list agent review "
+review=$(pane_of review)
+within "Ctrl g 3: the focus in it" 2 is_pane "$review"
+within "the new review: its worktree" 8 screen_has "$review" 'TUICR .*web.fix'
+within "the new review: its title" 3 bash -c "[[ \"\$(tmux -L $SOCK display -p -t $review '#{pane_title}')\" == 'turns · web'* ]]"
+jay-sidebar --files
+files=$(pane_by_title "files ·")
+within "files over review" 5 screen_has "$files" YAZI
+tm kill-pane -t "$review"
+jay >/dev/null 2>&1
+within "review closed under files, jay: files goes, review again" 5 cols_are "list agent review "
+review=$(pane_of review)
+within "jay: tuicr in the new review" 8 screen_has "$review" 'TUICR .*web.fix'
+key 0776
+within "hidden review" 3 bash -c "[[ \"\$(tmux -L $SOCK display -p -t $review '#{window_name}')\" == _review ]]"
+jay >/dev/null 2>&1
+eq "jay: a hidden review stays hidden" _review "$(tm display -p -t "$review" '#{window_name}')"
+key 0776
+within "shown again" 3 is_at "$review" hub.2
+# The hub window closed (tasks windows left): jay makes it again.
+if has_window 'shop/main · acme'; then
+  tm kill-window -t =jay:hub
+  jay >/dev/null 2>&1
+  within "hub window closed, jay: list, agent, review again" 5 cols_are "list agent review "
+  within "jay: rows in the new list" 15 screen_has "$(pane_of list)" fix-login
+  within "jay: the agent it showed" 8 screen_has "$(pane_of agent)" 'ATTACHED cccc0001'
+fi
 
 # Ctrl g q: the client goes, the hub runs on.
 key 0771
