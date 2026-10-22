@@ -61,6 +61,8 @@ docs/                    the documentation (this file, install, working, orchest
 notes/
   lazygit-review.md      the study behind review with lazygit (7: the diff renderers)
   lazygit-diff/          screen dumps of the diff renderers at 60, 80 and 120 columns
+  paradigm.md            the study: is zellij the right base for jay (tmux, WezTerm, kitty, ...)
+  paradigm-spike/        its throwaway spike scripts (tmux, zellij timings)
 install.sh               installer: copies or links, configs, hooks, zjstatus, the move from
                          wt-hub; --check, --no-compat, --compat, --uninstall
 CLAUDE.md                rules for edits in this repo, and zellij 0.45 facts
