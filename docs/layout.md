@@ -73,7 +73,8 @@ tests/
   lib.sh                 the helpers of the tests (fake HOME, stubs, checks)
   test-*.sh              the test files (test-mux.sh, test-mux-tmux.sh: the mux layer)
   smoke-tmux.sh          a throwaway tmux hub in a pty, about a minute: tests/run.sh smoke
-  pty-client.py          the pty "terminal" of the smoke test (keys from a file)
+  smoke-zellij.sh        a throwaway zellij hub: panes that cannot be lost (jay brings them back)
+  pty-client.py          the pty "terminal" of the smoke tests (keys from a file)
 docs/                    the documentation (this file, install, working, orchestrators, ...)
 notes/
   lazygit-review.md      the study behind review with lazygit (7: the diff renderers)

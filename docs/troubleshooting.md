@@ -12,6 +12,9 @@
   server cannot stop the list or a hook for long.
 - **`jay` says the old hub runs**: the zellij session `hub` of wt-hub (before the rename) still
   runs. Quit it (Ctrl g, Ctrl q in it; the agents keep running), then run `jay` again.
+- **The list, the middle column or review is gone** (the pane was closed, or zellij shows
+  "exited" in it): run `jay`. It puts the missing pane back in its column at its saved width
+  (or the hub tab, when it was closed). In the tmux hub, Ctrl g `1` `2` `3` do it too.
 - **The list does not update**: press `r` in the list. It starts again as the newest
   `jay-sidebar` with fresh git signs.
 - **No notices**: run `terminal-notifier -diagnose`. Look at

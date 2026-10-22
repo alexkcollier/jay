@@ -31,7 +31,7 @@
 | `j` / `k`, ↓ / ↑, wheel | move |
 | `h` / `l` | narrower / wider |
 | `?` | all keys and signs (press again: fewer keys) |
-| `q`, Esc | nothing (the list belongs to the hub) |
+| `q`, Esc, Ctrl-C, Ctrl-G, Ctrl-Q, Ctrl-D | nothing (the list belongs to the hub; when it ends anyway, it starts again) |
 
 The list's keys act in the list only. The list has no key for review's mode or for files.
 
@@ -129,7 +129,7 @@ place of the agent counts) while it waits.
 
 | Keys | Action |
 |---|---|
-| Ctrl g, `1` / `2` / `3` | list / middle / right column (`3` also shows a hidden review) |
+| Ctrl g, `1` / `2` / `3` | list / middle / right column (`3` also shows a hidden review); a column whose pane was closed gets it back first |
 | Ctrl g, `h` / `l` | pane to the left / right |
 | Ctrl g, `;` | last pane |
 | Ctrl g, `v` | hide or show review |

@@ -341,7 +341,13 @@ its process: the path of the binary under Claude's `claude bg-pty-host` process.
 
 Quit the hub: Ctrl g, then Ctrl q. The status line shows "Ctrl g" while zellij waits for the key. The agents keep
 running. Closing the hub's Ghostty tab only detaches it: `jay` attaches it again. The list has
-no quit key.
+no quit key, and fzf's own (Esc, Ctrl-C, Ctrl-G, Ctrl-Q, Ctrl-D) do nothing there.
+
+The list, the middle column and review cannot be lost. Their programs start again when they end
+(the list says "The list ended" and comes back; the tmux hub also starts a killed program again
+in its pane). A pane that was closed, or that zellij holds after its program was killed, comes
+back with `jay` (run it in any terminal while the hub runs), in its column at its saved width;
+also the whole hub tab. In the tmux hub, Ctrl g `1` `2` `3` bring back the missing pane too.
 
 The tmux hub: Ctrl g, then `q` detaches this terminal (the hub and its tasks run on; `jay`
 attaches again). `tmux -L jay kill-server` ends it.

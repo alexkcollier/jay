@@ -19,7 +19,8 @@ Facts about your own machine (where the live install is, how your mod loads) go 
 
 - Shell part: `tests/run.sh` (bash 3.2, no network; a fake HOME, stubs for claude and zellij).
   `tests/run.sh <name>` runs the test files whose name has `<name>`.
-- A throwaway tmux hub in a pty (about a minute): `tests/run.sh smoke` (`tests/smoke-tmux.sh`).
+- A throwaway tmux hub in a pty (about a minute) and a zellij hub (its lost panes): `tests/run.sh
+  smoke` (`tests/smoke-tmux.sh`, `tests/smoke-zellij.sh`).
 - Mod: see "Mod" below.
 
 ## Rules
@@ -116,6 +117,10 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   use it on the live hub.
 - A click on an unfocused pane only focuses it; the program does not get that click.
 - A held (exited) command pane cannot be re-run from outside; close it and open a new one.
+- `ZELLIJ_PANE_ID=<n> zellij -s <s> action new-pane --near-current-pane --direction right` splits
+  pane n from outside, also with no client attached (plain `new-pane --tab-id` splits the biggest
+  pane, downward). `move-pane -p <pane> left` swaps it with its left neighbour; the widths stay
+  with the places. `resize -p <pane> increase|decrease right` moves its right border.
 - A server can outlive its session after a quit and hang every zellij command; all calls in
   `lib/jay-lib.sh` go through a 5 s timeout wrapper, and `jay` kills such a server.
 
@@ -159,6 +164,14 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   xterm's `\e[27;2;13~` reaches Claude as a new line. `claude attach` turns on the mouse modes
   (`mouse_any_flag`, `mouse_sgr_flag`) and the other screen.
 - A click on an unfocused pane focuses it and reaches the program (one click picks in the list).
+- Per pane: `set-option -p -t <pane> remain-on-exit on` and `set-hook -p -t <pane> pane-died
+  "run-shell -b -d 1 -C 'respawn-pane -t #{hook_pane}'"` start a pane's program again a second
+  after it ends. `respawn-pane` keeps the pane's id, title and options; without a command it runs
+  the last start command. `kill-pane` closes such a pane all the same (no hook).
+- Targets are not format-expanded (`-t '#{...}'` fails). `if -F` formats can loop: `#{W:…}` over
+  the session's windows, `#{P:…}` over a window's panes; `#{E:@opt}` expands an option that holds
+  a format (`@jay_cols` in `config/tmux/jay.conf`). `split-window -h -b -f` makes a full-height
+  pane at the window's left edge.
 - Under `set -e` (`jay`, `jay go`), a process substitution inherits errexit: any failing command
   in it (a `kill` of a child that just ended, `x=$(cat <missing file>)`) ends it silently.
 - `new-session` checks the client's `TERM`: `xterm-ghostty` needs Ghostty's `TERMINFO` (set in

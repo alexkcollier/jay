@@ -67,8 +67,98 @@ jay_mux_gh_tab() {
   jay_gh_tab_for_session "$JAY_SESSION"
 }
 
+# Bring back the hub's panes that are gone (a closed pane, the closed hub tab), each in its
+# column (list | agent | review) at its saved width, titled $1, $2 and $3. A role pane whose
+# program ended (held: "Enter to re-run") closes and comes back new: zellij cannot re-run it from
+# outside. Files over a review that is gone closes; a hidden review (Ctrl g v) stays hidden.
+# Prints the roles it brought back.
+# A new pane goes right of a neighbour (--near-current-pane with that pane as ZELLIJ_PANE_ID;
+# this works without a client), and the list then moves left of it (move-pane).
 jay_mux_repair() {
-  return 0
+  local panes hub list agent review files made="" layout lw mw rw p
+  panes=$(jay_mux_panes) || return 1
+  hub=$(jay_mux_tab_id hub)
+  # The held role panes close first.
+  for p in $(jq -r --arg t "$hub" 'select((.tab_id | tostring) == $t and .exited
+    and ((.launch // "") | test("jay-sidebar$|jay-pane (agent|review)$"))) | .pane' <<<"$panes"); do
+    jay_mux_close "$p"
+  done
+  list=$(_jay_zj_role_pane "$panes" "$hub" 'jay-sidebar$')
+  agent=$(_jay_zj_role_pane "$panes" "$hub" 'jay-pane agent$')
+  review=$(_jay_zj_role_pane "$panes" "$hub" 'jay-pane review$')
+  files=$(_jay_zj_role_pane "$panes" "$hub" 'jay-pane files$')
+  if [[ -n "$files" && -z "$review" ]]; then
+    jay_mux_close "$files"
+    files=""
+  fi
+  # No hub tab, or one with none of its panes left (its banner and bar only): a new hub tab.
+  if [[ -z "$list$agent$review" ]]; then
+    [[ -n "$hub" ]] && jay_mux_tab_close "$hub"
+    jay_state_dir
+    layout="$JAY_STATE/hub-tab.$$.kdl"
+    _jay_zj_hub_tab_layout "$@" >"$layout"
+    jay_without_claude zellij -s "$JAY_SESSION" action new-tab --no-focus --layout "$layout" \
+      --name hub --cwd "${JAY_ROOTS%%:*}" >/dev/null 2>&1
+    rm -f "$layout" "$JAY_HIDDEN"
+    printf 'list agent review\n'
+    return 0
+  fi
+  read -r lw mw rw < <(jay_hub_widths)
+  if [[ -z "$list" ]]; then
+    list=$(_jay_zj_split "${agent:-${files:-$review}}" "$1" "$HOME/.local/bin/jay-sidebar") || return 1
+    zellij -s "$JAY_SESSION" action move-pane -p "$list" left >/dev/null 2>&1
+    made+="list "
+  fi
+  if [[ -z "$agent" ]]; then
+    agent=$(_jay_zj_split "$list" "$2" "$HOME/.local/bin/jay-pane" agent) || return 1
+    made+="agent "
+  fi
+  if [[ -z "$review" ]]; then
+    rm -f "$JAY_HIDDEN"
+    review=$(_jay_zj_split "$agent" "$3" "$HOME/.local/bin/jay-pane" review) || return 1
+    made+="review "
+  fi
+  [[ -n "$made" ]] || return 0
+  _jay_zj_fit "$list" "$lw"
+  [[ -f "$JAY_HIDDEN" ]] || _jay_zj_fit "$agent" "$mw"
+  printf '%s\n' "${made% }"
+}
+
+# The first running pane in tab $2 of the panes $1 (jay_mux_panes) whose start command matches $3.
+_jay_zj_role_pane() {
+  [[ -n "$2" ]] || return 0
+  jq -r --arg t "$2" --arg re "$3" 'select((.tab_id | tostring) == $t and (.exited | not)
+    and ((.launch // "") | test($re))) | .pane' <<<"$1" | head -1
+}
+
+# A new pane right of pane $1 in the hub, titled $2, running "${@:3}" in the first root folder;
+# prints its id.
+_jay_zj_split() {
+  local pane
+  [[ "${1:-}" == terminal_* ]] || return 1
+  pane=$(ZELLIJ_PANE_ID=${1#terminal_} jay_without_claude zellij -s "$JAY_SESSION" action new-pane \
+    --near-current-pane --direction right --name "$2" --cwd "${JAY_ROOTS%%:*}" -- "${@:3}")
+  [[ "$pane" == terminal_* ]] || return 1
+  printf '%s\n' "$pane"
+}
+
+# Pane $1 to share $2 % of its tab's width, at its right border (zellij resizes in steps of 5 %).
+_jay_zj_fit() {
+  local i cols total
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    read -r cols total < <(jay_mux_panes | jq -rs --arg p "$1" '
+      (map(select(.pane == $p)) | first) as $r | select($r != null)
+      | [$r.cols, ([.[] | select(.tab_id == $r.tab_id and (.floating | not)) | .x + .cols] | max)]
+      | @tsv')
+    [[ -n "${total:-}" ]] || return 0
+    if ((cols * 100 / total > $2 + 2)); then
+      zellij -s "$JAY_SESSION" action resize -p "$1" decrease right >/dev/null 2>&1
+    elif ((cols * 100 / total < $2 - 2)); then
+      zellij -s "$JAY_SESSION" action resize -p "$1" increase right >/dev/null 2>&1
+    else
+      return 0
+    fi
+  done
 }
 
 # What `jay --print-layout` prints.
@@ -343,24 +433,45 @@ _jay_zj_bottom() {
 
 # The hub's layout: list | agent | review, the list at its saved share of the width.
 _jay_zj_layout() {
-  local list middle right
-  read -r list middle right < <(jay_hub_widths)
   cat <<KDL
 layout {
     tab name="hub" focus=true {
         $(_jay_zj_top hub)
-        pane split_direction="vertical" {
-            pane size="$list%" name="worktrees" command="$HOME/.local/bin/jay-sidebar"
-            pane size="$middle%" name="hub" focus=true command="$HOME/.local/bin/jay-pane" {
-                args "agent"
-            }
-            pane size="$right%" name="review" command="$HOME/.local/bin/jay-pane" {
-                args "review"
-            }
-        }
+        $(_jay_zj_hub_columns worktrees hub review)
         $(_jay_zj_bottom)
     }
 }
+KDL
+}
+
+# The hub tab alone, for a new tab (jay_mux_repair, when it was closed): the status line at the
+# top, the columns titled $1, $2 and $3.
+_jay_zj_hub_tab_layout() {
+  cat <<KDL
+layout {
+    $(_jay_zj_top hub)
+    $(_jay_zj_hub_columns "$@")
+    $(_jay_zj_bottom)
+}
+KDL
+}
+
+# The hub tab's columns, titled $1, $2 and $3: list | agent | review, the list at its saved
+# share of the width.
+_jay_zj_hub_columns() {
+  local list middle right t1 t2 t3
+  read -r list middle right < <(jay_hub_widths)
+  t1=$(sed 's/[\\"]/\\&/g' <<<"$1") t2=$(sed 's/[\\"]/\\&/g' <<<"$2") t3=$(sed 's/[\\"]/\\&/g' <<<"$3")
+  cat <<KDL
+pane split_direction="vertical" {
+            pane size="$list%" name="$t1" command="$HOME/.local/bin/jay-sidebar"
+            pane size="$middle%" name="$t2" focus=true command="$HOME/.local/bin/jay-pane" {
+                args "agent"
+            }
+            pane size="$right%" name="$t3" command="$HOME/.local/bin/jay-pane" {
+                args "review"
+            }
+        }
 KDL
 }
 
