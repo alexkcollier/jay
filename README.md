@@ -9,7 +9,7 @@ and Claude Code background agents.
 ## What the hub is
 
 ```
- ◆ JAY › shop/fix-login · Tab: tasks   ● 1 working  ○ 2 idle         ● shop/fix-login web  14:05
+ ◆ JAY › hub › shop/fix-login   ● 1 working  ○ 2 idle                ● shop/fix-login web  14:05
 ┌ worktrees ─────────────┬ shop/fix-login ────────────┬ turns · shop   e files · t commits ────┐
 │ ◆ hub ○                │  the picked agent:         │  review of the agent's turns (tuicr)   │
 │ acme                   │  claude attach <id>        │                                        │
@@ -34,8 +34,8 @@ and Claude Code background agents.
   commits. **Files** (yazi in the same worktree) opens over review and closes back to it.
   Ctrl g `v` hides review (the agent viewer gets its width) and shows it again.
 - **Status line** (one line at the top of each tab; zjstatus in zellij, tmux's own status line in
-  tmux). Left: `◆ JAY ›` and the picked worktree (on a tasks tab: `◆ JAY › tasks ›`, its worktree
-  and the tasks that run elsewhere), and where Ctrl g Tab goes. Middle: the agent counts with
+  tmux). Left: the tab you are on, `◆ JAY › hub ›` and the picked worktree (on a tasks tab:
+  `◆ JAY › tasks ›`, its worktree and the tasks that run elsewhere). Middle: the agent counts with
   their signs. Right: the tasks of all worktrees with the project of each (`● shop/fix-login web`;
   the picked worktree's bright, the others dim), then the time. When the line is too narrow, the
   other worktrees' tasks become `+N` first, then the picked worktree's tasks only their signs,

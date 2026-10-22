@@ -150,6 +150,8 @@ ok "click: no pick (review unchanged)" bash -c "! tmux -L $SOCK capture-pane -p 
 click_at "$list" '○ fix-login' 2
 within "double click: the agent opens" 5 screen_has "$agent" 'ATTACHED aaaa0001'
 within "double click: the focus in the middle, as Enter" 3 is_pane "$agent"
+sleep 1
+ok "double click: the focus stays in the middle (tmux's late double click does not take it back)" is_pane "$agent"
 within "double click: review in its worktree" 5 screen_has "$review" 'TUICR .*shop.fix-login'
 # fzf takes a click right after a double click (its pick still running) as nothing: a pause.
 sleep 1
@@ -247,27 +249,28 @@ plain() { perl -pe 's/#\[[^]]*\]//g'; }
 eq "status: one line" on "$(tm show -gv status)"
 eq "the config loads without errors" "" "$(tm show-messages 2>/dev/null | grep -i 'jay.conf:' | head -3)"
 eq "status: at the top" top "$(tm show -gv status-position)"
-within "status left: the picked worktree and where Tab goes" 5 bash -c "[[ \"\$(tmux -L $SOCK show -wv -t $hubw @jay_left | perl -pe 's/#\[[^]]*\]//g')\" == '◆ JAY › shop/fix-login · Tab: tasks' ]]"
+within "status left: the tab you are on (hub) and the picked worktree" 5 bash -c "[[ \"\$(tmux -L $SOCK show -wv -t $hubw @jay_left | perl -pe 's/#\[[^]]*\]//g')\" == '◆ JAY › hub › shop/fix-login' ]]"
 within "status middle: the agent counts" 5 wopt_has "$hubw" @jay_mid '3 idle'
 within "status right: the picked worktree's task, bright" 8 wopt_has "$hubw" @jay_right '#[fg=colour2]●#[default] shop/fix-login web'
 within "status right: the main checkout's, dim, the repo as project" 3 wopt_has "$hubw" @jay_right '#[dim]● shop api'
 hasnt "status: no ports" "$port1" "$(wopt "$hubw" @jay_right)"
-within "status left of a tasks window: its worktree and the tasks elsewhere" 5 bash -c "[[ \"\$(tmux -L $SOCK show -wv -t $wid @jay_left | perl -pe 's/#\[[^]]*\]//g')\" == '◆ JAY › tasks › shop/fix-login · acme · 1 running elsewhere: shop · Tab: hub' ]]"
+within "status left of a tasks window: its worktree and the tasks elsewhere" 5 bash -c "[[ \"\$(tmux -L $SOCK show -wv -t $wid @jay_left | perl -pe 's/#\[[^]]*\]//g')\" == '◆ JAY › tasks › shop/fix-login · acme · 1 running elsewhere: shop' ]]"
 within "status: the client shows the line" 3 client_shows '◆ JAY ›'
 # Cut to the width (a second terminal makes the windows its size): at 140 columns all fits; at
 # 80 the other worktrees' tasks go first ("+1"), then the picked worktree's names (signs only).
 right_plain() { wopt "$hubw" @jay_right | plain; }
-for cols in 140 80; do
+right_is() { [[ "$(tm show -wv -t "$hubw" @jay_right | plain)" == "$1" ]]; }
+for cols in 140 80 64; do
   /usr/bin/python3 -I "$REPO/tests/pty-client.py" "$TMP/client$cols.out" "$cols" 40 tmux -L "$SOCK" attach -t =jay &
   extra=$!
   within "status at $cols columns: the window's width" 5 bash -c "[[ \$(tmux -L $SOCK display -p -t $hubw '#{window_width}') == $cols ]]"
-  if ((cols == 140)); then
-    within "status at 140: all tasks with their names" 8 bash -c "[[ \"\$(tmux -L $SOCK show -wv -t $hubw @jay_right | perl -pe 's/#\[[^]]*\]//g')\" == '● shop/fix-login web  ● shop api' ]]"
-    has "status at 140: the counts with their words" "3 idle" "$(wopt "$hubw" @jay_mid | plain)"
-  else
-    within "status at 80: others to +1, the picked worktree's signs only" 8 bash -c "[[ \"\$(tmux -L $SOCK show -wv -t $hubw @jay_right | perl -pe 's/#\[[^]]*\]//g')\" == '●  +1' ]]"
-    has "status at 80: the left part whole" "◆ JAY › shop/fix-login · Tab: tasks" "$(wopt "$hubw" @jay_left | plain)"
-  fi
+  case $cols in
+    140) within "status at 140: all tasks with their names" 8 right_is '● shop/fix-login web  ● shop api'
+         has "status at 140: the counts with their words" "3 idle" "$(wopt "$hubw" @jay_mid | plain)" ;;
+    80) within "status at 80: first the other worktrees' tasks to +1" 8 right_is '● shop/fix-login web  +1' ;;
+    64) within "status at 64: then the picked worktree's tasks to their signs" 8 right_is '●  +1'
+        has "status at 64: the left part whole" "◆ JAY › hub › shop/fix-login" "$(wopt "$hubw" @jay_left | plain)" ;;
+  esac
   kill "$extra" 2>/dev/null
   wait "$extra" 2>/dev/null
 done

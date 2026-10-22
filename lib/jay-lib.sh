@@ -516,8 +516,8 @@ jay_hub_widths() {
 }
 
 # --- The status line: one line at the top of each tab, the same in both hubs ---
-# Left: "◆ JAY ›" and the picked worktree (a tasks tab: "◆ JAY › tasks › <worktree>" and the
-# tasks that run elsewhere), and where Ctrl g Tab goes; never cut. Middle: the agent counts
+# Left: the tab you are on and its worktree: "◆ JAY › hub › <picked worktree>", or on a tasks
+# tab "◆ JAY › tasks › <worktree>" and the tasks that run elsewhere; never cut. Middle: the agent counts
 # with their signs, as the list's first row. Right: the tasks (the picked worktree's bright,
 # the others dim), then the time. The parts come in by jay_mux_bar <part> <text> (agents and
 # tasks from the list's tick, where at a pick, note from jay run's tick); each one is kept in
@@ -531,13 +531,14 @@ jay_bar_set() {
   printf '%s' "$2" >"$JAY_BAR/$1.$$" && mv "$JAY_BAR/$1.$$" "$JAY_BAR/$1"
 }
 
-# The left part, with ANSI colors: $1 hub (worktree $2) or tasks (tab $2, note $3).
+# The left part, with ANSI colors: the tab you are on, $1 hub (the picked worktree $2) or tasks
+# (tab $2, note $3).
 jay_bar_left() {
-  local blue=$'\e[1;34m' dim=$'\e[2m' off=$'\e[0m'
+  local blue=$'\e[1;34m' off=$'\e[0m'
   if [[ "$1" == hub ]]; then
-    printf '%s %s %s' "${blue}◆ JAY ›${off}" "${2:-}" "${dim}· Tab: tasks${off}"
+    printf '%s %s' "${blue}◆ JAY › hub ›${off}" "${2:-}"
   else
-    printf '%s %s%s %s' "${blue}◆ JAY › tasks ›${off}" "${2:-}" "${3:+ · $3}" "${dim}· Tab: hub${off}"
+    printf '%s %s%s' "${blue}◆ JAY › tasks ›${off}" "${2:-}" "${3:+ · $3}"
   fi
 }
 

@@ -129,14 +129,15 @@ eq "review hidden: its window" "@7" "$(jay_mux_review_hidden %2)"
 reset
 jay_mux_bar where shop/fix-login
 jay_mux_bar agents $'\e[2m○\e[0m 3 idle #1'
-has "status: the hub window's left part" "set-option -w -t @0 @jay_left #[bold,fg=colour4]◆ JAY ›#[default] shop/fix-login #[dim]· Tab: tasks#[default]" "$(calls)"
+has "status: the hub window's left part, the tab you are on" "set-option -w -t @0 @jay_left #[bold,fg=colour4]◆ JAY › hub ›#[default] shop/fix-login ;" "$(calls)"
 has "status: the counts, # doubled" "set-option -w -t @0 @jay_mid #[dim]○#[default] 3 idle ##1" "$(calls)"
-has "status: a tasks window's left part" "set-option -w -t @5 @jay_left #[bold,fg=colour4]◆ JAY › tasks ›#[default] shop/main · acme #[dim]· Tab: hub#[default]" "$(calls)"
+has "status: a tasks window's left part" "set-option -w -t @5 @jay_left #[bold,fg=colour4]◆ JAY › tasks ›#[default] shop/main · acme ;" "$(calls)"
+hasnt "status: no Ctrl g Tab hint (it read as the tab's name)" "Tab: " "$(calls)"
 hasnt "status: not the hidden windows" "-t @4 @jay_left" "$(calls)"
 has "status: the launcher's title knows the worktree" "set-option -g @jay_where shop/fix-login" "$(calls)"
 reset
 jay_mux_tab_note @5 "1 running elsewhere: shop"
-has "tab note: in the window's own left part" "@jay_left #[bold,fg=colour4]◆ JAY › tasks ›#[default] shop/main · acme · 1 running elsewhere: shop #[dim]· Tab: hub#[default]" "$(calls)"
+has "tab note: in the window's own left part" "@jay_left #[bold,fg=colour4]◆ JAY › tasks ›#[default] shop/main · acme · 1 running elsewhere: shop ;" "$(calls)"
 
 # jay_bar_fit: the middle and right parts for a width, cut in this order: the other worktrees'
 # tasks to "+N", the picked worktree's tasks to their signs, the counts' words, then the rest.

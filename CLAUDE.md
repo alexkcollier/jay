@@ -164,6 +164,10 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   xterm's `\e[27;2;13~` reaches Claude as a new line. `claude attach` turns on the mouse modes
   (`mouse_any_flag`, `mouse_sgr_flag`) and the other screen.
 - A click on an unfocused pane focuses it and reaches the program (one click picks in the list).
+- tmux fires `DoubleClick1Pane` (and `TripleClick1Pane`) a moment after the clicks, and its
+  default binds `select-pane -t =` first: a focus that a double click's action moved elsewhere
+  goes back to the clicked pane. jay's config binds them to `send-keys -M` alone for a pane that
+  takes the mouse.
 - Per pane: `set-option -p -t <pane> remain-on-exit on` and `set-hook -p -t <pane> pane-died
   "run-shell -b -d 1 -C 'respawn-pane -t #{hook_pane}'"` start a pane's program again a second
   after it ends. `respawn-pane` keeps the pane's id, title and options; without a command it runs

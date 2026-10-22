@@ -175,11 +175,11 @@ mkdir -p "$HOME/.local/share/jay" && : >"$HOME/.local/share/jay/zjstatus-v0.25.0
 layout=$(jay --print-layout)
 eq "layout: one status line, no other bar" 1 "$(grep -c 'plugin location' <<<"$layout")"
 ok "layout: the status line first, at the top" bash -c "grep -n 'plugin location\|split_direction' <<<'$layout' | head -1 | grep -q plugin"
-has "layout: its left part" '◆ JAY ›#[fg=default,nobold] {pipe_where} #[dim]· Tab: tasks' "$layout"
+has "layout: its left part, the tab you are on" '◆ JAY › hub ›#[fg=default,nobold] {pipe_where}#[default]' "$layout"
 has "layout: counts, then tasks and time" '{pipe_mid}' "$layout"
 has "layout: tasks and time on the right" 'format_right  "{pipe_right}  #[fg=#727169]{datetime} "' "$layout"
 tasks_layout=$(jay --print-tasks-tab /w/shop 'shop/main · acme')
-has "tasks tab: its left part" '◆ JAY › tasks ›#[fg=default,nobold] shop/main · acme{pipe_note} #[dim]· Tab: hub' "$tasks_layout"
+has "tasks tab: its left part" '◆ JAY › tasks ›#[fg=default,nobold] shop/main · acme{pipe_note}#[default]' "$tasks_layout"
 eq "tasks tab: one status line" 1 "$(grep -c 'plugin location' <<<"$tasks_layout")"
 rm -f "$HOME/.local/share/jay/zjstatus-v0.25.0.wasm"
 

@@ -391,9 +391,9 @@ _jay_zj_status() {
   local tz left
   tz=$(readlink /etc/localtime | sed 's#.*/zoneinfo/##')
   if [[ "$1" == hub ]]; then
-    left='#[fg=#7E9CD8,bold]◆ JAY ›#[fg=default,nobold] {pipe_where} #[dim]· Tab: tasks'
+    left='#[fg=#7E9CD8,bold]◆ JAY › hub ›#[fg=default,nobold] {pipe_where}'
   else
-    left="#[fg=#7E9CD8,bold]◆ JAY › tasks ›#[fg=default,nobold] $(sed 's/[\\"]/\\&/g; s/#\[/# [/g' <<<"$2"){pipe_note} #[dim]· Tab: hub"
+    left="#[fg=#7E9CD8,bold]◆ JAY › tasks ›#[fg=default,nobold] $(sed 's/[\\"]/\\&/g; s/#\[/# [/g' <<<"$2"){pipe_note}"
   fi
   cat <<KDL
 plugin location="file:$JAY_ZJSTATUS" {

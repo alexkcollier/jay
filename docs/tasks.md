@@ -17,8 +17,8 @@
 Each worktree gets its own tasks tab in the hub for long-running commands: `pnpm dev`, watchers,
 `docker compose up`. The tab is named `<repo>/<branch> · <client>` and is made the first time it
 is needed. Each pane in a tasks tab is a task. You and the agents see the same panes. The status
-line at the top of each tab says where you are: `◆ JAY › <picked worktree>` on the hub tab,
-`◆ JAY › tasks › <its worktree>` on a tasks tab, with where Ctrl g Tab goes.
+line at the top of each tab says which tab you are on: `◆ JAY › hub › <picked worktree>` on the
+hub tab, `◆ JAY › tasks › <its worktree>` on a tasks tab. Ctrl g Tab goes from one to the other.
 
 - **Ctrl g Tab**: from the hub tab to the tasks tab of the worktree you picked (agent or
   worktree row; a new tab when it has none); from a tasks tab back to the hub. With an agent
