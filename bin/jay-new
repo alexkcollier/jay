@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
-# jay new <branch|pr:N> [-b base] [-t "task note"] [-a] [-- prompt...]
+# jay new <branch|pr:N> [-b base] [-t "task note"] [-a] [--no-report] [-- prompt...]
 # Create (or reuse) the worktree (worktrunk's wt switch) and store the task note. With a prompt,
 # or -a for an idle one, start a background Claude agent there (see it in the hub list or
-# `claude agents`). Without -t, the first line of the prompt becomes the task note.
+# `claude agents`). Without -t, the first line of the prompt becomes the task note. Run by a
+# Claude agent, the prompt tells the new agent to report back to it (--no-report: not).
 set -euo pipefail
 source "$HOME/.local/lib/jay-lib.sh"
 
-usage() { sed -n '2,5s/^# \{0,1\}//p' "$0"; }
-branch="" base="" task="" agent=false prompt=()
+usage() { sed -n '2,6s/^# \{0,1\}//p' "$0"; }
+branch="" base="" task="" agent=false report=true prompt=()
 while (($#)); do
   case $1 in
     -b|--base) base=$2; shift 2 ;;
     -t|--task) task=$2; shift 2 ;;
     -a|--agent) agent=true; shift ;;
+    --no-report) report=false; shift ;;
     --) shift; prompt=("$@"); break ;;
     -h|--help) usage; exit 0 ;;
     *) branch=$1; shift ;;
@@ -36,6 +38,26 @@ fi
 [[ -n "$task" ]] && wt -C "$path" config state vars set task="$task" >/dev/null 2>&1
 
 IFS=$'\t' read -r _ repo branch _ < <(jay_describe "$path")
+# The name of the Claude agent that runs this (an orchestrator, the hub Claude), as `claude
+# agents` and ListAgents show it: SendMessage finds a session by that name. Its job's state.json
+# when claude agents does not have it. Empty for a person in a shell.
+caller_name() {
+  local name=""
+  if [[ -n "${CLAUDE_CODE_SESSION_ID:-}" ]]; then
+    name=$(jq -r --arg s "$CLAUDE_CODE_SESSION_ID" 'first(.[] | select(.sessionId == $s) | .name // empty) // empty' <<<"$agents" 2>/dev/null || true)
+  fi
+  if [[ -z "$name" && -n "${CLAUDE_JOB_DIR:-}" ]]; then
+    name=$(jq -r '.name // empty' "$CLAUDE_JOB_DIR/state.json" 2>/dev/null || true)
+  fi
+  printf '%s' "$name"
+}
+if ((${#prompt[@]})) || [[ "$agent" == true ]]; then
+  agents=$(claude agents --json --all 2>/dev/null || true)
+fi
+if ((${#prompt[@]})) && [[ "$report" == true ]]; then
+  caller=$(caller_name)
+  [[ -z "$caller" ]] || prompt+=($'\n\n'"When you are done, or blocked, report to $caller with SendMessage: the branch head, the result, what needs a decision.")
+fi
 # Called from an agent (an orchestrator, the hub Claude), the agent's CLAUDE*/ANTHROPIC*
 # variables would reach the new one: an inherited CLAUDE_CODE_CHILD_SESSION hides it from
 # `claude agents` and turns off its transcript. Start it without them.
@@ -43,9 +65,9 @@ strip=()
 for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
 # A second agent in the same worktree gets <repo>/<branch>-2 (jay_unique_name).
 if ((${#prompt[@]})); then
-  (cd "$path" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(jay_unique_name "$(jay_tab_name "$repo" "$branch")")" "${prompt[*]}")
+  (cd "$path" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(jay_unique_name "$(jay_tab_name "$repo" "$branch")" "$agents")" "${prompt[*]}")
 elif [[ "$agent" == true ]]; then
-  (cd "$path" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(jay_unique_name "$(jay_tab_name "$repo" "$branch")")")
+  (cd "$path" && env ${strip[@]+"${strip[@]}"} claude --bg --name "$(jay_unique_name "$(jay_tab_name "$repo" "$branch")" "$agents")")
 else
   echo "Worktree ready: $path"
   echo "Open it with: jay open $branch"

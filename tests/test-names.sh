@@ -64,6 +64,7 @@ shop="$root/shop"
 repo "$shop" && git -C "$shop" worktree add -q "$root/shop.feat" -b feat
 cat >"$HOME/.local/bin/wt" <<EOF
 #!/bin/bash
+printf '%s\n' "\$*" >>"$STUB/wt.calls"
 [[ "\$1" == switch ]] && echo '{"path": "$root/shop.feat"}'
 exit 0
 EOF
@@ -76,6 +77,29 @@ eq "jay new with a prompt, once more: shop/feat-4" shop/feat-4 "$(last_name)"
 stub_agents '[]'
 (cd "$shop" && jay-new feat -a) >/dev/null 2>&1
 eq "jay new: a free name" shop/feat "$(last_name)"
+
+# --- jay new from a Claude agent: the worker's prompt says to report back to it ---
+report="report to shop/main with SendMessage"
+: >"$STUB/claude.calls"
+(cd "$shop" && jay-new feat -- write the tests) >/dev/null 2>&1
+hasnt "jay new from a shell: no report line" "report to" "$(cat "$STUB/claude.calls")"
+stub_agents "[$(agent 0000000a shop/main working "$shop")]"
+: >"$STUB/claude.calls"
+(cd "$shop" && CLAUDE_CODE_SESSION_ID=sid-0000000a jay-new feat -- write the tests) >/dev/null 2>&1
+has "jay new from an agent: its name from claude agents" "$report" "$(cat "$STUB/claude.calls")"
+has "the prompt comes first" "write the tests" "$(grep -e '^--bg' "$STUB/claude.calls")"
+eq "the task note: still the first line of the prompt" "task=write the tests" "$(grep -o 'task=.*' "$STUB/wt.calls" | tail -1)"
+job 0000000c '{"name": "shop/main"}'
+: >"$STUB/claude.calls"
+(cd "$shop" && CLAUDE_JOB_DIR="$HOME/.claude/jobs/0000000c" jay-new feat -- write the tests) >/dev/null 2>&1
+has "jay new from an agent: its name from its job's state.json" "$report" "$(cat "$STUB/claude.calls")"
+: >"$STUB/claude.calls"
+(cd "$shop" && CLAUDE_CODE_SESSION_ID=sid-0000000a jay-new feat --no-report -- write the tests) >/dev/null 2>&1
+hasnt "jay new --no-report: no report line" "report to" "$(cat "$STUB/claude.calls")"
+has "jay new --no-report: the prompt" "write the tests" "$(cat "$STUB/claude.calls")"
+: >"$STUB/claude.calls"
+(cd "$shop" && CLAUDE_CODE_SESSION_ID=sid-0000000a jay-new feat -a) >/dev/null 2>&1
+hasnt "jay new -a from an agent: no prompt, so no report line" "report to" "$(cat "$STUB/claude.calls")"
 
 # --- jay c (and its link c) ---
 stub_agents "[$(agent 0000000e shop/feat)]"
