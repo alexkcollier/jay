@@ -24,6 +24,10 @@ has "the prompt: the Agent tool only for quick lookups" "Agent tool only for you
 has "the prompt: subscribe to the worker's idle notice" "notify_when_idle: true" "$prompt"
 has "the prompt: no polling loops" "Never poll \`claude agents\` or \`claude logs\` in a loop" "$prompt"
 hasnt "the prompt: no ambiguous \"review\" of work" "Plan, read, review" "$prompt"
+has "the prompt: one worktree per code change" "One worktree per code change" "$prompt"
+has "the prompt: read-only tasks share a worktree, named by role" "\`jay new <its branch> -n <role> -- <prompt>\` (name the agent by its role)" "$prompt"
+has "the prompt: commit only your own paths" "\`git commit -- <paths>\`" "$prompt"
+has "the hub Claude prompt: shared worktrees" "follow-ups share one" "$(jay_hub_claude_prompt)"
 hub=$(jay_hub_claude_prompt)
 has "the hub Claude prompt: orchestrators only read" "skills that change a branch run in its workers" "$hub"
 has "the hub Claude prompt: in-depth work goes to an agent" "To an agent goes every change and every in-depth task" "$hub"

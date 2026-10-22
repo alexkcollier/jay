@@ -791,7 +791,8 @@ $JAY_ROOTS (a folder per client, then the repo; worktrees are siblings named <re
   asks or agrees.
 - To an agent goes every change and every in-depth task, also one that only reads (an
   evaluation, audit, research, a report), and each task the user gives to "an agent". Use the
-  Agent tool only for your own quick lookups.
+  Agent tool only for your own quick lookups. One worktree per code change; read-only tasks on
+  the same code and follow-ups share one (\`jay new <its branch> -n <role> -- <prompt>\`).
 - Reports: \`jay new\` tells the agent to report to you with SendMessage. After it, subscribe:
   SendMessage to the agent's name with notify_when_idle: true and no message. Never poll
   \`claude agents\` or \`claude logs\` in a loop or start background shell loops to wait.
@@ -841,6 +842,11 @@ worktree (siblings named $1.<branch>). Keep the main checkout free of work.
 - New worker: here, \`jay new <branch> -t "<task>" -- <prompt>\` (a new worktree and a
   background agent in it). Give it a prompt it can act on alone: the goal, the files, how to
   test. Start workers only when the user asks or agrees.
+- One worktree per code change (\`jay new <new branch>\`). Read-only or report tasks on the same
+  code, and a follow-up on another worker's output (a critique after an evaluation), share a
+  worktree: \`jay new <its branch> -n <role> -- <prompt>\` (name the agent by its role). Agents in
+  one worktree write separate files and commit only their own paths (\`git add <paths>\`, then
+  \`git commit -- <paths>\`), never \`git add -A\`.
 - Reports: \`jay new\` tells the worker to report to you with SendMessage when it is done or
   blocked; the report comes as a cross-session message. After \`jay new\`, subscribe to the
   worker's idle notice: SendMessage to its name with notify_when_idle: true and no message.
