@@ -108,6 +108,10 @@ You type to the agent here, as in any `claude attach`.
 - When `claude attach` fails at once (for example, the agent's worktree is gone), its error stays
   on screen. Enter tries again.
 - The pane never closes.
+- Type skills and slash commands here, in the agent that must run them. A skill that changes a
+  branch (a commit, a push, a pull request skill) goes to the worker of that branch, not to an
+  orchestrator: the orchestrator tells you which worker is ready for which command. See
+  [Skills and slash commands](orchestrators.md#skills-and-slash-commands).
 
 ## The hub Claude
 

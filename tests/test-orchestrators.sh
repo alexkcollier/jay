@@ -14,6 +14,9 @@ repo "$web" && git -C "$web" worktree add -q "$root/web.fix" -b fix
 
 prompt=$(jay_orchestrator_prompt shop "$shop")
 eq "the prompt starts with the mark" "$JAY_ORCH_MARK" "${prompt:0:${#JAY_ORCH_MARK}}"
+has "the prompt: skills that write run in the worker" "run in the worker of that branch, never here" "$prompt"
+has "the prompt: user-only skills" "tell the user which" "$prompt"
+has "the hub Claude prompt: orchestrators only read" "skills that change a branch run in its workers" "$(jay_hub_claude_prompt)"
 # respawnFlags: the options a background agent started with (claude keeps them in state.json).
 orch_flags() { jq -nc --arg p "$(jay_orchestrator_prompt "$1" "$2")" --arg n "$1/main" '["--name", $n, "--append-system-prompt", $p]'; }
 job 0000000a "{\"cwd\": \"$shop\", \"respawnFlags\": $(orch_flags shop "$shop")}"

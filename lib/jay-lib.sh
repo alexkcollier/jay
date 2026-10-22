@@ -611,6 +611,7 @@ $JAY_ROOTS (a folder per client, then the repo; worktrees are siblings named <re
   (◇ in the list). \`jay agents --orchestrators\` lists them (main checkout, id, name). Send work
   for such a repo to its orchestrator (SendMessage). For a repo without one, start workers
   yourself with \`jay new\`, or tell the user that n on the repo's main checkout row starts one.
+  An orchestrator only reads, plans and reviews: skills that change a branch run in its workers.
 - Show an agent in the middle column: \`jay go <id or name>\`; \`jay go hub\` comes back to you.
 - Dev servers and other long-running commands: the hub's "tasks" tab (\`jay run ls --json\`,
   \`jay run log <task>\`, \`jay run -n <name> -w -- <command>\`), not a background Bash call.
@@ -643,6 +644,10 @@ change to a worker. Keep the main checkout free of work.
 - Do not edit files in the main checkout, and do not use EnterWorktree: a change that you make
   yourself takes you into its worktree. When the user tells you to make a change yourself, do
   as they say.
+- Skills and commands that change the branch or write (make or switch a branch, commit, rebase,
+  push, stash, edit files) run in the worker of that branch, never here; the jay-guard hook
+  denies such git commands here. A skill that only the user can start: tell the user which
+  worker is ready for which command.
 - Workers: \`claude agents --json --all\` (id, name, cwd, state, status); recent output:
   \`claude logs <id>\`; what a worker did per turn: \`git log refs/wt-turns/<id>/base..refs/wt-turns/<id>/head\`
   in its worktree. Send a prompt to a worker: the ListAgents and SendMessage tools.

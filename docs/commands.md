@@ -28,7 +28,7 @@ worktrunk's `wt <name>` dispatch.
 | `jay agents --json` | `claude agents --json --all` with each agent's `phase` (input, failed, unread, working, idle), for `jay all` and the mod. |
 | `jay agents --orchestrators [main checkout]` | The orchestrator of each repo, one line each: main checkout, id, name (see [Orchestrators](orchestrators.md)). |
 | `jay clear <id>` | Type `/clear` into idle background agent `<id>` through a hidden `claude attach` (`c` in the list). Exit 0 when its session id changed. See [Fresh context](orchestrators.md#fresh-context). |
-| `jay setup [path]` | The worktrunk `pre-start` hook, when you turn it on (`./install.sh --with-setup`): in a new worktree, copy the ignored files (`.worktreeinclude` through `wt step copy-ignored`, else the ignored `.env*` files of the main checkout) and install the dependencies (pnpm, bun, yarn, npm or uv, from the lock file). It puts back a lock file that the install changed. Safe to run again. |
+| `jay setup [path]` | The worktrunk `pre-start` hook, when you turn it on (`./install.sh --with-setup`): in a new worktree, copy the ignored files (`.worktreeinclude` through `wt step copy-ignored`, else the ignored `.env*` files of the main checkout; outside `.claude`, `node_modules` and `dist`), copy the main checkout's `.claude/settings.local.json` (your Claude permissions for the repo) when it is ignored and the worktree has none (also with a `.worktreeinclude`), and install the dependencies (pnpm, bun, yarn, npm or uv, from the lock file). It puts back a lock file that the install changed. Safe to run again. |
 | `wt task [text]` | worktrunk alias: set the worktree's task note, or show it. |
 | `jay snapshot --list [path]` | The turn chains of a worktree: id, age, last subject. |
 | `jay snapshot --prune [--dry-run]` | Remove the chains of agents that `claude agents --all` no longer lists, when their worktree is gone or their last turn is older than 7 days. It does nothing without an agent list or the worktree cache. |
@@ -43,6 +43,8 @@ Not for hand use:
 
 - `jay-notify` (Stop, Notification)
 - `jay-snapshot` (UserPromptSubmit, Stop, PostToolUse)
+- `jay-guard` (PreToolUse on Bash: an orchestrator's git commands in its main checkout; see
+  [Skills and slash commands](orchestrators.md#skills-and-slash-commands))
 - `jay-run --hook` (SessionStart), `jay-run --bar` (the bar's tasks), `jay-run --tick` (the
   list's tick: a console in each tasks tab, the pane names, the extra consoles, then the bar's
   tasks), `jay-run --where` (the hub banner's worktree, at each pick), `jay-run --switch`

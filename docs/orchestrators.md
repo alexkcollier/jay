@@ -9,6 +9,7 @@
 - [How it makes workers](#how-it-makes-workers)
 - [How it follows and steers workers](#how-it-follows-and-steers-workers)
 - [Review and merge](#review-and-merge)
+- [Skills and slash commands](#skills-and-slash-commands)
 - [The signs](#the-signs)
 - [Fresh context](#fresh-context)
 - [An orchestrator in a worktree it entered](#an-orchestrator-in-a-worktree-it-entered)
@@ -74,6 +75,10 @@ change to a worker. Keep the main checkout free of work.
 - Do not edit files in the main checkout, and do not use EnterWorktree: a change that you make
   yourself takes you into its worktree. When the user tells you to make a change yourself, do
   as they say.
+- Skills and commands that change the branch or write (make or switch a branch, commit, rebase,
+  push, stash, edit files) run in the worker of that branch, never here; the jay-guard hook
+  denies such git commands here. A skill that only the user can start: tell the user which
+  worker is ready for which command.
 - Workers: `claude agents --json --all` (id, name, cwd, state, status); recent output:
   `claude logs <id>`; what a worker did per turn: `git log refs/wt-turns/<id>/base..refs/wt-turns/<id>/head`
   in its worktree. Send a prompt to a worker: the ListAgents and SendMessage tools.
@@ -95,6 +100,9 @@ What each part tells the agent:
   the files, how to test). It starts workers only when you ask or agree.
 - **No edits in the main checkout, no `EnterWorktree`**: it does not do the work itself. When you
   tell it to make a change itself, it does as you say (it then goes into a worktree).
+- **Skills and commands**: one that changes the branch or writes runs in the worker of that
+  branch. For a skill that only you can start, it tells you the worker and the command. See
+  [Skills and slash commands](#skills-and-slash-commands).
 - **Workers**: how it sees them (`claude agents`, `claude logs`, the turn chains of the hub) and
   how it talks to them (ListAgents, SendMessage).
 - **Worktrees**: `wt list` gives the git state and the task notes.
@@ -160,6 +168,110 @@ flow:
    worktree row removes the worktree (`wt remove`), then its idle agents (`claude rm`), and
    closes its tasks tab. The branch is deleted only when it is merged. Or ask the orchestrator to
    run `wt remove` and `claude rm`.
+
+## Skills and slash commands
+
+The rule: a command that changes the branch or writes runs in a worktree. In its main checkout,
+an orchestrator only reads, plans, reviews and steers workers. It merges there only with
+`git merge --ff-only <branch>`, and only when you tell it to.
+
+Why a rule for skills: Claude stops a background agent's file edits (Edit, Write) in the main
+checkout, but it does not stop git through Bash. The project skills of a repo
+(`.claude/skills`, tracked, so each worktree has them too) can run such git. Some examples:
+
+- A pull request skill (`/open-pr`, say) makes a branch with `git checkout -b` when it is on the
+  default branch, pushes it and runs `gh pr create`. Later it edits, commits and pushes the
+  fixes for the review comments.
+- A squash skill runs `git reset --soft`, a commit and a rebase.
+- An audit skill runs `git checkout <PR branch>`.
+
+In the main checkout, each of these moves main or changes its files. In a worker, they change
+only the worker's branch.
+
+| Kind of skill or command | Examples | Where it runs |
+|---|---|---|
+| Read and report | questions about the code, an audit or explain skill that only reads, `/context`, `/cost` | the orchestrator |
+| Review with a target | `/code-review <branch>`, `/code-review <PR number>` | the orchestrator |
+| Review that writes | `/code-review --fix` (it applies the findings to the files) | the worker of that branch |
+| Branch, commit, history, push | a pull request skill, a squash or rebase skill, a skill that fixes review comments | the worker of that branch |
+| Checkout of another branch | an audit skill that checks out a PR branch, `gh pr checkout` | a worker on that branch: `jay new pr:<N>` |
+| Files and stash | a skill that edits, formats or generates files; `git stash`, `git clean` | the worker of that branch |
+
+Many such skills have `disable-model-invocation: true` in their front matter: only you can
+start them, when you type them. Claude does not start them on its own. The flow:
+
+1. The orchestrator gets the worker ready: the change is committed and the tests pass.
+2. It tells you which worker is ready for which command, for example: "shop/fix-login is
+   ready for `/open-pr`".
+3. You pick that worker in the list (the middle column shows it) and type the command there.
+4. The skill runs in the worker's worktree, on its branch. The orchestrator follows the worker
+   as usual (see [How it follows and steers workers](#how-it-follows-and-steers-workers)).
+
+A skill that Claude can start itself goes to the worker in the same way: the orchestrator sends
+the worker a prompt that asks for it (SendMessage).
+
+### When such a skill runs in an orchestrator
+
+When you type such a skill in the orchestrator, or the orchestrator starts one:
+
+- Claude's own rule stops its file edits in the main checkout.
+- The `jay-guard` hook stops its git and gh commands that change the main checkout (see below).
+  Claude gets the reason: the command changes the main checkout, so give it to the worker of
+  that branch, or run it in that branch's worktree. The orchestrator tells you, and the main
+  checkout stays as it was.
+- The skill stops at that step. Steps before it ran, but those only read.
+
+Then give the skill to the worker of that branch, as above.
+
+### The guard
+
+`jay-guard` (`bin/jay-guard`) is a PreToolUse hook on Bash (`config/claude-settings-hooks.json`;
+`./install.sh` adds it to `~/.claude/settings.json`). It runs before each Bash call of each
+session:
+
+- It acts only for an orchestrator: a background agent with the orchestrator prompt in its job's
+  `respawnFlags` (`CLAUDE_JOB_DIR` gives the job), whose folder is the main checkout of its repo.
+  For every other session it exits at once.
+- It acts only on commands that run in the main checkout: in the Bash folder (`cwd`), or after a
+  `cd` or `git -C` into it. A subfolder counts; a worktree in it (`.claude/worktrees/...`) does
+  not. A command after `cd <worktree>` or with `git -C <worktree>` passes, also in a subshell.
+- It reads compound commands: `&&`, `||`, `;`, `|`, new lines, subshells, `$(...)` and
+  backticks, `bash -c '...'`, `eval`. Quotes, comments, redirections and heredoc bodies are not
+  commands.
+
+What it denies in the main checkout:
+
+- `git checkout` and `git switch` (a branch, `-b`, `-c`, files), `git restore`, `git clean`,
+  `git add`, `git rm`, `git mv`, `git apply`;
+- `git branch <name>`, `-d`, `-D`, `-m`, `-c`, `-f`, `-u`; `git tag <name>`, `-a`, `-d`;
+- `git commit`, `reset`, `rebase`, `cherry-pick`, `revert`, `am`, `pull`, `push`, `stash` (not
+  `stash list` or `stash show`);
+- `git merge` without `--ff-only` (also with `--squash` or `--no-ff`);
+- `git worktree add`, `remove`, `move`, `prune` (worktrees come from `jay new`, a removal from
+  `wt remove`);
+- `git fetch` into a local branch (`origin a:b`), `git config` writes;
+- `gh pr checkout`, `gh pr create`, `gh pr merge`, `gh repo sync`;
+- a git command that it does not know (an alias, say), or whose folder or subcommand it cannot
+  tell (`cd "$WT"`, `git -C "$(...)"`): when in doubt, it denies.
+
+What it allows: `git status`, `log`, `diff`, `show`, `branch` (a list), `tag` (a list),
+`rev-parse`, `merge-base`, `fetch`, `worktree list`, `for-each-ref`, `stash list`, `remote -v`,
+`config --get` and other reads; `git merge --ff-only <branch>`; all `gh` commands except the
+ones above; all other programs.
+
+It checks only git and gh. Other programs that write files (`sed -i`, a formatter, an
+install) are not checked: the orchestrator prompt covers them.
+
+A denied call returns this JSON (exit 0), and Claude shows the reason as the tool's result:
+
+```json
+{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+ "permissionDecisionReason": "jay-guard: `git checkout -b fix` is denied in the main checkout ..."}}
+```
+
+The deny holds also with `--permission-mode bypassPermissions`. An orchestrator started before
+the guard has the old prompt, but the guard acts for it too: it looks only for the prompt's
+first words.
 
 ## The signs
 
@@ -249,6 +361,8 @@ The hub Claude ([The hub Claude](working.md#the-hub-claude)) works across repos.
 - `jay agents --orchestrators` lists them, one line each: main checkout, id, name.
   `jay agents --orchestrators <main checkout>` gives only the one of that repo.
 - Send work for such a repo to its orchestrator (SendMessage).
+- An orchestrator only reads, plans and reviews: skills that change a branch run in its workers
+  (see [Skills and slash commands](#skills-and-slash-commands)).
 - For a repo without one, start workers yourself with `jay new`, or tell the user that `n` on the
   repo's main checkout row starts one.
 
