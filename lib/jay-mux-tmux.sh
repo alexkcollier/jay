@@ -36,15 +36,14 @@ jay_mux_has_client() {
 }
 
 jay_mux_server_pid() {
-  _jay_tm display-message -p -t "=$JAY_SESSION" '#{pid}' 2>/dev/null
+  _jay_tm display-message -p -t "=$JAY_SESSION:" '#{pid}' 2>/dev/null
 }
 
 # Remove a server that does not answer (or has no hub session). A server that hangs is killed by
 # its socket's name.
 jay_mux_kill() {
   _jay_tm kill-server >/dev/null 2>&1 && return 0
-  pkill -9 -f "tmux -L $JAY_TMUX_SOCKET( |\$)" 2>/dev/null
-  return 0
+  pkill -9 -f "tmux -L $JAY_TMUX_SOCKET( |\$)" 2>/dev/null || true
 }
 
 # The hub of wt-hub (jay's old name) runs: the zellij session "hub" with the list pane
@@ -61,7 +60,7 @@ jay_mux_old_hub() {
 jay_mux_start() {
   local list middle right lines cols root=${JAY_ROOTS%%:*} p0 p1 p2
   read -r list middle right < <(jay_hub_widths)
-  read -r lines cols < <(stty size 2>/dev/null)
+  read -r lines cols < <(stty size 2>/dev/null) || true
   [[ "${cols:-}" =~ ^[0-9]+$ ]] || cols=200
   [[ "${lines:-}" =~ ^[0-9]+$ ]] || lines=50
   export JAY_MUX=tmux JAY_SESSION JAY_TMUX_SOCKET
@@ -72,7 +71,9 @@ jay_mux_start() {
     "$HOME/.local/bin/jay-pane" agent)
   p2=$(_jay_tm split-window -h -d -t "$p1" -l "$((right * 100 / (middle + right)))%" -c "$root" \
     -P -F '#{pane_id}' "$HOME/.local/bin/jay-pane" review)
-  _jay_tm select-pane -t "$p0" -T worktrees \; select-pane -t "$p2" -T review \; select-pane -t "$p1" -T hub
+  # select-pane -T only sets the title; the last select-pane gives the agent the focus.
+  _jay_tm select-pane -t "$p0" -T worktrees \; select-pane -t "$p2" -T review \; select-pane -t "$p1" -T hub \
+    \; select-pane -t "$p1"
   exec tmux -L "$JAY_TMUX_SOCKET" -f "$JAY_TMUX_CONF" attach -t "=$JAY_SESSION"
 }
 
