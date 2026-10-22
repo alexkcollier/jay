@@ -132,7 +132,7 @@ there, and there is no prefix key. Ctrl g, then one key; the bar shows the keys 
 | Ctrl g, `;` | last pane |
 | Ctrl g, `v` | hide or show review |
 | Ctrl g, Tab | hub window ⇄ the picked worktree's tasks window (as in zellij) |
-| Ctrl g, `r` | the launcher, in a popup; its title says where the line runs |
+| Ctrl g, `r` | the launcher, in a popup; its title says where the line runs. A command that ends shows its output in a popup of its size (any key closes it); one that runs on closes the launcher |
 | Ctrl g, `t` | all tasks in a popup picker; Enter: that task's window |
 | Ctrl g, `q` | quit this terminal's view (detach); the hub, the agents and the tasks run on |
 | Ctrl g, `[` | scroll mode (tmux's copy mode; `q` leaves it) |

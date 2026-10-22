@@ -209,6 +209,9 @@ within "bar: the main checkout's, dim, the repo as project" 3 option_has @jay_ta
 hasnt "bar: no ports" "$port1" "$(tm show -gv @jay_tasks)"
 wid=$(tm list-windows -t =jay -F '#{window_id} #{window_name}' | awk '/fix-login/ { print $1 }')
 within "note: the fix-login window names the task elsewhere" 3 bash -c "[[ \"\$(tmux -L $SOCK show -wv -t $wid @jay_note)\" == '1 running elsewhere: shop' ]]"
+eq "tasks window: console and task side by side, as zellij's tab" "1 1" \
+  "$(tm list-panes -t "$wid" -F '#{pane_top}' | sort -u | wc -l | tr -d ' ') $(tm list-panes -t "$wid" -F '#{pane_left}' | grep -c '^0$')"
+eq "pane titles centered in the border, as zellij's frames" '#[align=centre] #{pane_title} ' "$(tm show -gv pane-border-format)"
 within "pane title: name and ports" 4 bash -c "tmux -L $SOCK list-panes -s -t =jay -F '#{pane_title}' | grep -qx 'web · :$port1'"
 has "ls: the name without the ports" "  web  " "$(jay run ls)"
 has "log" "Serving" "$(jay run log web)"

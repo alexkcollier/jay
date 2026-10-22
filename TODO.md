@@ -23,7 +23,9 @@ bin/jay-pane) ⇄ files (yazi).
   redraws in the list (the clear on a new row count stays), wide glyphs. Known limits: both
   hubs' lists follow a pick made in either (`jay_list_follow` finds every list's socket); the
   zellij tasks tabs' note counts from the picked worktree, tmux's from each window's own; the
-  launcher's popup has a fixed height. Then step 4 (tmux the default) and 5 (remove zellij).
+  launcher's popup has a fixed height (a command's output opens a second popup of its size);
+  the bar is under the banner at the top (tmux has one status position; zellij's is at the
+  bottom). Then step 4 (tmux the default) and 5 (remove zellij).
 - An agent whose home is gone goes on as a copy with a new id (docs/working.md, "When the folder
   an agent came from goes"): its turn chain starts again, and an old entry whose recorded
   worktree is on disk stays hidden until that worktree goes. Claude has no option to move an

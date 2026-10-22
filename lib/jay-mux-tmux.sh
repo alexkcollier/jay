@@ -301,14 +301,17 @@ jay_mux_tab_close() {
   _jay_tm kill-window -t "$1" >/dev/null 2>&1
 }
 
-# A new pane in window $1, titled $2, in folder $3, running "${@:4}"; prints its id. The window's
-# panes are tiled; with no room, they are tiled first.
+# A new pane in window $1, titled $2, in folder $3, running "${@:4}"; prints its id. As in
+# zellij's tasks tab: up to three panes side by side, more in a grid. With no room, the panes
+# make room first.
 jay_mux_tab_pane() {
-  local pane
-  pane=$(_jay_tm split-window -d -t "$1" -c "$3" -P -F '#{pane_id}' "${@:4}" 2>/dev/null) \
+  local pane n layout=even-horizontal
+  pane=$(_jay_tm split-window -h -d -t "$1" -c "$3" -P -F '#{pane_id}' "${@:4}" 2>/dev/null) \
     || { _jay_tm select-layout -t "$1" tiled >/dev/null 2>&1
          pane=$(_jay_tm split-window -d -t "$1" -c "$3" -P -F '#{pane_id}' "${@:4}" 2>/dev/null); } || return 1
-  _jay_tm select-pane -t "$pane" -T "$2" \; select-layout -t "$1" tiled >/dev/null 2>&1
+  n=$(_jay_tm display-message -p -t "$1" '#{window_panes}' 2>/dev/null)
+  ((${n:-0} > 3)) && layout=tiled
+  _jay_tm select-pane -t "$pane" -T "$2" \; select-layout -t "$1" "$layout" >/dev/null 2>&1
   printf '%s\n' "$pane"
 }
 

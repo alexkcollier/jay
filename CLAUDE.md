@@ -140,7 +140,15 @@ Facts about your own machine (where the live install is, how your mod loads) go 
 - A key table (`bind -n C-g switch-client -T jay`) acts once and goes back; `run-shell -b` runs a
   script without a pane. `display-popup -E -e VAR=1` sets a variable in the popup; a popup has
   no pane of its own (its `TMUX_PANE` is the pane under it: `jay_mux_self` ignores it there).
-  The popup's `-T` title is a format.
+  The popup's `-T` title is a format. A client has one popup at a time: a new `display-popup`
+  replaces the open one, and the old one's command ending then closes the new one. To follow a
+  popup with another (the launcher's output), the first one runs `run-shell -b "sleep 0.3;
+  tmux display-popup -c <client> …"` and ends; `display -p '#{client_name}'` in a popup gives
+  its client.
+- `set-titles-string '#S | #{pane_title}'` (zellij's title format): tmux sends a new title
+  (OSC 2) when the focus moves and when the focused pane is renamed.
+- One status position only (top or bottom) for all status lines: the banner and the bar are
+  both at the top, not banner top and bar bottom as in zellij.
 - User options carry the bar: `set -g @jay_tasks '#[fg=...]text'` (styles in the value work; `#`
   must be doubled), `set -w -t @5 @jay_note …` for one window; the status line reads pane, then
   window, then global options.
