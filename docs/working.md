@@ -281,8 +281,8 @@ folder in its transcript.
 An update puts a new `claude` binary in place (see
 [Claude Code and its updates](install.md#claude-code-and-its-updates)). New agents and new
 `claude attach` clients use it at once. A background agent that runs keeps the binary it
-started with. A dim `↻` after its name marks such an agent, and the first row of the list (and
-the bar) counts them.
+started with. A dim `↻` after its name marks such an agent, and the status line's agent counts
+end with their number (`↻ 2`).
 
 With `JAY_AUTO_RESPAWN=idle` (the default), the list moves each such agent to the new binary at
 a quiet moment, at most once a minute, with `claude respawn <id>`. Each respawn goes into

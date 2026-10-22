@@ -279,11 +279,13 @@ $(bg r13 1002 "{\"cwd\": \"$root/web.fix\", \"name\": \"web/fix\"}")
 EOF
 )
 stub_agents "$two"
-rows=$(FZF_COLUMNS=80 jay-sidebar --rows)
+rows=$(FZF_COLUMNS=80 JAY_SIDEBAR_SUM="$TMP/sum" jay-sidebar --rows)
 row() { awk -F'\t' -v s="$1" '$2 == s { print $3 }' <<<"$rows"; }
 has "list: ↻ after an agent on an old binary" $'web/main \e[2m↻\e[0m' "$(row sid-r12)"
 hasnt "list: no ↻ on the installed binary" "↻" "$(row sid-r13)"
-has "list: the count in the first row" $'\e[2m↻ 1' "$(row sum)"
+has "the counts for the status line: the ↻ count" $'\e[2m↻ 1' "$(cat "$TMP/sum")"
+eq "the list has no counts row (the status line has them)" "" "$(row sum)"
+eq "the list's first row: ◆ hub" hub "$(head -1 <<<"$rows" | cut -f2)"
 has "list: ↻ in the help (?)" "↻" "$(JAY_SIDEBAR_HELP="$TMP/help" jay-sidebar --footer --toggle)"
 
 finish

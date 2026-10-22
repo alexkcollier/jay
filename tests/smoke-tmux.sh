@@ -122,6 +122,8 @@ eq "the panes from the left" "hub.0 hub.1 hub.2" "$(place_of "$list") $(place_of
 within "a client" 3 has_client
 within "the agent pane opens the hub Claude" 10 screen_has "$agent" 'ATTACHED bbbb0001'
 within "the list shows the agents" 15 screen_has "$list" fix-login
+first_row_is_hub() { tm capture-pane -p -t "$list" | grep -v '^[[:space:]]*$' | head -1 | grep -q '◆ hub'; }
+within "the list has no counts row: its first row is ◆ hub" 5 first_row_is_hub
 within "the focus starts in the middle" 2 is_pane "$agent"
 
 # A pick: the agent in the middle (Opening at once), its worktree in review, the banner.

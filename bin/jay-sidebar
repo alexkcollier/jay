@@ -236,8 +236,9 @@ rows() {
       (if $hideidle and $idle > 0 then " \tgap:idle\t ",
          "idle\tidle\t" + c("2") + "a shows \($idle) idle repo" + (if $idle > 1 then "s" else "" end) + c("0")
        else empty end)
-  ' "$CACHE" | tee >(wc -l | tr -d ' ' >"${JAY_SIDEBAR_COUNT:-/dev/null}") \
-    >(head -1 | cut -f3 >"${JAY_SIDEBAR_SUM:-/dev/null}")
+  ' "$CACHE" | tee >(head -1 | cut -f3 >"${JAY_SIDEBAR_SUM:-/dev/null}") | tail -n +2 \
+    | tee >(wc -l | tr -d ' ' >"${JAY_SIDEBAR_COUNT:-/dev/null}")
+  # The first row (the agent counts) goes to the status line only (send_sum), not to the list.
 }
 
 # Move the focus from the list $1 columns to the right (the hub's middle column is 1, review
@@ -1017,8 +1018,9 @@ export JAY_SIDEBAR_COUNT="$STATE/sidebar.$$.count" JAY_SIDEBAR_SUM="$STATE/sideb
   JAY_SIDEBAR_HELP="$STATE/sidebar.$$.help" JAY_SIDEBAR_RESTART="$STATE/sidebar.$$.restart"
 post() { curl -s --max-time 2 --unix-socket "$sock" -X POST http://localhost -d "$1" >/dev/null 2>&1 || true; }
 
-# Send the agent counts (the list's first row) to the hub's bar (zjstatus, see bin/jay) when
-# they change, and every 30 s for a bar that started again.
+# Send the agent counts (rows makes them as its first row, which the list does not show) to the
+# status line's middle part (jay_mux_bar) when they change, and every 30 s for a zjstatus that
+# started again.
 last_sum=""
 send_sum() {
   local sum
