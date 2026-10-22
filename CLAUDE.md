@@ -159,6 +159,12 @@ Facts about your own machine (where the live install is, how your mod loads) go 
 - User options carry the status line: `set -w -t @5 @jay_left '#[fg=...]text'` (styles in the value work; `#`
   must be doubled), one window's own with `-w`; the status line reads pane, then window, then
   global options.
+- With `extkeys`, tmux puts Ghostty in modifyOtherKeys 2 (`\e[>4;2m`): Ghostty then sends a Cmd
+  key it does not bind (Cmd+P, Cmd+O) as `\e[27;9;112~` (Super bit), and tmux makes that bit
+  Meta: the pane gets Alt+P (Claude's model picker). Option is never Alt (no
+  `macos-option-as-alt`). jay.conf stops M-p and M-o. tmux holds a lone Esc 500 ms (not
+  escape-time) while a query to the terminal has no answer (a test pty with no pixel size gets
+  `\e[18t\e[14t`; answer them or set the size).
 - `extended-keys on` with `terminal-features …:extkeys`: `claude attach` in a pane asks for
   mode 2 (`#{pane_key_mode}` = `Ext 2`); Shift+Enter from the terminal as CSI u (`\e[13;2u`) or
   xterm's `\e[27;2;13~` reaches Claude as a new line. `claude attach` turns on the mouse modes

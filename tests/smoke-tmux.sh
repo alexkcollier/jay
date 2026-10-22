@@ -418,6 +418,16 @@ if has_window 'shop/main · acme'; then
   within "jay: the agent it showed" 8 screen_has "$(pane_of agent)" 'ATTACHED cccc0001'
 fi
 
+# Cmd keys as Ghostty sends them (CSI 27, Super bit): Cmd+P and Cmd+O never reach a pane (tmux
+# makes them Alt+P, Claude's model picker, and Alt+O, fast mode); Cmd+X does, as Alt+X.
+tm new-window -d -n keys bash -c 'stty raw -echo; while IFS= read -rsn1 -d "" c; do printf %s "$c" | xxd -p >>"$1"; done' _ "$TMP/keys.got"
+tm select-window -t =jay:keys
+key 1b5b32373b393b3131327e; key 1b5b32373b393b3131317e; key 1b5b32373b393b3132307e
+got_keys() { tr -d '\n' <"$TMP/keys.got" 2>/dev/null; }
+within "Cmd+X reaches the pane as Alt+X" 3 bash -c "$(declare -f got_keys); TMP=$TMP; [[ \$(got_keys) =~ 1b78|5b3132303b3375 ]]"
+eq "Cmd+P and Cmd+O do not" "" "$(got_keys | grep -oE '5b3131(32|31)3b3375|1b(70|6f)')"
+tm kill-window -t =jay:keys
+
 # Ctrl g q: the client goes, the hub runs on.
 key 0771
 within "Ctrl g q: the client detaches" 3 bash -c "$(declare -f has_client tm); SOCK=$SOCK; ! has_client"

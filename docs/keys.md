@@ -146,6 +146,10 @@ stop; the agents keep running). The mouse: a click on a pane focuses it and reac
 at once (one click selects a row in the list, a double click opens it); drag a border to resize; the wheel scrolls a program that
 takes the mouse, else tmux's scroll mode.
 
+Alt+P and Alt+O do not reach the panes. tmux has no Cmd modifier: a Cmd key that Ghostty does
+not use itself (Cmd+P, Cmd+O) comes to the pane as Alt+P (Claude's model picker) or Alt+O
+(Claude's fast mode), and tmux cannot tell the two apart. In Claude, use `/model` and `/fast`.
+
 ## Pane titles
 
 The titles show the keys of the panes that tuicr (or lazygit) and yazi fill:
