@@ -22,7 +22,10 @@ In `~/.local/state/jay/`:
 | `lazygit/state/` | the state of the hub's lazygit (its recent repos) |
 | `ended/<id>`, `seen/<id>` | empty files; the time of each is when the agent's last turn ended (Stop hook; not while the agent has background tasks) and when you last saw the agent (unread sign); removed after 14 days |
 | `prune.stamp` | time of the last automatic prune |
-| `prune.log` | each agent the list pruned, and each turn chain removed |
+| `prune.log` | each agent the list pruned, each turn chain removed, and each respawn (`jay respawn` and the list's: the versions and Claude's answer) |
+| `respawned/<id>` | the version an agent was respawned onto; its time is when (the 10-minute rule); removed after 14 days |
+| `respawn.stamp` | time of the list's last respawn step (at most one each minute) |
+| `claude-version` | the installed Claude Code version, under the binary's path and mtime (`claude --version` runs again after an update) |
 | `notify.log` | one line per notify hook call, and the output of notice clicks |
 | `tasks/<pid>.exit`, `<pid>.again` | the exit code of a `jay run` pane whose command ended; a restart request (no output is stored) |
 | `tasks/started` | a record of each task that `jay run` started (by hub server and pane id): who started it and its command line; after a hub restart, its tasks are `gone` for a day |
@@ -48,7 +51,9 @@ Elsewhere:
   `respawnFlags` (the orchestrator prompt, the options of a copy), `cwd` and `worktreePath` (a
   worktree it entered), `linkScanPath` and `resumeSessionId` (its transcript, whose last cwd
   tells where an agent is that does not run) and `needs` (an agent that waits for its first
-  prompt) there.
+  prompt) there. For a respawn: `tempo` (`active` while a turn runs), `inFlight` (background
+  tasks, crons, wakeups), `createdAt` (it ranks orchestrators: a respawn changes `startedAt`)
+  and `cliVersion` (the version of the last turn; only when the process does not tell it).
 - `~/.local/state/jay/replaced/<old id>`: an old agent entry that a copy replaced (the file has
   the new id); the list hides it and removes it when its recorded worktree is gone.
 - `~/.claude.json`: Claude's folder trust, which `n`, `N` and `c` can write.

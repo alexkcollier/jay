@@ -28,6 +28,13 @@ if [[ "${1:-}" == -axo ]]; then
 fi
 exec /bin/ps "$@"'
 
+# --- The setting: default idle; ~/.config/jay/config; the environment wins ---
+eq "JAY_AUTO_RESPAWN: default idle" idle "$JAY_AUTO_RESPAWN"
+mkdir -p "$HOME/.config/jay" && printf 'JAY_AUTO_RESPAWN = off\n' >"$HOME/.config/jay/config"
+eq "JAY_AUTO_RESPAWN: from the settings file" off "$(env -u JAY_AUTO_RESPAWN bash -c 'source "$HOME/.local/lib/jay-lib.sh"; echo "$JAY_AUTO_RESPAWN"')"
+eq "JAY_AUTO_RESPAWN: the environment wins" idle "$(JAY_AUTO_RESPAWN=idle bash -c 'source "$HOME/.local/lib/jay-lib.sh"; echo "$JAY_AUTO_RESPAWN"')"
+rm -f "$HOME/.config/jay/config"
+
 # --- jay_claude_version: cached under the binary's path and mtime ---
 eq "the installed version" 2.1.308 "$(jay_claude_version)"
 : >"$STUB/claude.calls"

@@ -25,6 +25,8 @@ bin/
                          for the unread sign
   jay-open               jay open: the worktree's zellij session in a Ghostty tab
   jay-pane               a hub pane (agent | review | files) that follows its target
+  jay-respawn            jay respawn: agents on an old Claude Code onto the installed one, when
+                         quiet (the list does it by itself: JAY_AUTO_RESPAWN)
   jay-run                jay run: tasks in a tasks tab per worktree: start, ls, log, wait, stop,
                          restart, port; --switch (Ctrl g Tab), --tick, --bar, --hook, --exec
   jay-setup              jay setup: optional worktrunk pre-start hook: ignored files, dependencies

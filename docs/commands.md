@@ -29,6 +29,10 @@ worktrunk's `wt <name>` dispatch.
 | `jay agents --json` | `claude agents --json --all` with each agent's `phase` (input, failed, unread, working, idle), for `jay all` and the mod. |
 | `jay agents --orchestrators [main checkout]` | The orchestrator of each repo, one line each: main checkout, id, name (see [Orchestrators](orchestrators.md)). |
 | `jay clear <id>` | Type `/clear` into idle background agent `<id>` through a hidden `claude attach` (`c` in the list). Exit 0 when its session id changed. See [Fresh context](orchestrators.md#fresh-context). |
+| `jay respawn` | The background agents that run an older Claude Code than the installed one, with the version they run and why each one waits (or "ready"). See [Claude Code updates](working.md#claude-code-updates). |
+| `jay respawn --idle` | Respawn (`claude respawn`) each of them that is quiet now: the step that the list does by itself at most once a minute (`JAY_AUTO_RESPAWN=idle`). The others: why they wait. |
+| `jay respawn <id or name>` | Respawn that agent when it is quiet; else say why not, and exit 1. An agent on the installed version: nothing to do. |
+| `jay respawn --force <id or name>` | Respawn it also when it is not quiet (background tasks, shown, attached, asked you something). Never while a turn runs or waits for an answer, when the folder it wakes in is gone, or when a copy replaced it. |
 | `jay setup [path]` | The worktrunk `pre-start` hook, when you turn it on (`./install.sh --with-setup`): in a new worktree, copy the ignored files (`.worktreeinclude` through `wt step copy-ignored`, else the ignored `.env*` files of the main checkout; outside `.claude`, `node_modules` and `dist`), copy the main checkout's `.claude/settings.local.json` (your Claude permissions for the repo) when it is ignored and the worktree has none (also with a `.worktreeinclude`), and install the dependencies (pnpm, bun, yarn, npm or uv, from the lock file). It puts back a lock file that the install changed. Safe to run again. |
 | `wt task [text]` | worktrunk alias: set the worktree's task note, or show it. |
 | `jay snapshot --list [path]` | The turn chains of a worktree: id, age, last subject. |

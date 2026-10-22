@@ -45,7 +45,7 @@ case "${1:-} ${2:-}" in
   "agents --help") echo "  --all   With --json: also include completed"; echo "  --json  Print active sessions" ;;
   "--version "*) echo "2.1.306 (Claude Code)" ;;
   "--help "*) echo "  --bg, --background   Start the session in the background" ;;
-  "attach --help" | "rm --help" | "logs --help") echo "Usage: claude $1 <id>" ;;
+  "attach --help" | "rm --help" | "logs --help" | "respawn --help") echo "Usage: claude $1 <id>" ;;
   "rm "*) exit 0 ;;
   # The mod: `plugin marketplace list` prints $STUB/marketplaces.txt; the other plugin commands
   # only leave their call in $STUB/claude.calls.

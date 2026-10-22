@@ -30,7 +30,7 @@ reads the front app with `lsappinfo`.
 | jq | 1.7.1 | `brew install jq` (in `/usr/bin` on recent macOS) | all JSON |
 | tuicr | 0.27.0 | `brew install tuicr` | review |
 | yazi | 26.9.1 (26.x) | `brew install yazi` | files |
-| Claude Code | 2.1.306 (2.1.304+; built on 2.1.304) | `brew install --cask claude-code` | `claude --bg`, `claude attach`, `claude agents --json --all`, `claude rm`, `claude logs`, `claude --bg --resume`, hooks, the mod |
+| Claude Code | 2.1.308 (2.1.304+; built on 2.1.304) | the native installer or `brew install --cask claude-code` ([Claude Code and its updates](#claude-code-and-its-updates)) | `claude --bg`, `claude attach`, `claude agents --json --all`, `claude rm`, `claude logs`, `claude --bg --resume`, `claude respawn`, hooks, the mod |
 | git | 2.54.0 (Apple) | Xcode Command Line Tools | worktrees, turn chains |
 | bash | 3.2.57 (`/bin/bash`) | macOS | every script (`#!/usr/bin/env bash` finds `/bin/bash`) |
 | python3 | 3.9.6 (`/usr/bin/python3`) | Xcode Command Line Tools | `jay-keys`, `jay clear` |
@@ -61,7 +61,7 @@ What `./install.sh --check` checks:
 - lazygit 0.66.0 or newer and delta, only when `JAY_REVIEW=lazygit`; else a note. difftastic
   only when `JAY_REVIEW_DIFF=difft` too; else a note.
 - Claude Code 2.1.304 or newer, and the features of the hub in its help texts: `--bg`,
-  `agents --json --all`, `attach`, `rm`, `logs`.
+  `agents --json --all`, `attach`, `rm`, `logs`; a note when it has no `respawn`.
 - git, perl, curl and `/usr/bin/python3`. Without the Xcode Command Line Tools, `/usr/bin/git`
   and `/usr/bin/python3` only ask macOS to install them: the check can open that dialog. Run
   `xcode-select --install` first.
@@ -69,6 +69,24 @@ What `./install.sh --check` checks:
   missing (both are optional).
 - `~/.local/bin` on PATH.
 - An install of wt-hub (the old name): a TODO that `./install.sh` moves it to the new names.
+
+### Claude Code and its updates
+
+The hub works with both installs of Claude Code. It reads the installed version with
+`claude --version` (from the `claude` on PATH) and the version each agent runs from its process.
+
+| Install | How | Binary | Updates |
+|---|---|---|---|
+| Native installer | `curl -fsSL https://claude.ai/install.sh \| bash` | `~/.local/bin/claude`, a link to `~/.local/share/claude/versions/<version>` | by itself in the background (the updater moves the link); `claude update` by hand. Claude's daemon restarts itself when the link changes. |
+| Homebrew cask | `brew install --cask claude-code` | `/opt/homebrew/bin/claude`, a link into `/opt/homebrew/Caskroom/claude-code/<version>/` | `brew upgrade --cask claude-code` (Claude Code does not update a Homebrew install by itself) |
+
+Use one of the two. With both, the `claude` that comes first on PATH is the installed one for
+the hub.
+
+After an update, new agents and new `claude attach` clients use the new version at once. A
+background agent that runs keeps the version it started with; the list marks it with `↻` and
+moves it to the new version at a quiet moment (`claude respawn`). See
+[Claude Code updates](working.md#claude-code-updates); `JAY_AUTO_RESPAWN=off` turns that off.
 
 ## Terminals
 
@@ -90,7 +108,7 @@ it off. Without tab control:
 
    ```sh
    brew install worktrunk zellij fzf jq tuicr yazi
-   brew install --cask claude-code
+   brew install --cask claude-code    # or the native installer (Claude Code and its updates)
    # optional:
    brew install terminal-notifier     # macOS notices when an agent finishes or needs input
    brew install --cask ghostty        # tab control (jay, jay go, jay open, O in files)
@@ -230,6 +248,7 @@ hooks in background agents and a notice click.
 | `JAY_LAUNCHER` | the built-in zsh launcher | a command for the launcher (Ctrl g `r`) in another shell; see [Tasks](tasks.md#other-shells) |
 | `JAY_REVIEW` | `tuicr` | the review pane: `tuicr` (review comments) or `lazygit` (git actions); see [Review with lazygit](review.md#review-with-lazygit) |
 | `JAY_REVIEW_DIFF` | `delta` | the patch in lazygit review: `delta`, `difft` (difftastic) or `plain` (delta, no wrap); see [The patch in lazygit](review.md#the-patch-in-lazygit) |
+| `JAY_AUTO_RESPAWN` | `idle` | after a Claude Code update: `idle`, the list moves each agent that runs the old version onto the new one at a quiet moment; `off`, only `jay respawn` does; see [Claude Code updates](working.md#claude-code-updates) |
 
 The old `WT_` names (`WT_ROOTS`, `WT_REVIEW`, ...) still work, in the file and in the
 environment; a `JAY_` name wins over a `WT_` name. `./install.sh --check` tells you when a

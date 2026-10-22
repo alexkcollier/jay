@@ -12,6 +12,8 @@
 - [Open your editor](#open-your-editor)
 - [Notices](#notices)
 - [Remove and prune](#remove-and-prune)
+- [When the folder an agent came from goes](#when-the-folder-an-agent-came-from-goes)
+- [Claude Code updates](#claude-code-updates)
 - [Tidy the list](#tidy-the-list)
 - [Quit](#quit)
 
@@ -258,6 +260,55 @@ folder in its transcript.
   goes with that worktree: `d` on the worktree, or the prune after the worktree is gone. For a
   worktree from a WorktreeCreate hook (worktrunk), `claude rm` and the agent view (ctrl+x) keep
   the entry while the worktree is on disk.
+
+## Claude Code updates
+
+An update puts a new `claude` binary in place (see
+[Claude Code and its updates](install.md#claude-code-and-its-updates)). New agents and new
+`claude attach` clients use it at once. A background agent that runs keeps the binary it
+started with. A dim `↻` after its name marks such an agent, and the first row of the list (and
+the bar) counts them.
+
+With `JAY_AUTO_RESPAWN=idle` (the default), the list moves each such agent to the new binary at
+a quiet moment, at most once a minute, with `claude respawn <id>`. Each respawn goes into
+`~/.local/state/jay/prune.log`. With `JAY_AUTO_RESPAWN=off`, only `jay respawn` does it:
+
+- `jay respawn`: the agents on an old binary, and why each one waits.
+- `jay respawn --idle`: the list's step, now.
+- `jay respawn <id or name>`: one agent, or the reason why not.
+- `jay respawn --force <id>`: one agent, also when it is not quiet.
+
+What a respawn does (tested with Claude Code 2.1.308, from that version to the same one):
+
+- It keeps the id, the name, the conversation, the system prompt (`respawnFlags`), the folder and
+  the worktree the agent entered, its crons (CronCreate) and a wakeup (ScheduleWakeup, `/loop`).
+  A `claude attach` client stays connected and shows the new process. It takes about 1 s.
+- It ends a turn that runs. The turn does not continue: the agent then waits like a new one.
+- It stops the agent's Monitor tasks, and the agent loses the `notify_when_idle` subscriptions
+  it holds: a notice that it waits for does not come. A background Bash command runs on, but the
+  agent may not know it now.
+- It fails when the folder that Claude wakes the agent in is gone. The old process runs on.
+
+So an agent respawns only when all of these are true:
+
+- Its phase is idle or unread (`○`, `✓`), and its process is idle.
+- It has no background tasks, crons or wakeups (`inFlight` in its `state.json`).
+- It is not in the middle column, and no `claude attach` shows it: a draft in its input box
+  would go.
+- The folder that Claude wakes it in is on disk, and no copy replaced it.
+- The list did not respawn it in the last 10 minutes.
+- An orchestrator: no other agent of its repo works or waits. The hub Claude: no other agent
+  works or waits. Both can wait for idle notices from those agents.
+
+`--force` keeps only these checks: no turn runs or waits for an answer, the folder is there, no
+copy replaced it. An agent that asked you something at the end of its turn (`!`) waits until you
+answer it; `jay respawn --force <id>` moves it now.
+
+An agent that does not run (stopped, or retired by Claude after some hours idle) has no `↻`:
+it wakes on the new binary. Claude's daemon also restarts itself after an update of the native
+install and respawns some idle agents itself. The hub reads the version that an agent runs from
+its process: the path of the binary under Claude's `claude bg-pty-host` process. `cliVersion` in
+`state.json` is the version of the agent's last turn; a respawn does not change it.
 
 ## Tidy the list
 

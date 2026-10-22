@@ -65,6 +65,16 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   name, short id and process; only the session id changes. All `claude attach` clients of a
   session share one input box (Ctrl+U clears a line of a draft), and the session's screen takes
   the size of the client that joined last, also after that client leaves (`bin/jay-clear`).
+- Claude: `claude respawn <id>` (2.1.308, tested on one version) restarts a background agent on
+  the installed binary in ~1 s: same id, name, session id, conversation, respawnFlags, cwd and
+  entered worktree; new pid and startedAt; a `claude attach` client stays. It ends a running
+  turn for good (the agent then waits like a new one: needs "send a prompt to start"), kills its
+  Monitors, drops the notify_when_idle subscriptions it holds; crons, a ScheduleWakeup and
+  background Bash processes stay. With its state.json cwd gone it fails ("could not be resolved
+  on disk") and the old process runs on. state.json cliVersion changes only at the next turn
+  (also after an attach wakes a retired agent): the running binary is the path after `--` in the
+  parent `claude bg-pty-host` process. The daemon starts every worker from its own binary.
+- Claude: a notify_when_idle subscription to an idle session fires at once.
 - Test Claude sessions in a pty with every CLAUDE*/ANTHROPIC* variable unset: an inherited
   `CLAUDE_CODE_CHILD_SESSION` turns off the transcript and hides the session from `claude agents`.
 - A test that starts Claude sessions removes them at the end (`claude rm <id>`): without the

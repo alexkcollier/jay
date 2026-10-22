@@ -103,7 +103,8 @@ tool() {
 }
 
 # The Claude Code features of the hub, from the help texts: background agents (--bg), attach,
-# agents --json --all, rm, logs. Plugins (the mod) and hooks are older than these.
+# agents --json --all, rm, logs; respawn (a note when it is missing). Plugins (the mod) and hooks
+# are older than these.
 check_claude() {
   local path out missing=""
   path=$(PATH="$HOME/.local/share/mise/shims:$PATH" command -v claude 2>/dev/null) || return 0
@@ -120,6 +121,10 @@ check_claude() {
   else
     ok "claude has background agents (--bg, attach, agents --json --all, rm, logs)"
   fi
+  # jay respawn and the list's auto step (JAY_AUTO_RESPAWN) need claude respawn.
+  out=$("$path" respawn --help 2>&1) || true
+  [[ "$out" == *"claude respawn"* ]] \
+    || note "claude has no respawn (claude update): after an update, agents run the old Claude Code until they stop"
 }
 
 check_tools() {
@@ -463,6 +468,10 @@ install_settings() {
 # under the code), difft (difftastic: a diff of the syntax) or plain (delta, no wrap: H and L).
 # | in lazygit goes to the next one.
 # JAY_REVIEW_DIFF=delta
+
+# After a Claude Code update: idle (default) — the list moves each agent that still runs the old
+# binary onto the new one at a quiet moment (claude respawn); off — only jay respawn does.
+# JAY_AUTO_RESPAWN=idle
 CONF
       did "$SETTINGS_FILE (settings, all at their defaults)"
     fi
