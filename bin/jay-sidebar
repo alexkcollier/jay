@@ -3,13 +3,15 @@
 # Click, double-click or Enter: an agent → shown in the hub's middle column, and review (tuicr,
 # its turns) and files (yazi, when shown) switch to it; a worktree → review and files switch to
 # it; "◆ hub" → the hub Claude (a background agent, started when it has none) in the middle
-# column. An agent takes the focus to the middle; Enter on a worktree takes it to review.
+# column. An agent takes the focus to the middle; Enter on a worktree takes it to review. An
+# agent that cannot wake ("home gone", "lost") goes on as a copy instead (asks first).
 # n/N: new agent here (on a main checkout: the repo's orchestrator, ◇; when the repo has one,
 # the hub shows it) / in a new worktree
 # c: a fresh context (/clear) for an orchestrator or the hub Claude (asks first; idle only)
 # o: own Ghostty tab. Keys act in the list only: review's mode (t) and files (e) are keys of the
 # review pane.
-# d: remove the agent, or the worktree with its idle agents (asks first)
+# d: remove the agent, or the worktree with its idle agents (asks first; agents that came from
+# it and are in another worktree go on there as copies first)
 # a: hide/show idle repos and main checkouts
 # b: an idle interactive session goes on as a background agent (asks first)
 # p: prune dead agents (folder gone; asks first). The list also prunes them by itself, every
@@ -55,12 +57,15 @@ rows() {
   elif ((age > 30)); then
     (refresh_worktrees &) >/dev/null 2>&1
   fi
-  local agents jobs shown=""
+  local agents jobs stranded shown=""
   # The agent in the hub's middle column, marked with ▸ beside it.
   jay_hub_role agent >/dev/null && shown=$(cut -f1 "$(jay_hub_target_file agent)" 2>/dev/null)
   agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
   agents=$(jay_agent_phases "$agents" "$shown") || agents='[]'
   jobs=$(jay_jobs "$agents")
+  # The agents whose home is gone (see jay_stranded), as id: {fix, tree, runs}.
+  stranded=$(jay_stranded "$agents" "$jobs" | jq -Rsc 'split("\n") | map(select(. != "") | split("\t")
+    | {(.[0]): {tree: .[3], fix: .[4], runs: (.[5] == "1")}}) | add // {}')
   (auto_prune "$agents" &) >/dev/null 2>&1
   local hideidle=false width
   [[ -f "$HIDE_IDLE" ]] && hideidle=true
@@ -70,6 +75,7 @@ rows() {
   jq -rs --argjson agents "$agents" --arg shown "$shown" --arg hubid "$(jay_hub_claude_id)" \
     --argjson hideidle "$hideidle" --arg roots "$JAY_ROOTS" --argjson gone "$(gone_dirs "$agents")" \
     --argjson jobs "$jobs" --argjson orchs "$(jay_orch_ranks "$agents" "$jobs")" \
+    --argjson stranded "$stranded" --argjson replaced "$(jay_replaced_ids)" \
     --argjson gl "$(jq -nc --arg diff "$G_DIFF" --arg up "$G_UP" --arg alert "$G_ALERT" --arg ok "$G_OK" \
       --arg merge "$G_MERGE" --arg push "$G_PUSH" --arg pull "$G_PULL" --arg home "$G_HOME" '$ARGS.named')" \
     --argjson width "$width" --argjson now "$(date +%s)" '
@@ -97,15 +103,21 @@ rows() {
       # An agent from a main checkout in a worktree it entered stays under its main checkout, and
       # .away is the folder it is in. .orch: main for the orchestrator of the repo (the oldest
       # agent with the orchestrator prompt that belongs to the main checkout, see jay_orch_ranks),
-      # extra for another one there, else empty.
+      # extra for another one there, else empty. An agent whose home is gone ($stranded, see
+      # jay_stranded) shows also when it is stopped: under the worktree it is in, or, when that is
+      # gone too, under the "(gone)" row of its home. A replaced one (a copy goes on) does not show.
       ($wts | map(select(.main) | .path)) as $mains
     | ($wts | map({(.path): .branch}) | add // {}) as $branchof
-    | ($agents | map(select(.state != "stopped")
+    | ($agents | map(select(.state != "stopped" or $stranded[.id // ""] != null)
+        | select(.id as $i | $replaced | index([$i]) | not)
         | ($jobs[.id // ""].home // "") as $from
         | ($mains | index([$from]) != null) as $o
+        | $stranded[.id // ""] as $s
         | (.cwd as $d | $gone | any(. == $d)) as $g
         | $orchs[.sessionId] as $r
-        | . + {gone: ($g and ($o | not)), wt: (if $o then $from elif $g then "" else owner(.cwd) end),
+        | . + {gone: ($g and ($o | not) and $s.fix != "move"),
+               wt: (if $o then $from elif $s.fix == "move" then owner($s.tree) elif $g then "" else owner(.cwd) end),
+               stranded: $s,
                away: (if $o then $jobs[.id].tree else "" end), phase: phase,
                orch: (if $r == null or ($mains | index([$r.home]) == null) then ""
                       elif $r.rank == 0 then "main" else "extra" end)})) as $all
@@ -139,10 +151,17 @@ rows() {
     | ($repos | [.[].dead[].agents[].sessionId]) as $housed
     | ($ag | map(select(.wt == "" and (.sessionId as $s | $housed | index([$s]) | not))) | byrank) as $stray
     | def lead($col): (" " * ($col - 2)) + (if shown then c("1;36") + "▸ " + c("0") else "  " end);
-      def agrow($col; $tail): "ag\t" + .sessionId + "\t" + lead($col) + (.phase | glyph) + " " + title + " " + c("2") + $tail + c("0");
+      # A fourth field "repair" (not shown) on an agent that cannot wake: a pick repairs it
+      # (jay-sidebar --pick, --repair).
+      def agrow($col; $tail): "ag\t" + .sessionId + "\t" + lead($col) + (.phase | glyph) + " " + title + " " + c("2") + $tail + c("0")
+        + (if .stranded != null and (.stranded.runs | not) then "\trepair" else "" end);
       # An orchestrator in a worktree it entered: "→ <branch>" of that worktree.
       def away: if .away != "" then " → " + (($branchof[owner(.away)] // (.away | split("/") | last)) | split("/") | last | narrow) else "" end;
-      def bgage: (if .kind == "background" then "bg " else "" end) + age(.startedAt // 0) + away;
+      # Its home is gone: yellow "home gone" (it can go on in its worktree), red "lost" (that
+      # worktree is gone too).
+      def homegone: if .stranded == null then "" elif .stranded.fix == "lost" then c("0") + " " + c("31") + "lost"
+        else c("0") + " " + c("33") + "home gone" end;
+      def bgage: (if .kind == "background" then "bg " else "" end) + age(.startedAt // 0) + away + homegone;
       # Git signs: conflicts now or a rebase/merge in progress, uncommitted
       # changes, commits to push / to pull when the branch is on the remote (its tracking branch
       # or origin/<branch>, as for a PR) else commits not in the default branch yet, a merge into
@@ -262,6 +281,93 @@ act() {
     hub) JAY_LIST_PICK=1 jay-go hub >/dev/null 2>&1 ;;
   esac
   return 0
+}
+
+# The fzf action of a pick (Enter, click; through transform): a row with the fourth field
+# "repair" ($2, an agent that cannot wake) repairs it after a confirm, any other row acts.
+# $1: --focus (Enter) or empty. fzf fills in {1} {2} when it runs the action.
+pick_action() {
+  if [[ "${2:-}" == repair ]]; then
+    printf '%s' 'execute(jay-sidebar --repair {2})+reload-sync(jay-sidebar --rows --fresh)+clear-screen'
+  else
+    printf 'execute-silent(jay-sidebar --act {1} {2}%s)+reload-sync(jay-sidebar --rows)' "${1:+ $1}"
+  fi
+}
+
+# Repair the agent with session id $1 that cannot wake because its home is gone (see
+# jay_stranded), after a confirm. It goes on as a copy in the worktree it is in (jay_continue_in);
+# then the old entry goes, or stays hidden while `claude rm` would delete that worktree
+# (jay_drop_replaced). When that worktree is gone too: a copy in the repo's main checkout, or
+# `claude rm`.
+repair() {
+  local sid=$1 agents agent id line name home tree fix runs main out answer
+  agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+  agent=$(jq -c --arg s "$sid" 'first(.[] | select(.sessionId == $s)) // empty' <<<"$agents")
+  id=$(jq -r '.id // empty' <<<"${agent:-null}")
+  [[ -n "$id" ]] && line=$(jay_stranded "$agents" "$(jay_jobs "$agents")" | awk -F'\t' -v i="$id" '$1 == i')
+  if [[ -z "${line:-}" ]]; then
+    pause "Nothing to repair: this agent can wake, or it is gone."
+    return 0
+  fi
+  IFS=$'\t' read -r id name home tree fix runs <<<"$line"
+  if [[ "$runs" == 1 ]]; then
+    pause "\"$name\" runs in ${tree/#$HOME/~}. The folder it came from (${home/#$HOME/~}) is gone, so it cannot wake after it stops. Pick it again when it does not run: then the list continues it."
+    return 0
+  fi
+  if [[ "$fix" == move ]]; then
+    say "\"$name\" ($id) cannot wake: Claude wakes an agent in the folder it came from, and that folder is gone:
+
+  ${home/#$HOME/~}
+
+It worked in ${tree/#$HOME/~}.
+
+y: continue it there. Claude starts a copy with the same conversation and options, and a new id. The old entry goes, or stays hidden until that worktree goes.
+h: hide the old entry only (you continued it already, say with claude --bg --resume). It goes with that worktree."
+    printf 'other key: cancel\n'
+    read -rsn1 answer </dev/tty
+    case $answer in
+      y) say "Continuing \"$name\" in ${tree##*/}..."
+         continue_in "$id" "$name" "$tree" ;;
+      h) jay_state_dir
+         mkdir -p "$JAY_STATE/replaced" && printf -- '-\n' >"$JAY_STATE/replaced/$id"
+         jay_drop_replaced "$id" || true ;;
+    esac
+    return 0
+  fi
+  main=$(jay_repo_main "$tree")
+  [[ -n "$main" ]] || main=$(jay_repo_main "$home")
+  say "\"$name\" ($id) cannot wake: the folder it came from and the worktree it worked in are both gone.
+
+  ${home/#$HOME/~}
+  ${tree/#$HOME/~}
+${main:+
+m: continue it in the main checkout ${main/#$HOME/~} (a copy with the same conversation and options, and a new id)}
+x: remove it (claude rm; its transcript stays)"
+  printf 'other key: cancel\n'
+  read -rsn1 answer </dev/tty
+  case $answer in
+    m) [[ -n "$main" ]] || return 0
+       say "Continuing \"$name\" in ${main##*/}..."
+       continue_in "$id" "$name" "$main" ;;
+    x) out=$(claude rm "$id" 2>&1) || pause "Not removed:
+
+$out" ;;
+  esac
+  return 0
+}
+
+# Agent $1 (name $2) goes on as a copy in folder $3 (jay_continue_in); the old entry goes when that
+# is safe. The hub then shows the copy.
+continue_in() {
+  local out
+  if ! out=$(jay_continue_in "$1" "$3" 2>&1); then
+    pause "\"$2\" did not go on in ${3/#$HOME/~}:
+
+$out"
+    return 1
+  fi
+  jay_drop_replaced "$1" || true
+  show_started "$out"
 }
 
 path_of() {
@@ -502,6 +608,8 @@ ${ROW}▸${OFF} agent in the middle pane
 ${ROW}◆ hub${OFF} row: the hub Claude
 ${CYN}◇${OFF} orchestrator of the repo
 ${YEL}◇${OFF} second orchestrator (d it)
+${YEL}home gone${OFF} cannot wake (⏎)
+${RED}lost${OFF} worktree gone too (⏎)
 ${G_HOME} main checkout
 ${YEL}${G_DIFF}${OFF} uncommitted changes
 ${CYN}${G_PUSH}1${OFF} commits to push (remote)
@@ -581,6 +689,7 @@ $out" ;;
       here=$(agents_in "$agents" "$top" "${3:-}")
       agents_busy "$here" && return 0
       idle=$(awk -F'\t' '$1 == "idle" { print "  " $3 }' <<<"$here")
+      away=$(awk -F'\t' -v h="$HOME" '$1 == "away" { t = $4; if (index(t, h "/") == 1) t = "~" substr(t, length(h) + 1); print "  " $3 " → " t }' <<<"$here")
       tasks=$(jay-run --worktree-tab "$top" --tasks 2>/dev/null)
       tab=$(jay-run --worktree-tab "$top" --name 2>/dev/null)
       confirm "Remove worktree ${branch:-$top}${idle:+ and its agents}?
@@ -589,11 +698,19 @@ $top
 ${idle:+
 Agents (their transcripts stay):
 $idle
+}${away:+
+Agents that came from here and work in another worktree now (EnterWorktree). Claude wakes an agent in the folder it came from, so after the removal they could not wake. They go on in their worktrees first, as copies: same conversation and options, new id. Their old entries go:
+$away
 }${tasks:+
 Tasks that stop (its tab in the hub closes):
 $tasks
 }
 The branch is deleted only if it is merged. Uncommitted changes stop the removal." || return 0
+      if [[ -n "$away" ]]; then
+        move_away "$here" || return 0
+        # The old entries are replaced now: they go after the worktree.
+        here=$(awk -F'\t' 'BEGIN { OFS = "\t" } $1 == "away" { $1 = "replaced" } { print }' <<<"$here")
+      fi
       if [[ "$(cut -f1 "$(jay_hub_target_file review)" 2>/dev/null)" == "$top" ]]; then
         jay_hub_locked jay_hub_show_review
         pane=$(jay_hub_locked jay_hub_point review "" | cut -f1)
@@ -623,19 +740,30 @@ Their transcripts stay." || return 0
   return 0
 }
 
-# The agents in agents JSON $1 whose folder is $2 or in it, as what<TAB>id<TAB>name. what is open
-# (an interactive session: the list cannot remove it), busy (its phase is working or input, see
-# jay_agent_phases: an agent that only waits for its workers is not busy), visit
-# (it entered the worktree, see jay_jobs; also when it does not run now) or idle. Agent id $3
-# (optional) is idle when it is a visit: d on that agent takes its worktree with it.
+# The agents in agents JSON $1 whose folder is $2 or in it, as what<TAB>id<TAB>name<TAB>tree<TAB>runs.
+# what is open (an interactive session: the list cannot remove it), replaced (an old entry whose
+# copy goes on, see jay_continue_in), busy (its phase is working or input, see jay_agent_phases:
+# an agent that only waits for its workers is not busy), away (its home is $2, but it is in
+# another worktree now, see jay_jobs; also when it does not run or is stopped: Claude would wake
+# it in $2), visit (it entered the worktree; also when it does not run now) or idle. Agent id $3
+# (optional) is idle when it is a visit: d on that agent takes its worktree with it. tree: the
+# folder an away agent is in; runs: 1 while its process runs.
 agents_in() {
-  jq -r --arg p "$2" --arg take "${3:-}" --argjson jobs "$(jay_jobs "$1")" '
+  local jobs
+  jobs=$(jay_jobs "$1")
+  jq -r --arg p "$2" --arg take "${3:-}" --argjson jobs "$jobs" --argjson replaced "$(jay_replaced_ids)" '
     def inside($d): $d == $p or ($d | startswith($p + "/"));
-    .[] | select(.state != "stopped" and (inside(.cwd // "") or inside($jobs[.id // ""].tree // "")))
+    .[] | ($jobs[.id // ""] // {}) as $j
+    | ($j.tree != null and inside($j.home // "") and (inside($j.tree) | not)) as $away
+    | (.id as $i | $i != null and ($replaced | index([$i]) != null)) as $old
+    | select($away or (($old or .state != "stopped") and (inside(.cwd // "") or inside($j.tree // ""))))
     | [(if .kind != "background" or .id == null then "open"
+        elif $old then "replaced"
         elif .phase | IN("working", "input") then "busy"
-        elif $jobs[.id].tree != null and .id != $take then "visit"
-        else "idle" end), (.id // ""), (.name // .id // .sessionId[0:8])] | @tsv' <<<"$(jay_agent_phases "$1" "")"
+        elif $away then "away"
+        elif $j.tree != null and .id != $take then "visit"
+        else "idle" end), (.id // ""), (.name // .id // .sessionId[0:8]), ($j.tree // ""),
+       (if .pid != null then 1 else 0 end)] | @tsv' <<<"$(jay_agent_phases "$1" "")"
 }
 
 # Return 0 after a note when agents TSV $1 (from agents_in) has an agent that the list must not
@@ -660,10 +788,36 @@ $visit
   return 0
 }
 
-# Remove the idle agents in agents TSV $1 (from agents_in) with `claude rm`; show the failures.
+# The away agents in agents TSV $1 (from agents_in) go on in the worktrees they are in, as copies
+# (jay_continue_in); one that runs stops first. Return 1 after a note when one did not: the
+# removal then stops (the copies made so far go on; their old entries are hidden).
+move_away() {
+  local what id name tree runs out failed=""
+  while IFS=$'\t' read -r what id name tree runs; do
+    [[ "$what" == away ]] || continue
+    say "\"$name\" goes on in ${tree##*/}..."
+    if [[ "$runs" == 1 ]] && ! jay_stop_agent "$id"; then
+      failed+="  $name: it did not stop"$'\n'
+      continue
+    fi
+    out=$(jay_continue_in "$id" "$tree" 2>&1) || failed+="  $name: $out"$'\n'
+  done <<<"$1"
+  [[ -z "$failed" ]] && return 0
+  pause "Not removed. These agents did not go on in their worktrees, and they need this folder to wake:
+
+$failed"
+  return 1
+}
+
+# Remove the idle agents in agents TSV $1 (from agents_in) with `claude rm`, and the replaced old
+# entries when that is safe (jay_drop_replaced); show the failures.
 rm_agents() {
   local what id name out failed=""
-  while IFS=$'\t' read -r what id name; do
+  while IFS=$'\t' read -r what id name _; do
+    if [[ "$what" == replaced ]]; then
+      jay_drop_replaced "$id" || true
+      continue
+    fi
     [[ "$what" == idle ]] || continue
     out=$(claude rm "$id" 2>&1) || failed+="  $name: $out"$'\n'
   done <<<"$1"
@@ -690,7 +844,7 @@ dead_agents() {
 # the agent when that worktree is still on disk without a WorktreeRemove hook, or has work to
 # lose. The worktree can differ from the folder: an agent that moved on keeps its first folder.
 auto_prune() {
-  local stamp="$STATE/prune.stamp" id name out
+  local stamp="$STATE/prune.stamp" id name out f
   [[ -n "$(find "$stamp" -mmin -10 2>/dev/null)" ]] && return 0
   touch "$stamp"
   while IFS=$'\t' read -r id name; do
@@ -698,6 +852,12 @@ auto_prune() {
     out=$(claude rm "$id" 2>&1)
     printf '%s %s (%s): %s\n' "$(date '+%F %T')" "$id" "$name" "$(head -1 <<<"$out")" >>"$STATE/prune.log"
   done < <(dead_agents "$1")
+  # The replaced old entries whose recorded worktree is gone now (jay_drop_replaced).
+  for f in "$JAY_STATE"/replaced/*; do
+    [[ -f "$f" ]] || continue
+    id=${f##*/} name=$(cat "$f" 2>/dev/null)
+    jay_drop_replaced "$id" && printf '%s %s: replaced by %s, removed\n' "$(date '+%F %T')" "$id" "$name" >>"$STATE/prune.log"
+  done
   # Then the turn chains of agents that are gone (see jay-snapshot --prune), and old
   # seen/ended marks (jay_agent_phases): with both gone an agent is idle, and a seen mark goes
   # first only when a newer turn made the agent unread already.
@@ -731,6 +891,10 @@ case ${1:-} in
   --rows) shift; rows "$@"; exit 0 ;;
   --prune) prune; exit 0 ;;
   --act) shift; act "$@"; exit 0 ;;
+  --pick) shift; pick_action "$@"; exit 0 ;;
+  --repair) shift; repair "$@"; exit 0 ;;
+  # For the tests: the agents that d on folder $2 finds (agents_in).
+  --agents-in) agents_in "$(claude agents --json --all 2>/dev/null || echo '[]')" "$2" "${3:-}"; exit 0 ;;
   --view) shift; view "$@"; exit 0 ;;
   --remove) shift; remove "$@"; exit 0 ;;
   --new) shift; new_agent "$@"; exit 0 ;;
@@ -740,7 +904,7 @@ case ${1:-} in
   --review) review_key "${2:-}"; exit 0 ;;
   --idle) if [[ -f "$HIDE_IDLE" ]]; then rm -f "$HIDE_IDLE"; else : >"$HIDE_IDLE"; fi; exit 0 ;;
   --footer) shift; footer "$@"; exit 0 ;;
-  -h|--help) sed -n '2,20s/^# \{0,1\}//p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,22s/^# \{0,1\}//p' "$0"; exit 0 ;;
   # An option this version does not have (say a bind of a list started before an update) must
   # not start a second list.
   -*) printf 'jay-sidebar: unknown option %s\n' "$1" >&2; exit 2 ;;
@@ -833,9 +997,9 @@ rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=
   --bind 'c:execute(jay-sidebar --clear {1} {2})+reload-sync(jay-sidebar --rows)+clear-screen' \
   --bind 'n:execute(jay-sidebar --new here {1} {2})+reload-sync(jay-sidebar --rows --fresh)+clear-screen' \
   --bind 'N:execute(jay-sidebar --new worktree {1} {2})+reload-sync(jay-sidebar --rows --fresh)+clear-screen' \
-  --bind 'enter:execute-silent(jay-sidebar --act {1} {2} --focus)+reload-sync(jay-sidebar --rows)' \
-  --bind 'double-click:execute-silent(jay-sidebar --act {1} {2})+reload-sync(jay-sidebar --rows)' \
-  --bind 'left-click:execute-silent(jay-sidebar --act {1} {2})+reload-sync(jay-sidebar --rows)' \
+  --bind 'enter:transform(jay-sidebar --pick --focus {4})' \
+  --bind 'double-click:transform(jay-sidebar --pick "" {4})' \
+  --bind 'left-click:transform(jay-sidebar --pick "" {4})' \
   --bind 'r:execute-silent(: >"$JAY_SIDEBAR_RESTART")+abort' \
   --bind 'o:execute-silent(jay-sidebar --view open {1} {2})' \
   --bind 'a:execute-silent(jay-sidebar --idle)+reload-sync(jay-sidebar --rows)+clear-screen' \

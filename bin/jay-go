@@ -4,10 +4,19 @@
 # hub's agent pane (from anywhere, also from an agent) and the hub's Ghostty tab comes
 # to the front; with no hub, in a Ghostty tab running `claude attach`.
 # An interactive one: its own Ghostty tab (and zellij pane).
+# A background agent that cannot wake (the folder it came from is gone): says what to do.
+# jay go --repair <agent> continues it as a copy (same conversation, new id) in the worktree it
+# was in, or in the repo's main checkout when that is gone too.
 set -euo pipefail
 source "$HOME/.local/lib/jay-lib.sh"
 
-[[ -n "${1:-}" && "$1" != -h && "$1" != --help ]] || { sed -n '2,5s/^# \{0,1\}//p' "$0"; exit 0; }
+[[ -n "${1:-}" && "$1" != -h && "$1" != --help ]] || { sed -n '2,8s/^# \{0,1\}//p' "$0"; exit 0; }
+repair=false
+if [[ "$1" == --repair ]]; then
+  repair=true
+  shift
+  [[ -n "${1:-}" ]] || { echo "Usage: jay go --repair <agent>" >&2; exit 2; }
+fi
 
 query="$*"
 query=${query#[\"\']}; query=${query%[\"\']}
@@ -53,6 +62,49 @@ id=$(jq -r '.id // empty' <<<"$agent")
 sid=$(jq -r .sessionId <<<"$agent")
 cwd=$(jq -r .cwd <<<"$agent")
 pid=$(jq -r '.pid // empty' <<<"$agent")
+
+# A background agent whose home is gone (see jay_stranded) cannot wake: `claude attach` fails.
+stranded=""
+[[ "$kind" == background && -n "$id" ]] \
+  && stranded=$(jay_stranded "$agents" "$(jay_jobs "$agents")" | awk -F'\t' -v i="$id" '$1 == i')
+if [[ "$repair" == true ]]; then
+  if [[ -z "$stranded" ]]; then
+    echo "$id can wake: nothing to repair. Its folder: $cwd" >&2
+    exit 1
+  fi
+  IFS=$'\t' read -r _ name home tree fix runs <<<"$stranded"
+  if [[ "$runs" == 1 ]]; then
+    echo "\"$name\" ($id) runs in $tree. Repair it when it does not run (claude stop $id when it is idle)." >&2
+    exit 1
+  fi
+  dir=$tree
+  if [[ "$fix" == lost ]]; then
+    dir=$(jay_repo_main "$tree")
+    [[ -n "$dir" ]] || dir=$(jay_repo_main "$home")
+    [[ -n "$dir" ]] || { echo "No main checkout found for $home. Remove the agent: claude rm $id" >&2; exit 1; }
+  fi
+  new=$(jay_continue_in "$id" "$dir") || { echo "\"$name\" ($id) did not go on in $dir." >&2; exit 1; }
+  echo "\"$name\" goes on in $dir as $new: a copy with the same conversation and options, and a new id."
+  if ! jay_drop_replaced "$id"; then
+    echo "The old entry $id stays until $tree goes: claude rm would delete that worktree. The hub list hides it."
+  fi
+  exit 0
+fi
+# One that runs still shows: it works until it stops.
+if [[ -n "$stranded" && -z "$pid" ]]; then
+  IFS=$'\t' read -r _ name home tree fix _ <<<"$stranded"
+  if [[ "$fix" == move ]]; then
+    echo "\"$name\" ($id) cannot wake: Claude wakes an agent in the folder it came from, and that folder is gone ($home). It worked in $tree.
+  jay go --repair $id   continues it there as a copy (same conversation and options, new id)" >&2
+  else
+    main=$(jay_repo_main "$tree")
+    [[ -n "$main" ]] || main=$(jay_repo_main "$home")
+    echo "\"$name\" ($id) cannot wake: the folder it came from ($home) and the worktree it worked in ($tree) are gone.${main:+
+  jay go --repair $id   continues it in the main checkout $main as a copy (same conversation, new id)}
+  claude rm $id         removes it (its transcript stays)" >&2
+  fi
+  exit 1
+fi
 
 if [[ "$kind" == background ]] && { jay_in_hub || jay_hub_live; }; then
   # The turn chain of a background agent is named after its id (see jay-snapshot). The
