@@ -31,10 +31,12 @@ usage() { sed -n '2,13s/^# \{0,1\}//p' "$0"; }
 # fields.
 fields() { jq -r "$1"' | map(tostring) | join("\u001f")'; }
 
-# zellij -s <a session that is not there> exits 0: look for the session first.
 hub_answers() {
-  jay_live_sessions | grep -qxF "$JAY_SESSION" && zellij -s "$JAY_SESSION" action list-clients >/dev/null 2>&1
+  jay_mux_alive
 }
+
+# The number of pane id $1 (3 for terminal_3 or %3), for the names of state files.
+pane_n() { printf '%s\n' "${1##*[!0-9]}"; }
 
 # The command line of args "$@": one arg is a shell string as it is; several are quoted.
 command_line() {
@@ -116,9 +118,8 @@ stop_group() {
 
 # --- The tasks: panes of the tasks tab, with their processes and ports ---
 
-# The pid of the hub's zellij server. -a: inside a hub pane (the list's tick, the launcher) the
-# server is an ancestor, which pgrep leaves out without it.
-hub_server() { pgrep -a -f "zellij --server .*/$JAY_SESSION\$" | head -1; }
+# The pid of the hub's server.
+hub_server() { jay_mux_server_pid; }
 
 # One line per pane of the hub: root pid<TAB>tty<TAB>foreground pid<TAB>pids (,)<TAB>foreground command.
 # The pids are the root's process tree, not the processes on its tty: turbo, for one, runs each
@@ -170,31 +171,33 @@ docker_ports() {
 panes_raw() {
   local panes procs fgs listen="" cwds
   hub_answers || return 1
-  panes=$(zellij -s "$JAY_SESSION" action list-panes -a -j -c 2>/dev/null) || return 1
-  jq -e 'type == "array"' <<<"$panes" >/dev/null 2>&1 || return 1
+  panes=$(jay_mux_panes) || return 1
   procs=$(pane_procs)
   fgs=$(cut -f3 <<<"$procs" | paste -sd, -)
   [[ "${1:-}" == --light ]] || listen=$(listen_ports)
   cwds=$(proc_cwds "$fgs")
-  jq -c --arg hub "$HUB_TAB" --arg procs "$procs" --arg listen "$listen" --arg cwds "$cwds" --arg self "jay-run --exec " '
+  jq -sc --arg hub "$HUB_TAB" --arg procs "$procs" --arg listen "$listen" --arg cwds "$cwds" --arg self "jay-run --exec " '
     def lines: split("\n") | map(select(length > 0) | split("\t"));
     ($procs | lines | map({root: (.[0] | tonumber), tty: .[1], fg: (.[2] | tonumber),
                            pids: (.[3] | split(",") | map(tonumber)), fgcmd: .[4]}) | sort_by(.root)) as $R
     | ($listen | lines | reduce .[] as $l ({}; .[$l[0]] += [$l[1] | tonumber])) as $L
     | ($cwds | lines | map({key: .[0], value: .[1]}) | from_entries) as $C
     # Not the short-lived panes of the keys (jay-run --switch, --launcher; hub-run in old binds).
-    | [.[] | select((.is_plugin | not) and .tab_name != $hub
-                    and ((.terminal_command // "") | test("(jay|hub)-run --(switch|launcher)") | not))] | sort_by(.id)
-    # A pane gets the first free root process whose foreground command is the pane command,
-    # in the same folder when there is one (panes and roots both go in start order). When
-    # zellij gives no command (it can be null), the only free root in the pane folder.
+    | [.[] | select(.tab != $hub
+                    and ((.launch // "") | test("(jay|hub)-run --(switch|launcher)") | not))] | sort_by(.n)
+    # A pane gets its own root process when the backend gives its pid (tmux). Else the first
+    # free root process whose foreground command is the pane command, in the same folder when
+    # there is one (panes and roots both go in start order). When zellij gives no command (it
+    # can be null), the only free root in the pane folder.
     | reduce .[] as $p ({used: [], out: []};
         .used as $used
-        | (if $p.exited then null else
+        | (if $p.exited then null
+           elif $p.pid != null then first($R[] | select(.root == $p.pid)) // null
+           else
             [$R[] | select(.root as $r | $used | index([$r]) | not)] as $free
-            | ([$free[] | select(.fgcmd == ($p.pane_command // "\u0000"))]
-               | ((map(select($C[.fg | tostring] == $p.pane_cwd)) + .) | first))
-              // ([$free[] | select($C[.fg | tostring] == $p.pane_cwd)] | if length == 1 then .[0] else null end)
+            | ([$free[] | select(.fgcmd == ($p.command // "\u0000"))]
+               | ((map(select($C[.fg | tostring] == $p.cwd)) + .) | first))
+              // ([$free[] | select($C[.fg | tostring] == $p.cwd)] | if length == 1 then .[0] else null end)
           end) as $m
         | .used += (if $m then [$m.root] else [] end)
         | .out += [{pane: $p, proc: $m}])
@@ -202,20 +205,20 @@ panes_raw() {
     | .pane as $p | .proc as $m
     # A shell at its prompt: a default pane, or a free shell that jay run opened ($SHELL -l).
     | ($m != null and $m.fg == $m.root
-       and ($p.terminal_command == null or ($m.fgcmd | test("^-?(/[^ ]*/)?(zsh|bash|fish|sh)( -l| -i| --login)*$")))) as $prompt
-    | (($p.terminal_command // "") | index($self)) as $at
+       and ($p.launch == null or ($m.fgcmd | test("^-?(/[^ ]*/)?(zsh|bash|fish|sh)( -l| -i| --login)*$")))) as $prompt
+    | (($p.launch // "") | index($self)) as $at
     | ($at != null) as $owned
-    | (if $owned then $p.terminal_command[($at + ($self | length)):] else null end) as $line
-    | {id: $p.id, pane: "terminal_\($p.id)", tab: $p.tab_name, tab_id: $p.tab_id, owned: $owned, title: $p.title,
+    | (if $owned then $p.launch[($at + ($self | length)):] else null end) as $line
+    | {id: $p.n, pane: $p.pane, tab: $p.tab, tab_id: $p.tab_id, owned: $owned, title: $p.title,
        root: ($m.root // null), fg: ($m.fg // null), pids: ($m.pids // []),
        state: (if $p.exited then "exited"
                elif $m == null then "unknown"
                elif $owned then (if ($m.pids | length) > 1 then "running" else "exited" end)
                elif $prompt then "idle"
                else "running" end),
-       exit: $p.exit_status,
+       exit: $p.exit,
        command: (if $owned then $line elif $m == null or $prompt then null else $m.fgcmd end),
-       cwd: ($C[($m.fg // -1) | tostring] // $p.pane_cwd),
+       cwd: ($C[($m.fg // -1) | tostring] // $p.cwd),
        ports: ([$m.pids[]? | $L[tostring][]?] | unique)}' <<<"$panes"
 }
 
@@ -342,7 +345,7 @@ find_task() {
   tasks=$(tasks_json) || die "the hub does not answer (start it with: jay)"
   found=$(jq -c --arg s "$sel" '
     ($s | ascii_downcase) as $l
-    | ($s | sub("^terminal_"; "")) as $id
+    | ($s | sub("^(terminal_|%)"; "")) as $id
     | (map(select(.pane == $s or (.id | tostring) == $id))) as $byid
     | (map(select((.name | ascii_downcase) == $l))) as $byname
     | (map(select([.name, (.command // ""), .cwd, (.worktree // "")] | map(ascii_downcase) | any(contains($l))))) as $bypart
@@ -380,26 +383,18 @@ tab_name() {
 }
 
 tab_id_of() {
-  zellij -s "$JAY_SESSION" action list-tabs -j 2>/dev/null \
-    | jq -r --arg t "$1" 'first(.[] | select(.name == $t) | .tab_id) // empty' 2>/dev/null
+  jay_mux_tab_id "$1"
 }
 
 # The id of the tasks tab of the worktree that holds $1. A worktree without one gets it, with
-# the banner and the bar (jay --print-tasks-tab), without moving the view.
+# the banner and the bar, without moving the view.
 ensure_tab() {
-  local top name tid layout strip=() var
+  local top name tid
   top=$(jay_toplevel "$1")
   name=$(tab_name "$top")
   tid=$(tab_id_of "$name")
   [[ -n "$tid" ]] && { printf '%s\n' "$tid"; return 0; }
-  mkdir -p "$STATE_DIR"
-  layout="$STATE_DIR/tasks-tab.$$.kdl"
-  "$HOME/.local/bin/jay" --print-tasks-tab "$top" "$name" >"$layout" || return 1
-  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
-  env ${strip[@]+"${strip[@]}"} zellij -s "$JAY_SESSION" action new-tab --no-focus --layout "$layout" \
-    --name "$name" --cwd "$top" >/dev/null 2>&1
-  rm -f "$layout"
-  tid=$(tab_id_of "$name")
+  tid=$(jay_mux_tab_new "$name" "$top")
   [[ -n "$tid" ]] && printf '%s\n' "$tid"
 }
 
@@ -410,10 +405,10 @@ ensure_tab() {
 # jay_hub_keep_hidden).
 cmd_switch() {
   local active dir agent tid="" tasks
-  jay_hub_keep_hidden "${ZELLIJ_PANE_ID:-}"
-  active=$(zellij -s "$JAY_SESSION" action list-tabs -j 2>/dev/null | jq -r 'first(.[] | select(.active) | .name) // empty')
+  jay_hub_keep_hidden "$(jay_mux_self)"
+  active=$(jay_mux_active_tab)
   if [[ "$active" != "$HUB_TAB" ]]; then
-    zellij -s "$JAY_SESSION" action go-to-tab-name "$HUB_TAB" >/dev/null 2>&1
+    jay_mux_tab_go "$HUB_TAB"
     return 0
   fi
   IFS=$'\t' read -r dir agent 2>/dev/null <"$(jay_hub_target_file review)"
@@ -424,7 +419,7 @@ cmd_switch() {
       else [.[] | select(.agent == $a)] | max_by(.id) // empty | .tab_id end' <<<"$tasks")
   fi
   [[ -n "$tid" ]] || tid=$(ensure_tab "$dir") || return 0
-  zellij -s "$JAY_SESSION" action go-to-tab-by-id "$tid" >/dev/null 2>&1
+  jay_mux_tab_go_id "$tid"
 }
 
 # Ctrl g r (a zellij Run binding, in a floating pane): a prompt that starts a command with
@@ -435,20 +430,20 @@ cmd_switch() {
 # (the binding's size): its title says where the command runs.
 cmd_launcher() {
   local tabs active tid dir name zd line
-  jay_hub_keep_hidden "${ZELLIJ_PANE_ID:-}"
-  tabs=$(zellij -s "$JAY_SESSION" action list-tabs -j 2>/dev/null)
-  active=$(jq -r 'first(.[] | select(.active) | .name) // empty' <<<"$tabs")
+  jay_hub_keep_hidden "$(jay_mux_self)"
+  tabs=$(jay_mux_tabs)
+  active=$(jq -r 'select(.active) | .name' <<<"$tabs" | head -1)
   if [[ "$active" == "$HUB_TAB" || -z "$active" ]]; then
     dir=$(cut -f1 "$(jay_hub_target_file review)" 2>/dev/null)
   else
-    tid=$(jq -r 'first(.[] | select(.active) | .tab_id)' <<<"$tabs")
-    dir=$(tasks_json 2>/dev/null | jq -r --argjson t "$tid" 'first(.[] | select(.tab_id == $t) | .cwd) // empty')
+    tid=$(jq -r 'select(.active) | .id' <<<"$tabs" | head -1)
+    dir=$(tasks_json 2>/dev/null | jq -r --arg t "$tid" 'first(.[] | select((.tab_id | tostring) == $t) | .cwd) // empty')
   fi
   [[ -n "$dir" && -d "$dir" ]] || dir=${JAY_ROOTS%%:*}
   dir=$(jay_toplevel "$dir")
   name=$(tab_name "$dir")
   cd "$dir" || exit 1
-  zellij action rename-pane "run in $name · Enter: run · Ctrl-C: cancel" >/dev/null 2>&1
+  jay_mux_rename "$(jay_mux_self)" "run in $name · Enter: run · Ctrl-C: cancel"
   if [[ -n "${JAY_LAUNCHER:-}" ]]; then
     JAY_LAUNCH_IN=$name exec /bin/sh -c "$JAY_LAUNCHER"
   fi
@@ -513,7 +508,7 @@ cmd_worktree_tab() {
 cmd_close_tab() {
   local tid
   tid=$(tab_id_of "${1:?}")
-  [[ -n "$tid" ]] && zellij -s "$JAY_SESSION" action close-tab-by-id "$tid" >/dev/null 2>&1
+  [[ -n "$tid" ]] && jay_mux_tab_close "$tid"
   return 0
 }
 
@@ -551,12 +546,9 @@ cmd_start() {
     jq -r '"jay run: this runs already: \(.name) (\(.pane))" + (if .urls != [] then " · " + (.urls | join(" ")) else "" end)' <<<"$same" >&2
     exit 1
   fi
-  local strip=() var
-  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
   tid=$(ensure_tab "$PWD") || die "the hub did not open a tab for $(tab_name "$PWD")"
-  pane=$(env ${strip[@]+"${strip[@]}"} zellij -s "$JAY_SESSION" action new-pane --tab-id "$tid" \
-    --cwd "$PWD" --name "$name" --close-on-exit -- "$SELF" --exec "$line") || die "zellij did not open the pane"
-  [[ "$pane" == terminal_* ]] && record_task "$(hub_server)" "${pane#terminal_}" "$name" "$line"
+  pane=$(jay_mux_tab_pane "$tid" "$name" "$PWD" "$SELF" --exec "$line") || die "the hub did not open the pane"
+  [[ -n "$pane" ]] && record_task "$(hub_server)" "$(pane_n "$pane")" "$name" "$line"
   printf '%s: started in the hub, tab %s (%s)\n' "$name" "$(tab_name "$PWD")" "$pane"
   if ((wait)); then
     sleep 1
@@ -577,11 +569,11 @@ PROMPT_END='(%|\$|#|>|❯|➜)[[:space:]]*$'
 # The pane lines of $1 (a dump), without the blank rows under the last line.
 trim_dump() { awk '{ a[NR] = $0 } NF { last = NR } END { for (i = 1; i <= last; i++) print a[i] }'; }
 
-# The console of tab id $1: "terminal_<id><TAB>root pid<TAB>cwd" of its newest shell at its
+# The console of tab id $1: "<pane id><TAB>root pid<TAB>cwd" of its newest shell at its
 # prompt; fails when it has none.
 console_of() {
-  panes_raw --light 2>/dev/null | jq -rs --argjson t "$1" \
-    '[.[] | select(.tab_id == $t and .state == "idle" and (.owned | not))] | max_by(.id) // empty
+  panes_raw --light 2>/dev/null | jq -rs --arg t "$1" \
+    '[.[] | select((.tab_id | tostring) == $t and .state == "idle" and (.owned | not))] | max_by(.id) // empty
      | "\(.pane)\t\(.root)\t\(.cwd)"' | grep .
 }
 
@@ -591,20 +583,18 @@ console_of() {
 # the launcher watches it: a command that ends shows the console's new lines in the launcher,
 # which grows to fit them, until a key. One that runs on: the launcher closes.
 console_run() {
-  local line=$1 dir tid pane p root cwd strip=() var before i started=0 ended=0 tp out h cd=""
+  local line=$1 dir tid pane p root cwd before i started=0 ended=0 tp out h cd="" self
   dir=$(pwd -P)
-  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
   tid=$(ensure_tab "$dir") || die "the hub did not open a tab for $(tab_name "$dir")"
   if ! IFS=$'\t' read -r pane root cwd < <(console_of "$tid"); then
     # A new tab's console, or the one the tick opens, may still start: take the newest shell
     # pane of the tab that has no command, else open one; then wait up to 3 s for its prompt.
-    pane=$(zellij -s "$JAY_SESSION" action list-panes -a -j -c 2>/dev/null | jq -r --argjson t "$tid" \
-      '[.[] | select(.tab_id == $t and (.is_plugin | not) and (.exited | not) and .title == "console")] | max_by(.id) // empty | "terminal_\(.id)"')
+    pane=$(jay_mux_panes | jq -rs --arg t "$tid" \
+      '[.[] | select((.tab_id | tostring) == $t and (.exited | not) and .title == "console")] | max_by(.n) // empty | .pane')
     if [[ -z "$pane" ]]; then
-      pane=$(env ${strip[@]+"${strip[@]}"} zellij -s "$JAY_SESSION" action new-pane --tab-id "$tid" --close-on-exit \
-        --cwd "$dir" --name console -- "${SHELL:-/bin/zsh}" -l 2>/dev/null)
+      pane=$(jay_mux_tab_pane "$tid" console "$dir" "${SHELL:-/bin/zsh}" -l 2>/dev/null)
     fi
-    [[ "$pane" == terminal_* ]] || die "no console in $(tab_name "$dir")"
+    [[ -n "$pane" ]] || die "no console in $(tab_name "$dir")"
     root="" cwd=""
     for i in $(seq 15); do
       sleep 0.2
@@ -613,9 +603,9 @@ console_run() {
     done
   fi
   [[ "$cwd" == "$dir" ]] || cd="cd -- $(printf '%q' "$dir") && "
-  before=$(zellij -s "$JAY_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | trim_dump | wc -l)
-  zellij -s "$JAY_SESSION" action write-chars --pane-id "$pane" $'\x05\x15'" $cd$line"$'\r' >/dev/null 2>&1
-  printf '%s\n' "$line" >"$STATE_DIR/console-${pane#terminal_}.line"
+  before=$(jay_mux_read "$pane" --full | trim_dump | wc -l)
+  jay_mux_type "$pane" $'\x05\x15'" $cd$line"$'\r'
+  printf '%s\n' "$line" >"$STATE_DIR/console-$(pane_n "$pane").line"
   # A console that did not reach its prompt in time gets the line too (its shell reads it when
   # it is ready), but the launcher does not wait for the output.
   [[ -n "$root" ]] || return 0
@@ -628,17 +618,18 @@ console_run() {
     [[ -n "$tp" ]] || break
     if [[ "$tp" != "$root" ]]; then started=1; continue; fi
     ((started || i >= 20)) && { ended=1; break; }
-    now=$(zellij -s "$JAY_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | trim_dump)
+    now=$(jay_mux_read "$pane" --full | trim_dump)
     if (($(wc -l <<<"$now") > before + 1)) && tail -1 <<<"$now" | grep -qE "$PROMPT_END"; then ended=1; break; fi
   done
   ((ended)) || return 0
   sleep 0.1
-  out=$(zellij -s "$JAY_SESSION" action dump-screen -p "$pane" --full 2>/dev/null | trim_dump \
+  out=$(jay_mux_read "$pane" --full | trim_dump \
     | awk -v from="$((before > 0 ? before : 1))" 'NR >= from')
-  if [[ -t 1 && -n "${ZELLIJ_PANE_ID:-}" ]]; then
+  self=$(jay_mux_self)
+  if [[ -t 1 && -n "$self" ]]; then
     h=$(($(printf '%s\n' "$out" | wc -l) + 3))
     ((h > 30)) && h=30
-    zellij action change-floating-pane-coordinates -p "terminal_$ZELLIJ_PANE_ID" --height "$h" >/dev/null 2>&1
+    jay_mux_float_height "$self" "$h"
     sleep 0.1
     clear
     printf '%s\n\e[2many key: close\e[0m' "$out"
@@ -690,7 +681,7 @@ cmd_log() {
   task=$(find_task "$sel") || exit 1
   pane=$(jq -r .pane <<<"$task")
   # The screen and scrollback, without the blank rows under the last line.
-  zellij -s "$JAY_SESSION" action dump-screen -p "$pane" --full 2>/dev/null \
+  jay_mux_read "$pane" --full \
     | awk '{ a[NR] = $0 } NF { last = NR } END { for (i = 1; i <= last; i++) print a[i] }' \
     | if [[ "$lines" == all ]]; then cat; else tail -n "$lines"; fi
 }
@@ -734,7 +725,7 @@ cmd_stop() {
   IFS=$'\x1f' read -r owned root fg state name pane < <(fields '[.owned, (.root // ""), (.fg // ""), .state, .name, .pane]' <<<"$task")
   if [[ "$owned" == true ]]; then
     [[ -n "$root" ]] && { stop_group "$root" "$root" || die "$name: still runs after Ctrl-C, TERM and KILL"; }
-    zellij -s "$JAY_SESSION" action close-pane --pane-id "$pane" >/dev/null 2>&1
+    jay_mux_close "$pane"
     printf '%s: stopped, pane closed\n' "$name"
     return 0
   fi
@@ -751,14 +742,14 @@ cmd_restart() {
   if [[ "$owned" != true ]]; then
     # A console's command that the launcher typed: stop it, then type that line again.
     local lf fg i again
-    lf="$STATE_DIR/console-${pane#terminal_}.line"
+    lf="$STATE_DIR/console-$(pane_n "$pane").line"
     [[ -f "$lf" ]] || die "$name: a shell pane; stop it (jay run stop $pane) and type the command again there"
     again=$(cat "$lf")
     fg=$(jq -r '.fg // empty' <<<"$task")
     [[ -n "$fg" ]] && { stop_group "$fg" || die "$name: still runs after Ctrl-C, TERM and KILL"; }
     for i in $(seq 20); do [[ "$(ps -o tpgid= -p "$root" | tr -d ' ')" == "$root" ]] && break; sleep 0.1; done
     printf '%s\n' "$again" >"$lf"
-    zellij -s "$JAY_SESSION" action write-chars --pane-id "$pane" $'\x05\x15'" $again"$'\r' >/dev/null 2>&1
+    jay_mux_type "$pane" $'\x05\x15'" $again"$'\r'
     printf '%s: restarted in %s\n' "$name" "$pane"
     return 0
   fi
@@ -815,13 +806,11 @@ cmd_bar() {
 # tab, open a new one there, in that tab's worktree, without moving the focus. Not while a
 # pane's process is unknown (it may be that shell).
 spare_shell() {
-  local tasks=$1 tid cwd top strip=() var
-  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
+  local tasks=$1 tid cwd top
   while IFS=$'\t' read -r tid cwd; do
     [[ -n "$tid" ]] || continue
     top=$(jay_toplevel "$cwd")
-    env ${strip[@]+"${strip[@]}"} zellij -s "$JAY_SESSION" action new-pane --tab-id "$tid" --close-on-exit \
-      --cwd "$top" --name console -- "${SHELL:-/bin/zsh}" -l >/dev/null 2>&1
+    jay_mux_tab_pane "$tid" console "$top" "${SHELL:-/bin/zsh}" -l >/dev/null 2>&1
   done < <(jq -r 'group_by(.tab_id)[] | select(all(.[]; .state != "idle" and .state != "unknown"))
     | "\(.[0].tab_id)\t\(.[0].cwd)"' <<<"$tasks")
 }
@@ -835,7 +824,7 @@ tidy_shells() {
   now=$(date +%s)
   while IFS=$'\t' read -r pane title want; do
     [[ -n "$pane" && "$title" != "$want" ]] || continue
-    zellij -s "$JAY_SESSION" action rename-pane -p "$pane" "$want" >/dev/null 2>&1
+    jay_mux_rename "$pane" "$want"
   done < <(jq -r '.[] | select((.owned | not) and (.state == "idle" or .state == "running"))
     | [.pane, .title, (if .state == "idle" then "console" else .name end)] | @tsv' <<<"$tasks")
   # A console back at its prompt: the line the launcher typed is done.
@@ -847,7 +836,7 @@ tidy_shells() {
     if [[ -z "$since" ]]; then
       printf '%s\n' "$now" >"$STATE_DIR/idle-$id"
     elif ((now - since >= 600)); then
-      zellij -s "$JAY_SESSION" action close-pane --pane-id "terminal_$id" >/dev/null 2>&1
+      jay_mux_close "$(jq -r --argjson i "$id" 'first(.[] | select(.id == $i)) | .pane' <<<"$tasks")"
       rm -f "$STATE_DIR/idle-$id" "$STATE_DIR/console-$id.line"
     fi
   done
@@ -877,7 +866,7 @@ cmd_where() {
   [[ -n "$dir" ]] || dir=$(cut -f1 "$(jay_hub_target_file review)" 2>/dev/null)
   [[ -n "$dir" && -d "$dir" ]] || return 0
   IFS=$'\t' read -r client repo branch top < <(jay_describe "$dir")
-  zellij -s "$JAY_SESSION" pipe "zjstatus::pipe::pipe_where::$repo/$branch" >/dev/null 2>&1
+  jay_mux_bar where "$repo/$branch"
 }
 
 # SessionStart hook: tells each Claude session about the tasks tab (stdout becomes context).

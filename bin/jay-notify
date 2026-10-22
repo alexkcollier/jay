@@ -72,9 +72,8 @@ if jay_gh_ok && [[ "$(jay_frontmost_bundle)" == com.mitchellh.ghostty ]]; then
     [[ "$event" == Stop ]] && jay_mark seen "$key"
     exit 0
   fi
-  if jay_hub_live && [[ "$(zellij -s "$JAY_SESSION" action list-tabs -j 2>/dev/null \
-    | jq -r 'first(.[] | select(.active) | .name) // "hub"' 2>/dev/null)" == hub ]]; then
-    tabs+=$'\n'$(jay_gh_tab_for_session "$JAY_SESSION" || true)
+  if jay_hub_live && active=$(jay_mux_active_tab) && [[ "${active:-hub}" == hub ]]; then
+    tabs+=$'\n'$(jay_mux_gh_tab || true)
   fi
   [[ -n "$selected" ]] && grep -qxF "$selected" <<<"$tabs" && exit 0
 fi

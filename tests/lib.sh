@@ -29,7 +29,7 @@ printf '[init]\n\tdefaultBranch = main\n[advice]\n\tdetachedHead = false\n' >"$H
 link_install() {
   local f
   for f in "$REPO"/bin/* "$REPO"/compat/*; do ln -sfn "$f" "$HOME/.local/bin/${f##*/}"; done
-  ln -sfn "$REPO/lib/jay-lib.sh" "$HOME/.local/lib/jay-lib.sh"
+  for f in "$REPO"/lib/jay-*.sh; do ln -sfn "$f" "$HOME/.local/lib/${f##*/}"; done
   ln -sfn "$REPO/lib/wt-lib.sh" "$HOME/.local/lib/wt-lib.sh"
 }
 

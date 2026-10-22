@@ -2,7 +2,7 @@
 # install.sh [--link] [--with-mod] [--with-setup] [--force] [--compat] | --check | --no-compat | --uninstall
 # Install jay (it was wt-hub) for this user (macOS). It runs again safely: run it again after a
 # git pull.
-#   ~/.local/bin/<each script in bin/>, ~/.local/lib/jay-lib.sh
+#   ~/.local/bin/<each script in bin/>, ~/.local/lib/jay-lib.sh and jay-mux-*.sh
 #                                    copies; --link: symlinks into this repo, so an edit is live
 #                                    at once (for work on jay itself)
 #   ~/.local/bin/<old names>, ~/.local/lib/wt-lib.sh
@@ -354,7 +354,8 @@ install_files() {
     [[ -f "$f" ]] || continue
     put "$f" "$BIN/${f##*/}"
   done
-  put "$repo/lib/jay-lib.sh" "$LIB/jay-lib.sh"
+  # The lib and its mux backends (jay-mux-<name>.sh).
+  for f in "$repo"/lib/jay-*.sh; do put "$f" "$LIB/${f##*/}"; done
   # The old names (wt-hub's) run the new commands, unless --no-compat took them away.
   if [[ ! -f "$NOCOMPAT" ]]; then
     for f in "$repo"/compat/*; do put "$f" "$BIN/${f##*/}"; done
@@ -698,7 +699,7 @@ no_compat() {
 uninstall() {
   head_ "Uninstall"
   local f dest n=0 name where
-  for f in "$repo"/bin/* "$repo"/compat/* "$repo/lib/jay-lib.sh" "$repo/lib/wt-lib.sh"; do
+  for f in "$repo"/bin/* "$repo"/compat/* "$repo"/lib/jay-*.sh "$repo/lib/wt-lib.sh"; do
     [[ $f == */lib/* ]] && dest="$LIB/${f##*/}" || dest="$BIN/${f##*/}"
     if [[ -e "$dest" || -L "$dest" ]] && is_ours "$dest"; then rm -f "$dest"; n=$((n + 1)); fi
   done

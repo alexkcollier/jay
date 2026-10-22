@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# jay-mux <name> [args] — run one function of jay's mux layer (jay_mux_<name> in lib/jay-lib.sh)
+# from outside bash: jay-keys, fzf binds, a later TUI. An arg "self" is the caller's own pane.
+# The output is plain text (panes and tabs: one JSON object per line).
+#   jay-mux panes | tabs | active_tab | alive | read <pane> [--full] | type <pane> <text>
+#   jay-mux rename <pane> <title> | focus <list|agent|review> | resize_list <decrease|increase>
+set -uo pipefail
+source "$HOME/.local/lib/jay-lib.sh"
+
+[[ -n "${1:-}" && "$1" != -h && "$1" != --help ]] || { sed -n '2,6s/^# \{0,1\}//p' "$0"; exit 0; }
+name=jay_mux_$1
+shift
+[[ "$(type -t "$name")" == function ]] || { echo "jay-mux: no function $name" >&2; exit 2; }
+args=()
+for arg in "$@"; do
+  [[ "$arg" == self ]] && arg=$(jay_mux_self)
+  args+=("$arg")
+done
+"$name" ${args[@]+"${args[@]}"}

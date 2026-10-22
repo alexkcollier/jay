@@ -431,18 +431,53 @@ jay_agent_phases() {
 
 JAY_SESSION=${JAY_SESSION:-jay}
 
+# --- The mux layer: every call to the hub's multiplexer goes through jay_mux_* ---
+# The backend is lib/jay-mux-$JAY_MUX.sh (zellij). The scripts say what they want ("focus the
+# agent column", "cover review with files"), the backend says how. jay-mux <name> [args] runs
+# one from outside bash (a pane id "self" is the caller's own pane). Pane and tab ids are the
+# backend's own strings; scripts pass them on and never take them apart.
+#   session  jay_mux_in_hub, jay_mux_alive, jay_mux_has_client, jay_mux_server_pid, jay_mux_kill,
+#            jay_mux_old_hub, jay_mux_start, jay_mux_attach, jay_mux_attach_cmd, jay_mux_gh_tab,
+#            jay_mux_print_layout
+#   panes    jay_mux_panes (JSON lines), jay_mux_self, jay_mux_rename, jay_mux_read, jay_mux_type,
+#            jay_mux_close, jay_mux_cover / jay_mux_uncover (a pane over a pane and back),
+#            jay_mux_wait_shown, jay_mux_wait_gone, jay_mux_focus <list|agent|review>,
+#            jay_mux_resize_list, jay_mux_list_share, jay_mux_float_height
+#   review   jay_mux_hide_review, jay_mux_unhide_review, jay_mux_review_hidden, jay_mux_rehide,
+#            jay_mux_keep_hidden
+#   tabs     jay_mux_tabs (JSON lines), jay_mux_tab_id, jay_mux_active_tab, jay_mux_tab_go,
+#            jay_mux_tab_go_id, jay_mux_tab_new, jay_mux_tab_close, jay_mux_tab_pane
+#   bar      jay_mux_bar <agents|tasks|where> <text>
+JAY_MUX=${JAY_MUX:-zellij}
+source "${BASH_SOURCE[0]%/*}/jay-mux-$JAY_MUX.sh"
+
 jay_in_hub() {
-  [[ "${ZELLIJ_SESSION_NAME:-}" == "$JAY_SESSION" && -z "${CLAUDE_JOB_DIR:-}" ]]
+  jay_mux_in_hub
 }
 
 # The hub runs with a terminal attached, wherever the caller is (an agent viewed in the hub
 # runs outside it).
 jay_hub_live() {
-  jay_session_has_client "$JAY_SESSION"
+  jay_mux_has_client
 }
 
-jay_hub_panes() {
-  zellij -s "$JAY_SESSION" action list-panes -a -j -c 2>/dev/null | jq -c '.[] | select(.is_plugin | not)'
+# Run "$@" without the CLAUDE*/ANTHROPIC* variables (a pane the hub opens for a caller in an
+# agent must not inherit them).
+jay_without_claude() {
+  (
+    for _var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do unset "$_var"; done
+    "$@"
+  )
+}
+
+# The hub's columns in % (list, middle, right): the list at its saved share (10 to 60, else 22),
+# the rest split 43:35.
+jay_hub_widths() {
+  local list middle
+  list=$(cat "$JAY_STATE/sidebar.pct" 2>/dev/null || true)
+  [[ "$list" =~ ^[0-9]+$ ]] && ((list >= 10 && list <= 60)) || list=22
+  middle=$(((100 - list) * 43 / 78))
+  printf '%s %s %s\n' "$list" "$middle" "$((100 - list - middle))"
 }
 
 # The files of role $1 (agent, review, files); the folder is made for the write that may follow.
@@ -465,19 +500,28 @@ jay_hub_pane_gone() {
   return 0
 }
 
-# "terminal_<id><TAB>pid" of the running jay-pane for role $1; fails when there is none.
-# A recorded pane that zellij no longer lists is lost (an in-place pane opened over a suspended
-# one): its jay-pane still runs and takes every pick, but nobody sees it. It is stopped and
-# forgotten. A pane of the role without a record is taken on when it is the only one and one
-# jay-pane of the role runs in the hub. When zellij does not answer, the record is trusted.
+# Record that jay-pane $2 (pid $3) runs in pane $1. A zellij pane is recorded as its number
+# ("3" for terminal_3), as older versions did: a list that still runs old code reads it.
+jay_hub_pane_record() {
+  local file
+  file=$(jay_hub_pane_file "$2")
+  printf '%s\t%s\n' "${1#terminal_}" "$3" >"$file.$$" && mv "$file.$$" "$file"
+}
+
+# "<pane id><TAB>pid" of the running jay-pane for role $1; fails when there is none.
+# A recorded pane that the hub no longer lists is lost (zellij: an in-place pane opened over a
+# suspended one): its jay-pane still runs and takes every pick, but nobody sees it. It is stopped
+# and forgotten. A pane of the role without a record is taken on when it is the only one and one
+# jay-pane of the role runs in the hub. When the hub does not answer, the record is trusted.
 jay_hub_role() {
   local file pane="" pid="" lost="" panes pids
   file=$(jay_hub_pane_file "$1")
   IFS=$'\t' read -r pane pid 2>/dev/null <"$file"
+  [[ "$pane" =~ ^[0-9]+$ ]] && pane=terminal_$pane
   if [[ -n "$pane" && -n "$pid" ]] && ps -o command= -p "$pid" 2>/dev/null | grep -q "jay-pane $1"; then
-    panes=$(jay_hub_panes)
-    if [[ -z "$panes" ]] || jq -e --argjson id "$pane" 'select(.id == $id and (.exited | not))' <<<"$panes" >/dev/null; then
-      printf 'terminal_%s\t%s\n' "$pane" "$pid"
+    panes=$(jay_mux_panes)
+    if [[ -z "$panes" ]] || jq -e --arg p "$pane" 'select(.pane == $p and (.exited | not))' <<<"$panes" >/dev/null; then
+      printf '%s\t%s\n' "$pane" "$pid"
       return 0
     fi
     lost=$pid
@@ -485,26 +529,15 @@ jay_hub_role() {
     kill -TERM "$pid" 2>/dev/null
     jay_hub_pane_gone "$1" "$pid"
   else
-    panes=$(jay_hub_panes)
+    panes=$(jay_mux_panes)
   fi
   pane=$(jq -r --arg role "$1" \
-    'select((.exited | not) and ((.terminal_command // "") | test("jay-pane " + $role + "$"))) | .id' <<<"$panes")
+    'select((.exited | not) and ((.launch // "") | test("jay-pane " + $role + "$"))) | .pane' <<<"$panes")
   [[ -n "$pane" && "$pane" != *$'\n'* ]] || return 1
-  # pgrep -a: from inside a hub pane the server is an ancestor, which pgrep leaves out without it.
-  pids=$(pgrep -P "$(pgrep -a -f "zellij --server .*/$JAY_SESSION\$" | head -1)" -f "jay-pane $1\$" | grep -vxF "${lost:-none}")
+  pids=$(pgrep -P "$(jay_mux_server_pid)" -f "jay-pane $1\$" | grep -vxF "${lost:-none}")
   [[ -n "$pids" && "$pids" != *$'\n'* ]] || return 1
-  printf '%s\t%s\n' "$pane" "$pids" >"$file.$$" && mv "$file.$$" "$file"
-  printf 'terminal_%s\t%s\n' "$pane" "$pids"
-}
-
-# Wait up to 2 s until pane $1 (a terminal id) is shown, not suspended under another pane.
-jay_hub_wait_shown() {
-  local i
-  for i in $(seq 20); do
-    jay_hub_panes | jq -e --argjson id "$1" 'select(.id == $id and (.is_suppressed | not))' >/dev/null && return 0
-    sleep 0.1
-  done
-  return 1
+  jay_hub_pane_record "$pane" "$1" "$pids"
+  printf '%s\t%s\n' "$pane" "$pids"
 }
 
 jay_hub_write_target() {
@@ -547,7 +580,7 @@ jay_kill_children() {
   return 0
 }
 
-# Point the running hub pane of role $1 at target line $2. Prints "terminal_<id><TAB>changed",
+# Point the running hub pane of role $1 at target line $2. Prints "<pane id><TAB>changed",
 # changed being 1 when the pane restarts its program for the new target, else 0.
 # Fails when no pane of that role runs.
 jay_hub_point() {
@@ -562,17 +595,9 @@ jay_hub_point() {
   printf '%s\t1\n' "$pane"
 }
 
-# In zellij 0.45 `focus-pane-id` from the CLI sets a focus of its own, not the terminal's, and on
-# a suspended pane it makes that pane float. `move-focus` moves the terminal's focus.
-
-# Move the focus to the middle column (the agent viewer), from any column: left twice reaches
-# the list, then one step right. From the tasks tab, go to the hub's tab first.
+# Move the focus to the middle column (the agent viewer), from any column and tab.
 jay_hub_focus_middle() {
-  zellij -s "$JAY_SESSION" action go-to-tab-name hub >/dev/null 2>&1
-  zellij -s "$JAY_SESSION" action move-focus left >/dev/null 2>&1
-  zellij -s "$JAY_SESSION" action move-focus left >/dev/null 2>&1
-  zellij -s "$JAY_SESSION" action move-focus right >/dev/null 2>&1
-  return 0
+  jay_mux_focus agent
 }
 
 # Run "$@" holding the hub lock, so two picks (sidebar, /jay go, a notice click) never move
@@ -595,7 +620,7 @@ jay_hub_show() {
   line=$(printf '%s\t%s' "$id" "$cwd")
   [[ "${4:-}" == interactive ]] && line=$(printf '%s\tinteractive\t%s' "$line" "$name")
   IFS=$'\t' read -r viewer changed < <(jay_hub_point agent "$line") || return 1
-  [[ "$changed" == 1 ]] && zellij -s "$JAY_SESSION" action rename-pane -p "$viewer" "$name" >/dev/null 2>&1
+  [[ "$changed" == 1 ]] && jay_mux_rename "$viewer" "$name"
   jay_hub_focus_middle
 }
 
@@ -1008,10 +1033,10 @@ jay_hub_target() {
   top=$(jay_toplevel "$1")
   title=$(jay_hub_title "$top")
   if IFS=$'\t' read -r pane changed < <(jay_hub_point review "$(printf '%s\t%s' "$top" "${2:-}")"); then
-    [[ "$changed" == 1 ]] && zellij -s "$JAY_SESSION" action rename-pane -p "$pane" "$(jay_hub_pane_title review "$title")" >/dev/null 2>&1
+    [[ "$changed" == 1 ]] && jay_mux_rename "$pane" "$(jay_hub_pane_title review "$title")"
   fi
   if IFS=$'\t' read -r pane changed < <(jay_hub_point files "$top"); then
-    [[ "$changed" == 1 ]] && zellij -s "$JAY_SESSION" action rename-pane -p "$pane" "$(jay_hub_pane_title files "$title")" >/dev/null 2>&1
+    [[ "$changed" == 1 ]] && jay_mux_rename "$pane" "$(jay_hub_pane_title files "$title")"
   fi
   # The hub tab's banner shows the picked worktree (Ctrl g Tab goes to its tasks tab).
   ("$HOME/.local/bin/jay-run" --where "$top" >/dev/null 2>&1 &)
@@ -1039,11 +1064,11 @@ jay_hub_retitle() {
   IFS=$'\t' read -r pane _ < <(jay_hub_role "$1") || return 0
   top=$(cut -f1 "$(jay_hub_target_file "$1")" 2>/dev/null)
   [[ -n "$top" ]] || return 0
-  zellij -s "$JAY_SESSION" action rename-pane -p "$pane" "$(jay_hub_pane_title "$1" "$(jay_hub_title "$top")")" >/dev/null 2>&1
+  jay_mux_rename "$pane" "$(jay_hub_pane_title "$1" "$(jay_hub_title "$top")")"
 }
 
-# Show files (yazi) in place over review, in the review's worktree. Not while review is hidden
-# (Ctrl g v).
+# Show files (yazi) over review, in the review's worktree (jay_mux_cover). Not while review is
+# hidden (Ctrl g v).
 jay_hub_show_files() {
   local review top pane
   [[ -f "$JAY_HIDDEN" ]] && return 0
@@ -1051,11 +1076,10 @@ jay_hub_show_files() {
   IFS=$'\t' read -r review _ < <(jay_hub_role review) || return 0
   top=$(cut -f1 "$(jay_hub_target_file review)" 2>/dev/null)
   [[ -n "$top" ]] || return 0
-  jay_hub_wait_shown "${review#terminal_}" || return 0
+  jay_mux_wait_shown "$review" || return 0
   jay_hub_write_target files "$top"
-  pane=$(zellij -s "$JAY_SESSION" action new-pane --in-place --pane-id "$review" --close-on-exit \
-    --name "$(jay_hub_pane_title files "$(jay_hub_title "$top")")" --cwd "$top" -- "$HOME/.local/bin/jay-pane" files)
-  [[ "$pane" == terminal_* ]] && jay_hub_role_ready files
+  pane=$(jay_mux_cover "$review" "$(jay_hub_pane_title files "$(jay_hub_title "$top")")" "$top" "$HOME/.local/bin/jay-pane" files)
+  [[ -n "$pane" ]] && jay_hub_role_ready files
   return 0
 }
 
@@ -1063,122 +1087,53 @@ jay_hub_show_files() {
 jay_hub_show_review() {
   local pane
   IFS=$'\t' read -r pane _ < <(jay_hub_role files) || return 0
-  zellij -s "$JAY_SESSION" action close-pane --pane-id "$pane" >/dev/null 2>&1
+  jay_mux_uncover "$pane"
   jay_hub_retitle review
 }
 
-# --- Review hidden (Ctrl g v): the middle column takes review's width ---
-# zellij 0.45 cannot hide a tiled pane. Review becomes a floating pane of no size in the bottom
-# right corner, and the tab's floating panes hide; tuicr runs on, so your place and draft
-# comments stay. A new floating pane (Ctrl g Tab, Ctrl g r) shows the floating panes again, and
-# when it closes the hidden review gets the keys: jay_hub_keep_hidden hides them again.
-# An embedded floating pane goes under the biggest pane, so show opens a placeholder right of
-# the middle column and stacks review with it: a floating pane takes the place of the pane it is
-# stacked with. The placeholder then closes. Files closes before review hides (a floating files
-# pane loses the review under it) and opens again after show.
-# The file holds review's share of the tab's width and 1 when files was open.
+# --- Review hidden (Ctrl g v): the middle column takes review's width; tuicr runs on, so your
+# place and draft comments stay. The backend does it (jay_mux_hide_review). The file holds
+# review's share of the tab's width and 1 when files was open.
 JAY_HIDDEN="$JAY_STATE/review.hidden"
 
-# Review is hidden (its pane floats): print the id of its tab.
+# Review is hidden: prints the id of its tab (zellij) or window (tmux).
 jay_hub_review_hidden() {
   local pane
   IFS=$'\t' read -r pane _ < <(jay_hub_role review) || return 1
-  jay_hub_panes | jq -er --argjson id "${pane#terminal_}" 'select(.id == $id and .is_floating) | .tab_id'
-}
-
-# Wait while pane $1 (a terminal id, as in ZELLIJ_PANE_ID) is open, up to $2 seconds (default 5).
-jay_hub_wait_gone() {
-  local end=$((SECONDS + ${2:-5}))
-  [[ -n "${1:-}" ]] || return 0
-  while ((SECONDS < end)); do
-    jay_hub_panes | jq -e --argjson id "$1" 'select(.id == $id)' >/dev/null || return 0
-    sleep 0.2
-  done
-  return 1
+  jay_mux_review_hidden "$pane"
 }
 
 jay_hub_hide_review() {
-  local review tab cols total files=0
+  local review
   IFS=$'\t' read -r review _ < <(jay_hub_role review) || return 0
-  if jay_hub_role files >/dev/null; then
-    files=1
-    jay_hub_show_review
-    jay_hub_wait_shown "${review#terminal_}" || return 0
-  fi
-  read -r tab cols total < <(jay_hub_panes | jq -rs --argjson id "${review#terminal_}" '
-    (map(select(.id == $id)) | first) as $r | select($r != null and ($r.is_floating | not))
-    | [$r.tab_id, $r.pane_columns, ([.[] | select(.tab_id == $r.tab_id and (.is_floating | not)) | .pane_x + .pane_columns] | max)]
-    | @tsv')
-  [[ -n "${total:-}" ]] || return 0
-  printf '%s %s\n' "$((cols * 100 / total))" "$files" >"$JAY_HIDDEN"
-  zellij -s "$JAY_SESSION" action toggle-pane-embed-or-floating -p "$review" >/dev/null 2>&1
-  zellij -s "$JAY_SESSION" action change-floating-pane-coordinates -p "$review" -x 100% -y 100% --width 1 --height 1 >/dev/null 2>&1
-  zellij -s "$JAY_SESSION" action hide-floating-panes -t "$tab" >/dev/null 2>&1
+  jay_mux_hide_review "$review"
 }
 
 # Show the hidden review in the right column again, at its old width. --focus: the focus goes to
 # review; else it goes back to the column that had it.
 jay_hub_unhide_review() {
-  local review tab share files list place i cols total
+  local review
   IFS=$'\t' read -r review _ < <(jay_hub_role review) || return 0
-  tab=$(jay_hub_review_hidden) || { rm -f "$JAY_HIDDEN"; return 0; }
-  read -r share files <"$JAY_HIDDEN" 2>/dev/null
-  [[ "${share:-}" =~ ^[0-9]+$ ]] || share=35
-  # The focus moves below act on the tiled panes only while the floating ones are hidden.
-  zellij -s "$JAY_SESSION" action hide-floating-panes -t "$tab" >/dev/null 2>&1
-  list=$(jay_hub_panes | jq -rs --argjson t "$tab" \
-    'any(.[]; .tab_id == $t and (.is_floating | not) and .is_focused and .pane_x == 0)')
-  jay_hub_focus_middle
-  place=$(zellij -s "$JAY_SESSION" action new-pane --direction right --close-on-exit -- sleep 10)
-  [[ "$place" == terminal_* ]] || return 0
-  zellij -s "$JAY_SESSION" action stack-panes -- "$place" "$review" >/dev/null 2>&1
-  zellij -s "$JAY_SESSION" action close-pane -p "$place" >/dev/null 2>&1
-  rm -f "$JAY_HIDDEN"
-  # zellij resizes in steps of 5 % of the tab.
-  for i in 1 2 3 4 5 6 7 8 9 10; do
-    read -r cols total < <(jay_hub_panes | jq -rs --argjson id "${review#terminal_}" '
-      (map(select(.id == $id)) | first) as $r | select($r != null)
-      | [$r.pane_columns, ([.[] | select(.tab_id == $r.tab_id and (.is_floating | not)) | .pane_x + .pane_columns] | max)]
-      | @tsv')
-    [[ -n "${total:-}" ]] || break
-    if ((cols * 100 / total > share + 2)); then
-      zellij -s "$JAY_SESSION" action resize -p "$review" decrease left >/dev/null 2>&1
-    elif ((cols * 100 / total < share - 2)); then
-      zellij -s "$JAY_SESSION" action resize -p "$review" increase left >/dev/null 2>&1
-    else
-      break
-    fi
-  done
-  [[ "${files:-0}" == 1 ]] && jay_hub_show_files
-  # Review (or files over it) has the focus now.
-  if [[ "${1:-}" != --focus ]]; then
-    zellij -s "$JAY_SESSION" action move-focus left >/dev/null 2>&1
-    [[ "$list" == true ]] && zellij -s "$JAY_SESSION" action move-focus left >/dev/null 2>&1
-  fi
-  return 0
+  jay_mux_unhide_review "$review" "${1:-}"
 }
 
 jay_hub_toggle_review() {
   if jay_hub_review_hidden >/dev/null; then jay_hub_unhide_review; else jay_hub_hide_review; fi
 }
 
-# Hide the floating panes of the hub tab again when review is hidden and is the only one left.
+# Hide review again when something showed it by accident (zellij: a new floating pane shows the
+# hidden ones).
 jay_hub_rehide() {
-  local tab
+  local pane
   [[ -f "$JAY_HIDDEN" ]] || return 0
-  tab=$(jay_hub_review_hidden) || return 0
-  zellij -s "$JAY_SESSION" action list-panes -a -j -c 2>/dev/null \
-    | jq -e --argjson t "$tab" '[.[] | select(.tab_id == $t and .is_floating)] | length == 1' >/dev/null || return 0
-  [[ "$(zellij -s "$JAY_SESSION" action are-floating-panes-visible -t "$tab" 2>/dev/null)" == true ]] || return 0
-  zellij -s "$JAY_SESSION" action hide-floating-panes -t "$tab" >/dev/null 2>&1
+  IFS=$'\t' read -r pane _ < <(jay_hub_role review) || return 0
+  jay_mux_rehide "$pane"
 }
 
-# For a Run binding's floating pane $1 (the caller's ZELLIJ_PANE_ID): when it closes, hide the
-# floating panes again (review hidden). In the background, up to an hour: the pane closes when
-# its caller ends.
+# For a key's pane $1 (the caller's own, zellij): when it closes, hide review again (review
+# hidden). In the background.
 jay_hub_keep_hidden() {
-  [[ -f "$JAY_HIDDEN" && -n "${1:-}" ]] || return 0
-  (trap '' HUP; jay_hub_wait_gone "$1" 3600 && jay_hub_rehide) </dev/null >/dev/null 2>&1 &
+  jay_mux_keep_hidden "${1:-}"
 }
 
 # --- Claude Code updates: agents on an old binary move to the new one at a quiet moment ---

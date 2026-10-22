@@ -59,147 +59,41 @@ esac
 
 source "$HOME/.local/lib/jay-lib.sh"
 
-SESSION=$JAY_SESSION
 root=${JAY_ROOTS%%:*}
-layout="$JAY_STATE/layout.kdl"
-# zjstatus (github.com/dj95/zjstatus) v0.25.0, sha256 282ceab219e56e1908c9fac33907241fe6c3e1ef7d85faab3e5f438cef87b8fe.
-# Without it the hub uses zellij's compact bar.
-ZJSTATUS="$HOME/.local/share/jay/zjstatus-v0.25.0.wasm"
-
-# The bar at the bottom of the hub, in kanagawa colors: the agent counts and the tasks (both
-# sent by the list, see jay-sidebar), the zellij mode when it is not locked and the time. No tab
-# list: there is a tab per worktree, and the banner says which one is shown.
-bar() {
-  if [[ ! -f "$ZJSTATUS" ]]; then
-    printf '%s\n' 'plugin location="zellij:compact-bar"'
-    return
-  fi
-  local tz
-  tz=$(readlink /etc/localtime | sed 's#.*/zoneinfo/##')
-  cat <<KDL
-plugin location="file:$ZJSTATUS" {
-                format_left   "#[fg=#7E9CD8,bold] ◆ jay  {pipe_agents}   {pipe_tasks}"
-                format_right  "{mode}#[fg=#727169] {datetime} "
-                format_space  ""
-                pipe_agents_format     "{output}"
-                pipe_agents_rendermode "raw"
-                pipe_tasks_format      "{output}"
-                pipe_tasks_rendermode  "raw"
-                mode_locked          ""
-                mode_normal          "#[fg=#1F1F28,bg=#E6C384,bold] {name} #[fg=#727169] Ctrl q: quit hub · Ctrl g: lock  "
-                mode_default_to_mode "normal"
-                datetime          "{format}"
-                datetime_format   "%H:%M"
-                datetime_timezone "$tz"
-            }
-KDL
-}
-
-# The banner at the top of each tab, so that each tab says it is the hub's: "◆ JAY › <what the
-# tab is>" ($1), the worktree ($3; without it the picked one, sent at each pick, see
-# jay_hub_target and jay-sidebar) and where Ctrl g Tab goes ($2). Without zjstatus, none.
-banner() {
-  [[ -f "$ZJSTATUS" ]] || return 0
-  local where='{pipe_where}'
-  [[ -n "${3:-}" ]] && where=$(sed 's/[\\"]/\\&/g; s/#\[/# [/g' <<<"$3")
-  cat <<KDL
-pane size=1 borderless=true {
-            plugin location="file:$ZJSTATUS" {
-                format_left   "#[fg=#1F1F28,bg=#7E9CD8,bold] ◆ JAY › $1 #[fg=#1F1F28,bg=#7E9CD8]  $where"
-                format_right  "#[fg=#1F1F28,bg=#7E9CD8] Ctrl g Tab: $2 "
-                format_space  "#[bg=#7E9CD8]"
-                pipe_where_format     "#[fg=#1F1F28,bg=#7E9CD8]{output}"
-                pipe_where_rendermode "static"
-            }
-        }
-KDL
-}
-
-write_layout() {
-  local list middle right
-  list=$(cat "$JAY_STATE/sidebar.pct" 2>/dev/null || true)
-  [[ "$list" =~ ^[0-9]+$ ]] && ((list >= 10 && list <= 60)) || list=22
-  middle=$(((100 - list) * 43 / 78))
-  right=$((100 - list - middle))
-  cat <<KDL
-layout {
-    default_tab_template {
-        children
-        pane size=1 borderless=true {
-            $(bar)
-        }
-    }
-    tab name="hub" focus=true {
-        $(banner worktrees "its tasks")
-        pane split_direction="vertical" {
-            pane size="$list%" name="worktrees" command="$HOME/.local/bin/jay-sidebar"
-            pane size="$middle%" name="hub" focus=true command="$HOME/.local/bin/jay-pane" {
-                args "agent"
-            }
-            pane size="$right%" name="review" command="$HOME/.local/bin/jay-pane" {
-                args "review"
-            }
-        }
-    }
-}
-KDL
-}
-
-# Only a running hub that answers is reused. An exited copy would come back resurrected (every
-# pane waiting for Enter), and a server that outlived its session hangs, so both are removed
-# and the hub starts fresh from the layout.
-hub_answers() {
-  jay_live_sessions | grep -qxF "$SESSION" && zellij -s "$SESSION" action list-clients >/dev/null 2>&1
-}
 
 # The hub of wt-hub (jay's old name) is the zellij session "hub", with the list pane
 # "worktrees". A second hub next to it would share the hub Claude and the agents' marks: the old
 # one quits first.
 no_old_hub() {
-  [[ "$SESSION" != hub ]] && jay_live_sessions | grep -qxF hub \
-    && zellij -s hub action list-panes -j 2>/dev/null | jq -e 'any(.[]; .title == "worktrees")' >/dev/null 2>&1 \
-    || return 0
+  jay_mux_old_hub || return 0
   echo "jay: the hub of wt-hub still runs (zellij session hub). Quit it first: Ctrl g, then Ctrl q in it (the agents keep running). Then run jay again." >&2
   exit 1
 }
 
+# Only a running hub that answers is reused (jay_mux_alive). Any other is removed, and the hub
+# starts fresh from the layout.
 fresh_start() {
   no_old_hub
-  pkill -9 -f "zellij --server .*/$SESSION\$" 2>/dev/null || true
-  zellij delete-session --force "$SESSION" >/dev/null 2>&1 || true
+  jay_mux_kill
   jay_state_dir
-  write_layout >"$layout"
   jay_hub_reset
 }
 
-# The tasks tab of worktree $1, named $2 (jay run makes it, see ensure_tab there): the banner,
-# the console (a shell in the worktree, see jay-run), the bar.
-tasks_tab_layout() {
-  cat <<KDL
-layout {
-    $(banner tasks "back to the hub" "$2")
-    pane cwd="$1" name="console"
-    pane size=1 borderless=true {
-        $(bar)
-    }
-}
-KDL
-}
-
 if [[ "${1:-}" == --print-layout ]]; then
-  write_layout
+  jay_mux_print_layout
   exit 0
 fi
+# The layout of a worktree's tasks tab, as older versions of jay run asked for it.
 if [[ "${1:-}" == --print-tasks-tab ]]; then
   [[ -n "${2:-}" && -n "${3:-}" ]] || { echo "jay --print-tasks-tab <worktree> <name>" >&2; exit 2; }
-  tasks_tab_layout "$(sed 's/[\\"]/\\&/g' <<<"$2")" "$3"
+  _jay_zj_tasks_layout "$(sed 's/[\\"]/\\&/g' <<<"$2")" "$3"
   exit 0
 fi
 
 where=${1:-}
 
 # A hub that runs in a Ghostty tab: go to that tab.
-if [[ "$where" != --here ]] && hub_answers && tab=$(jay_gh_tab_for_session "$SESSION"); then
+if [[ "$where" != --here ]] && jay_mux_alive && tab=$(jay_mux_gh_tab); then
   jay_gh_select "$tab"
   exit 0
 fi
@@ -207,12 +101,12 @@ fi
 # Else in this terminal (no new tab by default). Not possible without a terminal (an
 # agent, a script) or inside another zellij session (nested zellij): then a new tab.
 if [[ "$where" == --here ]] || [[ "$where" != --tab && -t 0 && -t 1 && -z "${ZELLIJ:-}" ]]; then
-  hub_answers && exec zellij attach "$SESSION"
+  jay_mux_alive && jay_mux_attach
   fresh_start
   # The hub's panes inherit the server's environment. A Ghostty started by an agent passes that
   # agent's CLAUDE_* variables to every tab, and in the hub they make jay_in_hub false.
   for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do unset "$var"; done
-  exec zellij -s "$SESSION" -n "$layout"
+  jay_mux_start
 fi
 
 # A new tab needs tab control (Ghostty only, see jay_gh_ok).
@@ -221,8 +115,8 @@ if ! jay_gh_ok; then
   exit 1
 fi
 
-if hub_answers; then
-  jay_gh_new_tab "$root" "zellij attach $SESSION" >/dev/null
+if jay_mux_alive; then
+  jay_gh_new_tab "$root" "$(jay_mux_attach_cmd)" >/dev/null
 else
   no_old_hub
   jay_gh_new_tab "$root" "$HOME/.local/bin/jay --here" >/dev/null

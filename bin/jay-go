@@ -119,7 +119,7 @@ if [[ "$kind" == background ]] && { jay_in_hub || jay_hub_live; }; then
   row=$sid
   [[ "$id" == "$hubid" ]] && row=hub
   [[ -n "${JAY_LIST_PICK:-}" ]] || (jay_list_follow "$row" &) >/dev/null 2>&1
-  if ! jay_in_hub && tab=$(jay_gh_tab_for_session "$JAY_SESSION"); then
+  if ! jay_in_hub && tab=$(jay_mux_gh_tab); then
     jay_gh_select "$tab"
   fi
   exit 0

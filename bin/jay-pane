@@ -31,7 +31,8 @@ reviewer=tuicr
 
 role=$1
 target_file=$(jay_hub_target_file "$role")
-printf '%s\t%s\n' "${ZELLIJ_PANE_ID:-}" "$$" >"$(jay_hub_pane_file "$role")"
+self=$(jay_mux_self)
+jay_hub_pane_record "$self" "$role" $$
 trap 'jay_hub_pane_gone "$role" $$' EXIT
 
 target() { cat "$target_file" 2>/dev/null; }
@@ -85,14 +86,14 @@ tip() {
 # (Ctrl g v) has no size and shows nothing: wait until it is shown. A retarget kills this helper
 # with tuicr.
 select_last_turn() {
-  local pane="terminal_${ZELLIJ_PANE_ID:-}" i=0
-  [[ -n "${ZELLIJ_PANE_ID:-}" ]] || return 0
+  local i=0
+  [[ -n "$self" ]] || return 0
   while ((i < 40)); do
     sleep 0.25
     [[ -f "$JAY_HIDDEN" ]] || i=$((i + 1))
     [[ "$(target)" == "$1" ]] || return 0
-    if zellij -s "$JAY_SESSION" action dump-screen -p "$pane" 2>/dev/null | head -4 | grep -q '┌ Commits ─'; then
-      zellij -s "$JAY_SESSION" action write-chars -p "$pane" '(' >/dev/null 2>&1
+    if jay_mux_read "$self" | head -4 | grep -q '┌ Commits ─'; then
+      jay_mux_type "$self" '('
       return 0
     fi
   done
@@ -115,11 +116,11 @@ turns_state() {
 # again on the newest turn. Only while tuicr's status line shows NORMAL or SELECT (also on its
 # picker): never over a comment being typed (it waits until then).
 follow() {
-  local was pane="terminal_${ZELLIJ_PANE_ID:-}" p
+  local was p
   was=$("$@")
   while sleep 2; do
     [[ "$("$@")" == "$was" ]] && continue
-    zellij -s "$JAY_SESSION" action dump-screen -p "$pane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -1 \
+    jay_mux_read "$self" | grep -v '^[[:space:]]*$' | tail -1 \
       | grep -qE '^[[:space:]]*(NORMAL|SELECT)' || continue
     for p in $(pgrep -P $$ -f jay-keys); do
       jay_kill_children "$p"

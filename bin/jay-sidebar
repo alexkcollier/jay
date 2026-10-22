@@ -230,11 +230,10 @@ rows() {
 }
 
 # Move the focus from the list $1 columns to the right (the hub's middle column is 1, review
-# and files are 2). `move-focus` moves the terminal's focus; `focus-pane-id` does not.
+# and files are 2).
 focus_column() {
   jay_in_hub || return 0
-  local i
-  for ((i = 0; i < $1; i++)); do zellij action move-focus right >/dev/null 2>&1; done
+  case $1 in 1) jay_mux_focus agent list ;; 2) jay_mux_focus review list ;; esac
 }
 
 # The JSON of the agent with session id $1 (empty when it is gone).
@@ -249,7 +248,7 @@ agent_json() {
 review_key() {
   (
     trap '' HUP
-    jay_hub_wait_gone "${ZELLIJ_PANE_ID:-}"
+    jay_mux_wait_gone "$(jay_mux_self)"
     case ${1:-toggle} in
       toggle) jay_hub_locked jay_hub_toggle_review ;;
       show) [[ -f "$JAY_HIDDEN" ]] && jay_hub_locked jay_hub_unhide_review --focus ;;
@@ -725,7 +724,7 @@ The branch is deleted only if it is merged. Uncommitted changes stop the removal
       if [[ "$(cut -f1 "$(jay_hub_target_file review)" 2>/dev/null)" == "$top" ]]; then
         jay_hub_locked jay_hub_show_review
         pane=$(jay_hub_locked jay_hub_point review "" | cut -f1)
-        [[ -n "$pane" ]] && zellij -s "$JAY_SESSION" action rename-pane -p "$pane" review >/dev/null 2>&1
+        [[ -n "$pane" ]] && jay_mux_rename "$pane" review
       fi
       # The worktree goes first: `claude rm` keeps an agent while its worktree is on disk.
       if out=$(wt -C "$top" remove --foreground 2>&1); then
@@ -942,7 +941,7 @@ send_sum() {
   [[ -n "$sum" ]] || return 0
   [[ "$sum" != "$last_sum" || "${1:-}" == --again ]] || return 0
   last_sum=$sum
-  (zellij pipe "zjstatus::pipe::pipe_agents::$sum" >/dev/null 2>&1 &)
+  (jay_mux_bar agents "$sum" &)
 }
 
 # The same for the tasks of the tasks tab. jay-run --tick also keeps a free shell in that tab.
@@ -953,7 +952,7 @@ send_tasks() {
   tasks=$(jay-run --tick 2>/dev/null)
   [[ "$tasks" != "$last_tasks" || "${1:-}" == --again ]] || return 0
   last_tasks=$tasks
-  (zellij pipe "zjstatus::pipe::pipe_tasks::$tasks" >/dev/null 2>&1 &)
+  (jay_mux_bar tasks "$tasks" &)
 }
 
 # Save the list's share of the hub's width when it changes (mouse drag, h/l), so `jay`
@@ -964,11 +963,7 @@ remember_width() {
   cols=$(stty size </dev/tty 2>/dev/null | cut -d' ' -f2)
   [[ -n "$cols" && "$cols" != "$last_cols" ]] || return 0
   last_cols=$cols
-  share=$(zellij action list-panes -a -j 2>/dev/null | jq --argjson me "${ZELLIJ_PANE_ID:--1}" '
-    (map(select(.is_plugin | not)) | map(select(.id == $me)) | first) as $pane
-    | select($pane != null)
-    | [.[] | select(.tab_id == $pane.tab_id and (.is_floating | not)) | .pane_x + .pane_columns] | max
-    | ($pane.pane_columns * 100 / .) | round')
+  share=$(jay_mux_list_share)
   [[ -n "$share" ]] && printf '%s\n' "$share" >"$STATE/sidebar.pct"
 }
 
@@ -1015,8 +1010,8 @@ rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=
   --bind 'o:execute-silent(jay-sidebar --view open {1} {2})' \
   --bind 'a:execute-silent(jay-sidebar --idle)+reload-sync(jay-sidebar --rows)+clear-screen' \
   --bind 'p:execute(jay-sidebar --prune)+reload-sync(jay-sidebar --rows)+clear-screen' \
-  --bind 'h:execute-silent(zellij action resize -p "$ZELLIJ_PANE_ID" decrease right)' \
-  --bind 'l:execute-silent(zellij action resize -p "$ZELLIJ_PANE_ID" increase right)' \
+  --bind 'h:execute-silent(jay-mux resize_list decrease)' \
+  --bind 'l:execute-silent(jay-mux resize_list increase)' \
   --bind 'j:down,k:up,q:ignore,esc:ignore'
 
 # r: start again as the newest version of this script, with fresh git signs (same pid, so the

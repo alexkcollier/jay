@@ -23,6 +23,11 @@ Facts about your own machine (where the live install is, how your mod loads) go 
 
 ## Rules
 
+- Scripts reach the hub's multiplexer only through the mux layer: `jay_mux_*` in
+  `lib/jay-mux-<backend>.sh` (the API is listed in `lib/jay-lib.sh`, "The mux layer";
+  `jay-mux <name>` from outside bash). zellij calls for the user's own sessions (`jay open`,
+  interactive agents in `jay go`) are not the hub's and stay in `lib/jay-lib.sh`.
+
 - No client names in this repo (client folders, repos, remotes, people), also not in examples,
   tests or notes: use made-up names (`acme`, `shop`). Client settings go in `~`-level config,
   for worktrunk in `~/.config/worktrunk/config.toml`.

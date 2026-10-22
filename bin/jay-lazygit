@@ -60,12 +60,12 @@ fi
 
 view="$root/views/$id"
 git_view() { GIT_DIR="$view/.git" GIT_WORK_TREE="$view" git "$@"; }
+self=$(jay_mux_self)
 
 # The commits panel's position, "<selected> <count>", from its frame ("─3 of 8─╯").
 position() {
-  [[ -n "${ZELLIJ_PANE_ID:-}" ]] || return 1
-  zellij -s "$JAY_SESSION" action dump-screen -p "terminal_$ZELLIJ_PANE_ID" 2>/dev/null \
-    | sed -nE 's/.*─([0-9]+) of ([0-9]+)─╯.*/\1 \2/p' | head -1
+  [[ -n "$self" ]] || return 1
+  jay_mux_read "$self" | sed -nE 's/.*─([0-9]+) of ([0-9]+)─╯.*/\1 \2/p' | head -1
 }
 
 # The newest commit of the chain: the running turn (live, on top of head), else the last turn.
@@ -115,7 +115,7 @@ sync_view || true
       sleep 0.5
       read -r now total < <(position) || continue
       if ((total > count)); then
-        ((now == total - count + 1)) && zellij -s "$JAY_SESSION" action write-chars -p "terminal_$ZELLIJ_PANE_ID" '<' >/dev/null 2>&1
+        ((now == total - count + 1)) && jay_mux_type "$self" '<'
         break
       fi
     done
