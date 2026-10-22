@@ -154,6 +154,14 @@ within "files q: no hidden window left" 2 no_window _cover
 jay-sidebar --files
 /bin/bash -c 'source "$HOME/.local/lib/jay-lib.sh"; jay_hub_show_review'
 within "files closed from outside: review back" 3 is_at "$review" hub.2
+# e in review (jay-keys reads tuicr's status line through jay-mux): files.
+key 0733
+within "Ctrl g 3: review" 2 is_pane "$review"
+key 65
+within "e in review: files" 5 bash -c "tmux -L $SOCK list-panes -s -t =jay -F '#{pane_title}' | grep -q '^files ·'"
+files=$(pane_by_title "files ·")
+tm send-keys -t "$files" q
+within "q in files: review back" 3 is_at "$review" hub.2
 
 # Hide review and show it again (Ctrl g v twice).
 before=$(tm display -p -t "$review" '#{pane_width}')
@@ -191,6 +199,14 @@ key 0774; within "Ctrl g t: the tasks picker" 3 client_shows 'task ❯'
 sleep 0.5
 key 0d; within "picker, Enter: the task's window (shop first)" 3 is_window 'shop/main · acme'
 key 0709; within "Ctrl g Tab from a tasks window: the hub" 3 is_window hub
+# The launcher (Ctrl g r): a popup whose Enter types the line into the picked worktree's console.
+key 0772; within "Ctrl g r: the launcher, titled with the worktree" 3 client_shows 'run in shop/fix-login'
+sleep 0.5
+key "$(printf 'echo launched-%s\r' "$$" | xxd -p | tr -d '\n')"
+console=$(tm list-panes -t "$wid" -F '#{pane_id} #{pane_title}' | awk '$2 == "console" { print $1; exit }')
+within "launcher: the line ran in the console" 5 screen_has "$console" "launched-$$"
+key 71
+within "launcher: closed" 3 bash -c "! tmux -L $SOCK display -p '#{popup_active}' 2>/dev/null | grep -q 1"
 jay run stop api >/dev/null 2>&1
 jay run stop web >/dev/null 2>&1
 ok "run: stopped" bash -c "! lsof -nP -iTCP:$port1 -sTCP:LISTEN"
