@@ -195,6 +195,7 @@ run() {
       fi
       # At once, also while a long conversation loads.
       printf '\n  Opening %s...\n' "${name:-$id}"
+      [[ "$id" == "$(jay_hub_claude_id)" ]] && hub_opened=$id
       leave_agent_view &
       claude attach "$id"
       rc=$?
@@ -235,6 +236,45 @@ run() {
   esac
 }
 
+# Enter after you left agent target line $1: open it again. When `claude agents` no longer lists
+# it, or a copy replaced it, open the agent that took its place (a renew or a copy, see
+# jay_successor; for the hub Claude, the current one), and review follows. Else the next note
+# says it is gone ($gone), and the target stays empty.
+hub_opened="" gone=""
+reopen() {
+  local id path kind name agents next line
+  IFS=$'\t' read -r id path kind name <<<"$1"
+  # claude agents fails: open it again, as before.
+  if ! agents=$(claude agents --json --all 2>/dev/null) || [[ -z "$agents" ]]; then
+    jay_hub_write_target agent "$1"
+    return 0
+  fi
+  next=$(jay_successor "$id")
+  if [[ -z "$next" ]] && listed "$id" "$agents"; then
+    jay_hub_write_target agent "$1"
+    return 0
+  fi
+  [[ -n "$next" ]] && ! listed "$next" "$agents" && next=""
+  # The hub Claude: the current one (jay_hub_claude starts it when it has none).
+  if [[ -z "$next" && -n "$id" && "$id" == "$hub_opened" ]] && next=$(jay_hub_claude 2>/dev/null); then
+    agents=$(claude agents --json --all 2>/dev/null) || agents='[]'
+    path=${JAY_ROOTS%%:*}
+  fi
+  if [[ -z "$next" ]]; then
+    gone=${name:-$id}
+    return 0
+  fi
+  # Its name and folder (a copy runs in another worktree).
+  IFS=$'\t' read -r name line < <(jq -r --arg i "$next" \
+    'first(.[] | select(.id == $i) | [.name // .id, .cwd // ""] | @tsv) // empty' <<<"$agents" 2>/dev/null)
+  [[ "$next" == "$(jay_hub_claude_id)" ]] && name=${name:-hub}
+  line=$(printf '%s\t%s\t%s\t%s' "$next" "${line:-$path}" "$kind" "${name:-$next}")
+  jay_hub_write_target agent "$line"
+  jay_mux_rename "$self" "${name:-$next}"
+  jay_hub_retarget "$id" "$next"
+}
+listed() { jq -e --arg i "$1" 'any(.[]; .id == $i)' <<<"$2" >/dev/null 2>&1; }
+
 # A fresh hub opens on the hub Claude (jay_hub_claude starts it when it has none). Review stays
 # empty: the hub Claude works in no worktree.
 if [[ "$role" == agent && -z "$(target)" ]]; then
@@ -249,6 +289,8 @@ while :; do
   now=$(target)
   if [[ -z "$now" ]]; then
     if [[ "$role" == agent ]]; then
+      [[ -n "$gone" ]] && printf '\n  %s is gone: claude agents does not list it.\n' "$gone"
+      gone=""
       printf '\n  Agent\n\n  Pick an agent in the list.\n  ◆ hub: the hub Claude.\n  n in the list: a new agent.\n'
     else
       printf '\n  Review\n\n  Pick a worktree or an agent in the list.\n  %s opens here for its turns.\n  e in %s: files (yazi); e in files: review.\n' "$reviewer" "$reviewer"
@@ -282,7 +324,7 @@ while :; do
     if [[ "$kind" != interactive && "$kind" != note ]]; then
       jay_hub_write_target agent ""
       printf '\n  You left this agent. It keeps running.\n\n  Enter: open it again.\n  Or pick an agent in the list.\n'
-      wait_change "" || jay_hub_write_target agent "$now"
+      wait_change "" || reopen "$now"
       clear
     fi
     continue

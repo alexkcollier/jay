@@ -140,8 +140,11 @@ You type to the agent here, as in any `claude attach`.
 
 - Leave the agent: Ctrl+Z, or ←. In `claude attach`, ← opens Claude's agent view; in the hub the
   list is that view, so the pane stops it. The agent keeps running.
-- After you leave, the pane says "You left this agent". Enter opens it again. A pick of an agent
-  opens that agent. A pick of the agent the pane should show opens it again whenever the pane
+- After you leave, the pane says "You left this agent". Enter opens it again. When the agent is
+  gone by then (`claude agents` does not list it, or a copy replaced it), Enter opens the agent
+  that took its place: the new agent of a `jay renew`, the copy, or for the hub Claude the
+  current one (a pick of "◆ hub" does the same). With no such agent, the pane says that the agent
+  is gone, and you pick another one. A pick of an agent opens that agent. A pick of the agent the pane should show opens it again whenever the pane
   does not show it (Claude's agent view, another agent opened from there, an error): the pick
   looks at the `claude attach` that really runs under the pane, not only at the pane's target.
 - When `claude attach` fails at once (for example, the agent's worktree is gone), its error stays

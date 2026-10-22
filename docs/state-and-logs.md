@@ -25,7 +25,7 @@ In `~/.local/state/jay/`:
 | `prune.stamp` | time of the last automatic prune |
 | `prune.log` | each agent the list pruned, each turn chain removed, and each respawn (`jay respawn` and the list's: the versions and Claude's answer) |
 | `respawned/<id>` | the version an agent was respawned onto; its time is when (the 10-minute rule); removed after 14 days |
-| `renewed/<id>` | an agent that `jay renew` started in place of an older one: the old agent's creation time (ms), which ranks the orchestrators; removed 14 days after `claude agents` no longer lists the agent |
+| `renewed/<id>` | an agent that `jay renew` started in place of an older one: the old agent's creation time (ms), which ranks the orchestrators, then the old agent's id and the ids that it renewed (Enter in a middle column left on an old id opens this agent); removed 14 days after `claude agents` no longer lists the agent |
 | `respawn.stamp` | time of the list's last respawn step (at most one each minute) |
 | `claude-version` | the installed Claude Code version, under the binary's path and mtime (`claude --version` runs again after an update) |
 | `notify.log` | one line per notify hook call, and the output of notice clicks |

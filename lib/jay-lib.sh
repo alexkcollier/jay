@@ -1222,7 +1222,8 @@ jay_hub_claude_id() {
 # keep an agent's system prompt: Claude keeps --append-system-prompt in the job's respawnFlags. So
 # an orchestrator or the hub Claude gets a newer prompt from jay only as a new agent: jay renew
 # (bin/jay-renew) starts it with the same name and options, moves what refers to the old id to
-# it, and removes the old agent. A mark $JAY_RENEWED/<new id> keeps the old agent's createdAt.
+# it, and removes the old agent. A mark $JAY_RENEWED/<new id> keeps the old agent's createdAt
+# (line 1, empty when unknown), then the old id and the ids that it renewed.
 
 JAY_RENEWED=${JAY_RENEWED:-$JAY_STATE/renewed}
 
@@ -1279,6 +1280,25 @@ jay_renewed() {
     printf '%s\t%s\n' "${f##*/}" "$(head -1 "$f")"
   done | jq -Rsc 'split("\n") | map(select(. != "") | split("\t") | select(.[1] // "" | test("^[0-9]+$"))
     | {(.[0]): (.[1] | tonumber)}) | add // {}'
+}
+
+# The agent that took the place of agent $1 (a short id): a renew (a renewed mark that names it)
+# or a copy (jay_continue_in: replaced/<old id>), followed to the last one. Prints its id; nothing
+# when no agent took the place of $1.
+jay_successor() {
+  local id=$1 next f i
+  for i in 1 2 3 4 5 6 7 8; do
+    next=$(cat "$JAY_STATE/replaced/$id" 2>/dev/null)
+    if [[ -z "$next" ]]; then
+      for f in "$JAY_RENEWED"/*; do
+        [[ -f "$f" ]] && sed -n '2,$p' "$f" | grep -qxF "$id" && { next=${f##*/}; break; }
+      done
+    fi
+    [[ -n "$next" && "$next" != "$id" ]] || break
+    id=$next
+  done
+  [[ "$id" != "$1" ]] && printf '%s\n' "$id"
+  return 0
 }
 
 # The hub's middle column and review show agent $2 in place of agent $1, when they showed $1:

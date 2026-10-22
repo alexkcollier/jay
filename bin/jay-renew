@@ -129,11 +129,11 @@ jay_state_dir
 [[ "$(jay_hub_claude_id)" == "$id" ]] && printf '%s\n' "$new" >"$JAY_HUB_CLAUDE_FILE"
 jay_hub_retarget "$id" "$new"
 [[ -f "$JAY_NOTES/$id" ]] && mv -f "$JAY_NOTES/$id" "$JAY_NOTES/$new"
+# The renewed mark: the old creation time (it may be unknown), then the old id and the ids that
+# it renewed (jay_successor).
 created=$(jay_renewed | jq -r --arg i "$id" '.[$i] // empty')
 [[ -n "$created" ]] || created=$(jq -r --arg i "$id" '.[$i].created // empty' <<<"$jobs")
-if [[ -n "$created" ]]; then
-  mkdir -p "$JAY_RENEWED" && printf '%s\n' "$created" >"$JAY_RENEWED/$new"
-fi
+mkdir -p "$JAY_RENEWED" && { printf '%s\n%s\n' "$created" "$id"; sed -n '2,$p' "$JAY_RENEWED/$id" 2>/dev/null; } >"$JAY_RENEWED/$new"
 rm -f "$JAY_RENEWED/$id"
 
 # The old agent goes. Its recorded worktree is checked again just before claude rm.

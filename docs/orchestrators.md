@@ -489,6 +489,8 @@ What a renew does:
    a zellij hub and a tmux hub run side by side), the agent's task
    note, and its orchestrator rank: a mark `renewed/<new id>` keeps the old agent's creation
    time, so the `◇` stays cyan also when a second orchestrator is older than the new agent.
+   The mark also keeps the old id: a middle column that you left on the old agent opens the new
+   one on Enter.
 4. It stops the old agent and removes it (`claude rm`). The old conversation stays in its
    transcript. A line goes into `prune.log`.
 

@@ -70,15 +70,19 @@ EOF
 mkdir -p "$JAY_STATE/tmux"
 printf '000000hb\n' >"$JAY_HUB_CLAUDE_FILE"
 
-# pane MUX: a jay-pane agent of that backend's hub, in its pane 7, with no multiplexer.
+# pane MUX: a jay-pane agent of that backend's hub, in its pane 7, with no multiplexer. Its
+# keyboard is the fifo $TMP/in-MUX, held open here (fd 5: zellij, fd 6: tmux): enter MUX types Enter.
 panes=()
+mkfifo "$TMP/in-zellij" "$TMP/in-tmux"
+exec 5<>"$TMP/in-zellij" 6<>"$TMP/in-tmux"
+enter() { if [[ "$1" == tmux ]]; then printf '\n' >&6; else printf '\n' >&5; fi; }
 pane() {
   local log="$TMP/pane-$1.log"
   if [[ "$1" == tmux ]]; then
     env JAY_MUX=tmux TMUX="$TMP/$JAY_TMUX_SOCKET,1,0" TMUX_PANE=%7 TERM=dumb \
-      "$HOME/.local/bin/jay-pane" agent </dev/null >"$log" 2>&1 &
+      "$HOME/.local/bin/jay-pane" agent <"$TMP/in-tmux" >"$log" 2>&1 &
   else
-    env ZELLIJ_PANE_ID=7 TERM=dumb "$HOME/.local/bin/jay-pane" agent </dev/null >"$log" 2>&1 &
+    env ZELLIJ_PANE_ID=7 TERM=dumb "$HOME/.local/bin/jay-pane" agent <"$TMP/in-zellij" >"$log" 2>&1 &
   fi
   panes+=($!)
   disown $! # no "Terminated" line at the end
@@ -141,5 +145,59 @@ within "orchestrator: the tmux middle column attaches the new agent" 10 attached
 sleep 1
 eq "orchestrator: the target stays on the new agent" 0000ee02 "$(target_of "$JAY_STATE/tmux")"
 hasnt "orchestrator: the tmux pane did not say you left" "You left this agent" "$(cat "$TMP/pane-tmux.log")"
+
+# --- Enter after "You left this agent", when that agent is gone ---
+# leave MUX ID: you leave agent ID (its attach ends); the pane says so and clears its target.
+leave() {
+  local dir=$JAY_STATE n
+  [[ "$1" == tmux ]] && dir=$JAY_STATE/tmux
+  n=$(grep -c 'You left this agent' "$TMP/pane-$1.log")
+  pkill -f "claude attach $2\$"
+  within "$3: the pane says you left" 5 bash -c \
+    "[[ -z \"\$(cut -f1 '$dir/agent.target')\" && \$(grep -c 'You left this agent' '$TMP/pane-$1.log') -gt $n ]]"
+}
+# A renewed orchestrator: Enter opens the new agent (the renewed mark names the old id).
+leave tmux 0000ee02 "renewed while left"
+job 0000ee02 "$(jq -c '.respawnFlags[3] = "You are the orchestrator of the repo shop: an older text."' \
+  "$HOME/.claude/jobs/0000ee02/state.json")"
+echo 0000ee03 >"$STUB/next-id"
+out=$(JAY_MUX=tmux jay-renew 0000ee02 2>&1)
+has "renewed while left: renewed" '"shop/main" is 0000ee03 now' "$out"
+eq "renewed while left: the target stays empty" "" "$(target_of "$JAY_STATE/tmux")"
+eq "renewed while left: the renewed mark names the old id" 0000ee02 "$(sed -n 2p "$JAY_RENEWED/0000ee03")"
+enter tmux
+within "renewed while left, Enter: the new agent opens" 10 attached 0000ee03 1
+eq "renewed while left, Enter: its target" "0000ee03 $shop background shop/main" \
+  "$(tr '\t' ' ' <"$JAY_STATE/tmux/agent.target")"
+eq "renewed while left, Enter: not the old agent again" 1 "$(grep -c '^0000ee02$' "$STUB/attach.log")"
+# The hub Claude, removed: Enter opens the current one (jay_hub_claude starts it).
+leave zellij 0000ee01 "hub Claude removed"
+claude rm 0000ee01
+echo 0000ee04 >"$STUB/next-id"
+enter zellij
+within "hub Claude removed, Enter: a new hub Claude opens" 10 attached 0000ee04 1
+eq "hub Claude removed, Enter: the hub Claude's id file" 0000ee04 "$(jay_hub_claude_id)"
+eq "hub Claude removed, Enter: its target" "0000ee04 $JAY_ROOTS background hub" \
+  "$(tr '\t' ' ' <"$JAY_STATE/agent.target")"
+# Another agent: Enter opens it again while it runs; when it is gone, a note says so.
+stub_agents "$(jq -c --argjson a "$(agent 000000p1 shop/feat "$shop")" '. + [$a]' "$STUB/agents.json")"
+JAY_MUX=tmux bash -c 'source "$HOME/.local/lib/jay-lib.sh"; jay_hub_point agent "$1"' _ \
+  "$(printf '000000p1\t%s\tbackground\tshop/feat' "$shop")" >/dev/null
+within "agent: it opens" 10 attached 000000p1 1
+leave tmux 000000p1 "agent"
+enter tmux
+within "agent, Enter: it opens again" 10 attached 000000p1 2
+leave tmux 000000p1 "agent gone"
+claude rm 000000p1
+enter tmux
+within "agent gone, Enter: a note" 5 grep -q 'shop/feat is gone: claude agents does not list it.' "$TMP/pane-tmux.log"
+eq "agent gone, Enter: the target stays empty" "" "$(target_of "$JAY_STATE/tmux")"
+eq "agent gone, Enter: not opened" 2 "$(grep -c '^000000p1$' "$STUB/attach.log")"
+
+# --- jay_successor: renews and copies, to the last one ---
+eq "successor: two renews" 0000ee03 "$(jay_successor 000000o1)"
+mkdir -p "$JAY_STATE/replaced" && echo 0000ee09 >"$JAY_STATE/replaced/0000ee03"
+eq "successor: then a copy" 0000ee09 "$(jay_successor 000000o1)"
+eq "successor: none" "" "$(jay_successor 000000p1)"
 
 finish
