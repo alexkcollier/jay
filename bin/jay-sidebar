@@ -22,7 +22,7 @@
 # then the turn chains of gone agents; log in ~/.local/state/jay/prune.log. An agent on an old
 # Claude Code (↻) is respawned at a quiet moment (jay_respawn_auto, JAY_AUTO_RESPAWN), same log.
 # r: reload this agent list (git signs now; the list starts again: new code and keys too)
-# h/l: narrower/wider
+# -/+ (= as +): narrower/wider
 # ?: keys. No quit key: the list belongs to the hub. fzf's own quit keys (Esc, Ctrl-C, Ctrl-G,
 # Ctrl-Q, Ctrl-D) do nothing, and when fzf ends anyway (killed, failed) the list starts again.
 # jay-sidebar --files: show files over review (e in the review pane, through jay-keys).
@@ -761,7 +761,7 @@ ${KEY}a${OFF}      hide/show idle repos
 ${KEY}p${OFF}      prune dead agents
 ${KEY}r${OFF}      reload this agent list
 ${KEY}j k${OFF}    move
-${KEY}h l${OFF}    narrower / wider
+${KEY}- +${OFF}    narrower / wider
 ${KEY}?${OFF}      fewer keys
 
 ${HEAD}Panes${OFF} (${KEY}Ctrl g${OFF}, then)
@@ -1180,8 +1180,9 @@ rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=
   --bind 'o:execute-silent(jay-sidebar --quick --view open {1} {2})' \
   --bind 'a:execute-silent(jay-sidebar --idle)+reload-sync(jay-sidebar --rows)+clear-screen' \
   --bind 'p:execute(jay-sidebar --prune)+reload-sync(jay-sidebar --rows)+clear-screen' \
-  --bind 'h:execute-silent(jay-mux resize_list decrease)' \
-  --bind 'l:execute-silent(jay-mux resize_list increase)' \
+  --bind '-:execute-silent(jay-mux resize_list decrease)' \
+  --bind '+:execute-silent(jay-mux resize_list increase)' \
+  --bind '=:execute-silent(jay-mux resize_list increase)' \
   --bind 'j:down,k:up,q:ignore,esc:ignore,ctrl-c:ignore,ctrl-g:ignore,ctrl-q:ignore,ctrl-d:ignore'
 rc=$?
 

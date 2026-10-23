@@ -29,7 +29,7 @@
 | `p` | prune dead agents now (asks first) |
 | `r` | reload the list (fresh git signs; starts the newest `jay-sidebar`) |
 | `j` / `k`, ↓ / ↑, wheel | move |
-| `h` / `l` | narrower / wider |
+| `-` / `+` (or `=`) | narrower / wider |
 | `?` | all keys and signs (press again: fewer keys) |
 | `q`, Esc, Ctrl-C, Ctrl-G, Ctrl-Q, Ctrl-D | nothing (the list belongs to the hub; when it ends anyway, it starts again) |
 

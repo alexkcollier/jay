@@ -262,6 +262,37 @@ key 076c; within "Ctrl g l: right" 2 is_pane "$agent"
 key 07; within "Ctrl g: the bar shows the keys" 2 client_shows 'h l 1 2 3 ; v Tab r t q'
 key 1b
 
+# The list's width: - narrower, + and = wider; h and l do nothing there.
+# list_key HEX NAME CMD...: type HEX in the list until CMD succeeds (3 tries). fzf drops the keys
+# that come while the list's reload-sync (every 4 s) runs: --track with --id-nth blocks its input.
+list_key() {
+  local hex=$1 name=$2 i end
+  shift 2
+  for i in 1 2 3; do
+    key "$hex"
+    end=$((SECONDS + 2))
+    while ((SECONDS < end)); do
+      "$@" >/dev/null 2>&1 && { pass "$name"; return 0; }
+      sleep 0.2
+    done
+  done
+  fail "$name" "never: $*"
+}
+list_width() { tm display -p -t "$list" '#{pane_width}'; }
+width_is() { [[ "$(list_width)" == "$1" ]]; }
+width_below() { (($(list_width) < $1)); }
+key 0731; within "Ctrl g 1: the list" 2 is_pane "$list"
+w0=$(list_width)
+list_key 2d "list -: narrower" width_below "$w0"
+w1=$(list_width)
+key 68; key 6c; sleep 1
+eq "list h l: the width stays" "$w1" "$(list_width)"
+ok "list h l: the list stays" screen_has "$list" fix-login
+list_key 2b "list +: wider" width_is "$w0"
+list_key 2d "list -: narrower again" width_is "$w1"
+list_key 3d "list =: wider, as +" width_is "$w0"
+key 0732; within "Ctrl g 2: the agent" 2 is_pane "$agent"
+
 # Files over review (e in review) and back (q in yazi; or from outside).
 jay-sidebar --files
 files=$(pane_by_title "files ·")
