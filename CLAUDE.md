@@ -179,7 +179,8 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   Meta: the pane gets Alt+P (Claude's model picker). Option is never Alt (no
   `macos-option-as-alt`). A DCS reply that tmux does not expect (`\eP>|…\e\\` after its XTVERSION
   reply came) goes to the pane as M-P (`\e[80;3u`), the text and M-\; Claude reads `\e[80;3u` as
-  Alt+P. jay.conf stops M-p, M-P and M-o. tmux holds a lone Esc 500 ms (not
+  Alt+P. jay.conf stops M-p, M-P and M-o. Other unexpected replies (kitty graphics APC, DA1) go
+  to the focused pane raw. tmux has no option to drop them. tmux holds a lone Esc 500 ms (not
   escape-time) while a query to the terminal has no answer (a test pty with no pixel size gets
   `\e[18t\e[14t`; answer them or set the size).
 - `extended-keys on` with `terminal-features …:extkeys`: `claude attach` in a pane asks for
@@ -206,5 +207,17 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   `source-file`. jay.conf sets the list in full (`set -su`, then `set -asF`) and again in an
   `after-set-option` hook. A hook sees the command's args: `#{hook_argument_0}` is the option's
   name, `#{hook_flag_a}` is 1 for `-a`; formats in a hook's `set` need `-F`.
+- yazi (26.9.1) in tmux: tmux's XTVERSION reply ("tmux 3.8") makes it run `tmux set -p
+  allow-passthrough all ; set -s input-buffer-size …` and ask again through the passthrough
+  (XTVERSION, kitty graphics, DA1). That `set -p` has no `-t`, and from a client with no tty tmux
+  takes the session's active pane (not `TMUX_PANE`): the files pane starts in a hidden window
+  (`jay_mux_cover`), so another pane got `all`. The terminal's replies go to the focused pane:
+  the M-P bind eats their ESC P, and the rest arrives as keys (`>|ghostty 1.3.2`; in yazi `o`
+  opened the editor). jay.conf turns the passthrough off again (after-set-option). Without the
+  DA1 reply, yazi 26.9.1's probe stays pending: quit and the first stop (`o`) wait 5 s.
+- An `after-set-option` hook: `#{hook_pane}` is empty; its commands without `-t` act on the
+  command's target (`set -pu x` there unsets the pane option that was just set).
+- `tests/pty-client.py` with `PTY_GHOSTTY=<secs>` answers terminal queries as Ghostty (the first
+  of each kind at once, later ones late); the tmux smoke test uses it.
 - `new-session` checks the client's `TERM`: `xterm-ghostty` needs Ghostty's `TERMINFO` (set in
   Ghostty's tabs, not in `env -i`).

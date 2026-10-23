@@ -9,6 +9,8 @@
 # The fake HOME goes in /tmp: the list's fzf socket and tmux's socket live in it, and macOS
 # allows 104 bytes for a socket path (the default temp folder is too deep).
 TMPDIR=/tmp
+# The real yazi (for the terminal replies), found before the fake HOME and PATH.
+real_yazi=$( { mise which yazi || command -v yazi; } 2>/dev/null | head -1)
 source "$(dirname "$0")/lib.sh"
 link_install
 command -v tmux >/dev/null 2>&1 || PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
@@ -121,7 +123,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-/usr/bin/python3 -I "$REPO/tests/pty-client.py" "$TMP/client.out" 200 50 jay &
+# The client answers the terminal's queries as Ghostty, the later ones 1.5 s late.
+PTY_GHOSTTY=1.5 /usr/bin/python3 -I "$REPO/tests/pty-client.py" "$TMP/client.out" 200 50 jay &
 client=$!
 within "jay starts the tmux hub" 10 tm has-session -t =jay
 # jay_mux_start names the panes after the splits: wait for the names, not only the panes.
@@ -496,6 +499,41 @@ within "Cmd+X reaches the pane as Alt+X" 3 bash -c "$(declare -f got_keys); TMP=
 within "an unexpected DCS reply: its text reaches the pane" 3 bash -c "$(declare -f got_keys); TMP=$TMP; [[ \$(got_keys) == *3e7c6c617465* ]]"
 eq "Cmd+P, Cmd+O and the reply's ESC P do not" "" "$(got_keys | grep -oE '5b3131(32|31)3b3375|5b38303b3375|1b(70|6f|50)')"
 tm kill-window -t =jay:keys
+
+# Terminal replies: yazi turns tmux's passthrough on (on the focused pane) and asks the terminal
+# through it (XTVERSION, kitty graphics, DA1). The replies came to the pane with the focus as keys
+# (">|ghostty 1.3.2": in yazi, o opened the editor). jay.conf turns the passthrough off again: no
+# query reaches the terminal, no reply a pane (here a pane that keeps all it gets, focused before
+# the replies would come).
+if [[ -x "$real_yazi" ]]; then
+  for d in "$HOME/.local/bin" "$HOME/.local/share/mise/shims"; do
+    printf '#!/bin/bash\nexec %q "$@"\n' "$real_yazi" >"$d/yazi"
+  done
+  xtversions() { grep -c '^1b503e7c' "$TMP/client.out.answers"; }
+  before=$(xtversions)
+  asked() { tm show-messages | grep -q 'command: set-option -p allow-passthrough all'; }
+  review=$(pane_of review)
+  : >"$TMP/replies.got"
+  tm new-window -d -n replies bash -c 'stty raw -echo; while IFS= read -rsn1 -d "" c; do printf %s "$c" | xxd -p >>"$1"; done' _ "$TMP/replies.got"
+  key 0733; within "real yazi: Ctrl g 3, review" 2 is_pane "$review"
+  jay-sidebar --files
+  within "real yazi: it turns the passthrough on" 10 asked
+  tm select-window -t =jay:replies
+  sleep 3
+  files=$(pane_by_title "files ·")
+  ok "real yazi: it runs in files" bash -c "[[ \$(tmux -L $SOCK display -p -t $files '#{pane_dead}') == 0 ]]"
+  eq "real yazi: the passthrough off on each pane" "" \
+    "$(tm list-panes -a -F '#{pane_id} #{allow-passthrough}' | grep -v ' off$'; tm show -gv allow-passthrough | grep -vx off)"
+  eq "real yazi: no query through the passthrough reached the terminal" "$before" "$(xtversions)"
+  eq "real yazi: no reply in the focused pane" "" "$(tr -d '\n' <"$TMP/replies.got" | xxd -r -p)"
+  tm kill-window -t =jay:replies
+  # yazi 26.9.1 waits 5 s for the probe's DA1 reply before it quits (later versions: 2 s after
+  # the start).
+  tm send-keys -t "$files" q
+  within "real yazi: q, review back" 8 is_at "$review" hub.2
+else
+  printf '%-20s no yazi: the terminal replies are not tested\n' "$TEST_NAME"
+fi
 
 # Ctrl g q: the client goes, the hub runs on.
 key 0771
