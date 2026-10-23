@@ -340,13 +340,22 @@ jay_mux_tab_pane() {
 
 # --- The status line (zjstatus at the top of each tab, fed through pipes) ---
 
+# Send $1 to zjstatus's pipe (pipe_where::text). `zellij pipe` also reads its stdin, with a
+# payload too, and waits while the stdin stays open: stdin is /dev/null. It gives up after
+# $JAY_ZELLIJ_PIPE_TIMEOUT seconds (2), not the 5 s of the other calls: a lost bar update is
+# no problem, a stalled hook or list is.
+_jay_zj_pipe() {
+  JAY_ZELLIJ_TIMEOUT=${JAY_ZELLIJ_PIPE_TIMEOUT:-2} zellij -s "$JAY_SESSION" pipe "zjstatus::pipe::$1" \
+    </dev/null >/dev/null 2>&1
+}
+
 # Part $1 of the status line (agents, tasks, where, note; see jay_bar_set): kept, then the line
 # is drawn again. where and note are pipes of their own (the left part, in the layout).
 jay_mux_bar() {
   jay_bar_set "$1" "$2"
   case $1 in
-    where) zellij -s "$JAY_SESSION" pipe "zjstatus::pipe::pipe_where::$2" >/dev/null 2>&1 ;;
-    note) zellij -s "$JAY_SESSION" pipe "zjstatus::pipe::pipe_note::${2:+ · $2}" >/dev/null 2>&1 ;;
+    where) _jay_zj_pipe "pipe_where::$2" ;;
+    note) _jay_zj_pipe "pipe_note::${2:+ · $2}" ;;
   esac
   jay_mux_status
 }
@@ -375,8 +384,8 @@ jay_mux_status() {
     ((n > lmax)) && lmax=$n
   done < <(jay_mux_tabs | jq -r 'select(.name != "hub") | .name')
   { IFS= read -r mid; IFS= read -r right; } < <(jay_bar_fit "$((w - lmax - 13 - 9))")
-  zellij -s "$JAY_SESSION" pipe "zjstatus::pipe::pipe_mid::$mid" >/dev/null 2>&1
-  zellij -s "$JAY_SESSION" pipe "zjstatus::pipe::pipe_right::$right" >/dev/null 2>&1
+  _jay_zj_pipe "pipe_mid::$mid"
+  _jay_zj_pipe "pipe_right::$right"
   return 0
 }
 

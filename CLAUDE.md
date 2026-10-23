@@ -133,6 +133,10 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   with the places. `resize -p <pane> increase|decrease right` moves its right border.
 - A server can outlive its session after a quit and hang every zellij command; all calls in
   `lib/jay-lib.sh` go through a 5 s timeout wrapper, and `jay` kills such a server.
+- `zellij pipe` reads its stdin also when it has a payload, and waits while the stdin stays
+  open; to a stopped server it waits for good. Give it `</dev/null` and a timeout, also in a
+  probe by hand (`perl -e 'alarm 5; exec @ARGV' zellij …`): one left from a Claude Bash shell
+  ran at 99% CPU for two days.
 - A session's socket is `$TMPDIR/zellij-<uid>/contract_version_1/<session>` (`$ZELLIJ_SOCKET_DIR`
   in place of `$TMPDIR/zellij-<uid>`); the server runs as `zellij --server <that path>`. A
   server killed with -9 leaves its socket; `delete-session --force` removes it.

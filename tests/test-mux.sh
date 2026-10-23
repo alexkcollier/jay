@@ -13,6 +13,8 @@ case "$*" in
   *" action list-tabs"*) cat "$STUB/tabs.json" ;;
   *" action new-pane"* | *" action new-tab"*) echo terminal_9 ;;
   *" action dump-screen"*) if [[ -f "$STUB/screen" ]]; then cat "$STUB/screen"; else printf "line one\nNORMAL mode\n"; fi ;;
+  # As zellij: a pipe waits while its stdin is open; with $STUB/pipe.hang, for good.
+  *" pipe "*) cat >/dev/null; [[ -f "$STUB/pipe.hang" ]] && exec sleep 30 ;;
 esac
 exit 0'
 cat >"$STUB/panes.json" <<'JSON'
@@ -78,6 +80,23 @@ has "status line: the picked worktree, left" "-s jaytest pipe zjstatus::pipe::pi
 reset
 jay_mux_bar note "1 running elsewhere: shop"
 has "status line: the note of the tasks tabs" "-s jaytest pipe zjstatus::pipe::pipe_note:: · 1 running elsewhere: shop" "$(calls)"
+# A pipe does not wait on the caller's stdin, and a pipe that hangs (its session gone or stalled)
+# gives up after the timeout.
+mkfifo "$TMP/stdin"
+sleep 20 >"$TMP/stdin" &
+open=$!
+start=$SECONDS
+jay_mux_bar where shop/a <"$TMP/stdin"
+took=$((SECONDS - start))
+ok "status line: stdin open, no wait (took $took s)" test "$took" -le 1
+kill "$open"
+wait "$open" 2>/dev/null
+: >"$STUB/pipe.hang"
+start=$SECONDS
+JAY_ZELLIJ_PIPE_TIMEOUT=1 jay_mux_bar agents "1 working"
+took=$((SECONDS - start))
+ok "status line: a hung pipe gives up (2 pipes, 1 s each; took $took s)" test "$took" -le 3
+rm -f "$STUB/pipe.hang"
 eq "read" "line one
 NORMAL mode" "$(jay_mux_read terminal_3)"
 reset
