@@ -27,13 +27,13 @@ bin/jay-pane) ⇄ files (yazi).
   the bar is under the banner at the top (tmux has one status position; zellij's is at the
   bottom). Step 4 (tmux the default) is in: without `JAY_MUX`, the hub that runs, else tmux
   (`jay_which_mux`; docs/install.md, "tmux or zellij"). Then 5 (remove zellij).
-- tmux hub, files: no image previews, and yazi 26.9.1 takes 5 s to quit (`e`, `q`) and to run
-  the first `o` after a start (2026-10-23). jay.conf keeps tmux's passthrough off, so the
-  terminal's replies to yazi's queries no longer arrive as keys (`>|ghostty 1.3.2`: `o` opened
-  the editor in yazi; text in Claude); yazi's probe then waits for a DA1 reply that never comes.
-  Yazi's main branch (9561890a, 2026-10-18) ends the probe 2 s after the start: with the next
-  yazi release the 5 s should go. Check it then; if it stays, jay could close the files pane
-  itself on `e`.
+- tmux hub, files: no image previews, and yazi 26.9.1 takes 5 s to quit (`q`) and to run the
+  first `o` after a start (2026-10-23). jay.conf keeps tmux's passthrough off, so the terminal's
+  replies to yazi's queries no longer arrive as keys (`>|ghostty 1.3.2`: `o` opened the editor in
+  yazi; text in Claude); yazi's probe then waits for a DA1 reply that never comes. `e` does not
+  wait: jay closes the files pane itself (`jay-sidebar --review back`). Yazi's main branch
+  (9561890a, 2026-10-18) ends the probe 2 s after the start: with the next yazi release the 5 s
+  of `q` and `o` should go. Check it then.
 - An agent whose home is gone goes on as a copy with a new id (docs/working.md, "When the folder
   an agent came from goes"): its turn chain starts again, and an old entry whose recorded
   worktree is on disk stays hidden until that worktree goes. Claude has no option to move an

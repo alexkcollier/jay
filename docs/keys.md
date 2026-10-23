@@ -95,8 +95,8 @@ keys are yazi's own (yazi's help: `~` or F1).
 
 | Key | Action |
 |---|---|
-| `e` | back to review |
-| `q` | quit yazi: back to review |
+| `e` | back to review at once (jay closes the files pane; in a prompt, `e` is text) |
+| `q` | quit yazi: back to review (in the tmux hub yazi can take 5 s to quit) |
 | `o` | open the hovered file in this pane (yazi's open) |
 | `O` | open the hovered file or folder in your editor, in its project, in a new tab (`jay edit`) |
 | `W` | open with... (yazi's "open with" menu) |

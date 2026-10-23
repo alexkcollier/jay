@@ -509,6 +509,7 @@ if [[ -x "$real_yazi" ]]; then
   for d in "$HOME/.local/bin" "$HOME/.local/share/mise/shims"; do
     printf '#!/bin/bash\nexec %q "$@"\n' "$real_yazi" >"$d/yazi"
   done
+  ln -sfn "$REPO/config/yazi" "$HOME/.config/jay/yazi"
   xtversions() { grep -c '^1b503e7c' "$TMP/client.out.answers"; }
   before=$(xtversions)
   asked() { tm show-messages | grep -q 'command: set-option -p allow-passthrough all'; }
@@ -527,8 +528,30 @@ if [[ -x "$real_yazi" ]]; then
   eq "real yazi: no query through the passthrough reached the terminal" "$before" "$(xtversions)"
   eq "real yazi: no reply in the focused pane" "" "$(tr -d '\n' <"$TMP/replies.got" | xxd -r -p)"
   tm kill-window -t =jay:replies
-  # yazi 26.9.1 waits 5 s for the probe's DA1 reply before it quits (later versions: 2 s after
-  # the start).
+  # e (the hub's yazi keys): jay closes files at once. In a prompt e is text.
+  tm send-keys -t "$files" a
+  within "real yazi: a, a prompt" 3 screen_has "$files" 'Create'
+  tm send-keys -t "$files" e
+  sleep 1
+  ok "real yazi: e in a prompt: files stays" is_at "$files" hub.2
+  tm send-keys -t "$files" C-c
+  within "real yazi: Ctrl-C, the prompt closes" 3 screen_hasnt "$files" 'Create'
+  now() { perl -MTime::HiRes=time -e 'printf "%d\n", time * 1000'; }
+  t0=$(now)
+  tm send-keys -t "$files" e
+  while ! is_at "$review" hub.2 && (($(now) - t0 < 8000)); do sleep 0.05; done
+  ms=$(($(now) - t0))
+  ok "real yazi: e, review back in under 1 s (${ms} ms)" test "$ms" -lt 1000
+  ok "real yazi: e, the focus in review" is_pane "$review"
+  within "real yazi: e, the files pane goes" 2 bash -c "! tmux -L $SOCK list-panes -s -t =jay -F '#{pane_title}' | grep -q '^files ·'"
+  within "real yazi: e, yazi ends" 3 bash -c "! pgrep -f '^$real_yazi'"
+  within "real yazi: e, review's title" 2 bash -c "[[ \"\$(tmux -L $SOCK display -p -t $review '#{pane_title}')\" == 'turns · '* ]]"
+  # q: yazi's own quit. yazi 26.9.1 waits 5 s for the probe's DA1 reply before it quits (later
+  # versions: 2 s after the start).
+  jay-sidebar --files
+  files=$(pane_by_title "files ·")
+  within "real yazi: files again" 5 is_at "$files" hub.2
+  sleep 1
   tm send-keys -t "$files" q
   within "real yazi: q, review back" 8 is_at "$review" hub.2
 else

@@ -26,7 +26,8 @@
 # ?: keys. No quit key: the list belongs to the hub. fzf's own quit keys (Esc, Ctrl-C, Ctrl-G,
 # Ctrl-Q, Ctrl-D) do nothing, and when fzf ends anyway (killed, failed) the list starts again.
 # jay-sidebar --files: show files over review (e in the review pane, through jay-keys).
-# jay-sidebar --review toggle|show: hide or show review (Ctrl g v), show it (Ctrl g 3).
+# jay-sidebar --review toggle|show|back: hide or show review (Ctrl g v), show it (Ctrl g 3), close
+# files over it (e in yazi).
 # jay-sidebar --focus list|agent|review: bring back the hub's panes that are gone, then the focus
 # to that column (Ctrl g 1 2 3 of the tmux hub, when a pane is missing).
 set -uo pipefail
@@ -276,10 +277,13 @@ agent_json() {
 # Ctrl g v (toggle: hide or show review) and Ctrl g 3 (show: a hidden review comes back with
 # the focus): zellij Run bindings, in a floating pane of one cell that closes when this ends.
 # The work waits in the background until that pane is gone, so the focus moves act on the hub's
-# own panes.
+# own panes. back: e in files (the hub's yazi keys, config/yazi) closes files at once; yazi's
+# own quit can wait 5 s for its terminal probe in the tmux hub. The call comes from yazi in the
+# files pane, which closes: no wait for that.
 review_key() {
   (
     trap '' HUP
+    [[ "${1:-}" == back ]] && { jay_hub_locked jay_hub_show_review; exit 0; }
     jay_mux_wait_gone "$(jay_mux_self)"
     case ${1:-toggle} in
       toggle) jay_hub_locked jay_hub_toggle_review ;;

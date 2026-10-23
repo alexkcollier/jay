@@ -1,11 +1,12 @@
 # yazi in the hub's files pane only (jay-pane sets YAZI_CONFIG_HOME to
-# ~/.config/jay/yazi). e goes back to review, as e in tuicr shows files. o stays yazi's open
+# ~/.config/jay/yazi). e goes back to review, as e in tuicr shows files: jay closes the files
+# pane at once (yazi's quit can wait 5 s for its terminal probe in tmux). o stays yazi's open
 # (in this pane); O opens the hovered file or folder in your editor, in its project (git root),
 # through jay edit: a terminal editor in a new Ghostty tab. yazi's "open with" menu (its O)
 # moves to W.
 [mgr]
 prepend_keymap = [
-  { on = "e", run = "quit", desc = "Back to review (jay)" },
+  { on = "e", run = 'shell --orphan -- "$HOME/.local/bin/jay-sidebar" --review back', desc = "Back to review (jay)" },
   { on = "O", run = 'shell -- "$HOME/.local/bin/jay-edit" %h', desc = "Open in editor, in its project, new tab (jay)" },
   { on = "W", run = "open --interactive", desc = "Open with... (jay)" },
 ]

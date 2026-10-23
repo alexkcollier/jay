@@ -21,8 +21,8 @@
 #         does not: q shows its newest state.
 #         JAY_REVIEW=lazygit: lazygit in the same two modes instead (jay-lazygit). It follows
 #         new turns without a restart; its t and e are its own custom commands.
-# files:  yazi in the worktree. It covers review; e or q quits yazi and review comes back
-#         (e from the hub's yazi keymap, config/yazi).
+# files:  yazi in the worktree. It covers review; e closes the pane (jay-sidebar --review back,
+#         from the hub's yazi keymap, config/yazi) or q quits yazi, and review comes back.
 set -uo pipefail
 export PATH="$HOME/.local/share/mise/shims:/opt/homebrew/bin:$PATH"
 JAY_SESSION=${ZELLIJ_SESSION_NAME:-${JAY_SESSION:-${WT_HUB_SESSION:-jay}}}
