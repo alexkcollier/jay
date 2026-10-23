@@ -1,7 +1,8 @@
 #!/bin/bash
 # jay-guard (the PreToolUse hook on Bash): in an orchestrator's main checkout it denies the git
-# and gh commands that change the branch, the history or the files, and allows reads and
-# `git merge --ff-only`. A worktree, a plain agent and an interactive session pass.
+# and gh commands that change the branch, the history or the files, and allows reads,
+# `git merge --ff-only` and `git branch -d` of a branch with no worktree (`-D` asks). A
+# worktree, a plain agent and an interactive session pass.
 source "$(dirname "$0")/lib.sh"
 link_install
 source "$HOME/.local/lib/jay-lib.sh"
@@ -30,6 +31,7 @@ guard() {
 decision() { guard "$@" | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null; }
 denies() { eq "denies: $3 (in ${2##*/})" deny "$(decision "$@")"; }
 allows() { eq "allows: $3 (in ${2##*/})" "" "$(decision "$@")"; }
+asks() { eq "asks: $3 (in ${2##*/})" ask "$(decision "$@")"; }
 
 # Denied in the main checkout.
 for cmd in "git checkout -b fix" "git checkout feat" "git checkout -- a.txt" "git switch -c fix" \
@@ -101,6 +103,40 @@ has "the reason names the command" '`git checkout -b fix`' "$reason"
 has "the reason names the main checkout" "$shop" "$reason"
 has "the reason: give it to the worker" "worker of that branch" "$reason"
 eq "the event name" PreToolUse "$(guard orch0001 "$shop" "git push" | jq -r '.hookSpecificOutput.hookEventName')"
+
+# Deleting local branches that no worktree has checked out: -d passes, -D asks the user.
+git -C "$shop" branch old1 && git -C "$shop" branch old2
+cur=$(git -C "$shop" branch --show-current)
+for cmd in "git branch -d old1" "git branch -d old1 old2" "git branch --delete old1" \
+  "git branch -dq old1" "git branch -d -- old1" "git branch -d 'old1'" "cd src && git branch -d old1" \
+  "git branch -d old1; git status"; do
+  allows orch0001 "$shop" "$cmd"
+done
+for cmd in "git branch -D old1" "git branch -D old1 old2" "git branch -d --force old1" \
+  "git branch --delete --force old1" "git branch -df old1" "git branch -f -d old2" \
+  "git branch -d old1 && git branch -D old2"; do
+  asks orch0001 "$shop" "$cmd"
+done
+for cmd in "git branch -d $cur" "git branch -D $cur" "git branch -d feat" "git branch -D w1" \
+  "git branch -d old1 feat" "git branch -D old1 $cur" "git branch -d \$b" "git branch -D \"\$b\"" \
+  "git branch -d \"\$(echo old1)\"" "git branch -d \`echo old1\`" "git branch -d old*" "git branch -d 'old?'" \
+  "git branch -d {old1,old2}" "git branch -d nosuch" "git branch -D old1 nosuch" "git branch -d -" \
+  "git branch -d @{-1}" "git branch -d -r origin/old1" "git branch -dr origin/old1" \
+  "git branch -d --remotes origin/old1" "git branch -d -m old1" "git branch -d -v old1" \
+  "git branch -D old1 && git push" "git branch -m old1 new1" "git branch -f old1 HEAD" \
+  "git branch --set-upstream-to=origin/main old1" "git -C \"\$X\" branch -d old1"; do
+  denies orch0001 "$shop" "$cmd"
+done
+reason=$(guard orch0001 "$shop" "git branch -D old1 old2; git branch -D old1" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+has "the ask names the branches" "branches old1 old2 in" "$reason"
+has "the ask: unmerged work" "not merged" "$reason"
+reason=$(guard orch0001 "$shop" "git branch -d feat" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+has "the deny: checked out in a worktree" "feat is checked out in a worktree" "$reason"
+reason=$(guard orch0001 "$shop" "git branch -d $cur" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+has "the deny: the branch of the main checkout" "$cur is the branch of the main checkout" "$reason"
+reason=$(guard orch0001 "$shop" "git branch -d nosuch" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+has "the deny: not a local branch" '`nosuch` is not a local branch' "$reason"
+eq "the guard deletes no branch" "old1 old2" "$(git -C "$shop" for-each-ref --format='%(refname:short)' refs/heads/old1 refs/heads/old2 | xargs)"
 
 # Other sessions pass.
 allows "" "$shop" "git checkout -b fix"

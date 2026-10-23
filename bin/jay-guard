@@ -5,11 +5,13 @@
 # There it denies git and gh commands that change the branch, the history or the files (checkout,
 # switch, branch <name>, commit, reset, rebase, push, stash, merge without --ff-only, gh pr
 # create...), and tells Claude to give the step to the worker of that branch. It allows reads
-# (status, log, diff, fetch...) and `git merge --ff-only <branch>`. A command in another folder
-# (a worktree, `cd <worktree> &&`, `git -C <worktree>`) passes. When it cannot tell the folder
-# or the git command, it denies. Every other session: it exits at once.
+# (status, log, diff, fetch...), `git merge --ff-only <branch>`, and `git branch -d <branch>...`
+# of local branches that no worktree has checked out; for `git branch -D` of such branches it
+# asks the user. A command in another folder (a worktree, `cd <worktree> &&`, `git -C
+# <worktree>`) passes. When it cannot tell the folder, the git command or a branch name, it
+# denies. Every other session: it exits at once.
 set -uo pipefail
-[[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,10s/^# \{0,1\}//p' "$0"; exit 0; }
+[[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,12s/^# \{0,1\}//p' "$0"; exit 0; }
 
 input=$(cat)
 job=${CLAUDE_JOB_DIR:-}
@@ -236,6 +238,44 @@ has_flag() {
   return 1
 }
 
+# `git branch -d|-D <branch>...` (the args in $@): each branch must be a local branch that no
+# worktree has checked out. -d passes; -D, -df, --force add the branches to ASK (the user
+# confirms). Else WHY. GDYN: a word of the command that the guard cannot read; GDIR: its folder.
+branch_delete() {
+  local a b force=false rest=false names=() wts head
+  for a in "$@"; do
+    if $rest; then names+=("$a"); continue; fi
+    case $a in
+      --) rest=true ;;
+      --delete | --quiet) ;;
+      --force) force=true ;;
+      --remotes) WHY="it deletes a remote-tracking branch"; return ;;
+      --*) WHY="it changes a branch"; return ;;
+      -*r*) WHY="it deletes a remote-tracking branch"; return ;;
+      # - is the branch before: the guard cannot tell it.
+      -) WHY="the guard cannot tell the branch \`-\`"; return ;;
+      -*[!dDfq]*) WHY="it changes a branch"; return ;;
+      -*) [[ "$a" == *[Df]* ]] && force=true ;;
+      *) names+=("$a") ;;
+    esac
+  done
+  ((${#names[@]})) || return
+  if $GDYN || [[ "$GDIR" == "?" ]]; then WHY="the guard cannot tell the branch or the repo"; return; fi
+  wts=$(git -C "$main" worktree list --porcelain 2>/dev/null) || { WHY="the guard cannot read the worktrees"; return; }
+  head=$(git -C "$main" symbolic-ref -q HEAD 2>/dev/null)
+  for b in "${names[@]}"; do
+    case $b in
+      *\** | *\?* | *\[* | *\{* | *~*) WHY="the guard cannot read the branch name \`$b\`"; return ;;
+    esac
+    if ! git check-ref-format "refs/heads/$b" || ! git -C "$main" show-ref --verify --quiet "refs/heads/$b"; then
+      WHY="\`$b\` is not a local branch"; return
+    fi
+    [[ "$head" == "refs/heads/$b" ]] && { WHY="$b is the branch of the main checkout"; return; }
+    grep -qxF "branch refs/heads/$b" <<<"$wts" && { WHY="$b is checked out in a worktree"; return; }
+  done
+  if $force; then for b in "${names[@]}"; do [[ " $ASK " == *" $b "* ]] || ASK+=" $b"; done; fi
+}
+
 git_why() {
   local sub=$1
   shift
@@ -255,6 +295,7 @@ git_why() {
       has_arg --update-head-ok "$@" && WHY="a fetch into the checked-out branch"
       return ;;
     branch)
+      has_flag dD " --delete " "$@" && { branch_delete "$@"; return; }
       has_flag dDmMcCfut " --delete --move --copy --force --set-upstream-to --unset-upstream --edit-description --track --no-track --create-reflog " "$@" \
         && { WHY="it changes a branch"; return; }
       has_flag lar " --list --all --remotes " "$@" && return
@@ -328,8 +369,8 @@ gh_why() {
 }
 
 # --- The walk: each command of command line $1, run in folder $2. DENY: the first denied
-# command and why.
-DENY="" DENY_WHY=""
+# command and why. ASK: the branches that a `git branch -D` deletes, a space before each.
+DENY="" DENY_WHY="" ASK="" GDYN=false GDIR=""
 
 check_line() {
   local dir=$2 t
@@ -408,7 +449,8 @@ check_simple() {
       if [[ "$sub" == d:* ]]; then WHY="the guard cannot tell the git command"
       else
         local args=()
-        for a in "$@"; do args+=("${a#?:}"); done
+        GDYN=false GDIR=$gdir
+        for a in "$@"; do args+=("${a#?:}"); [[ "$a" == d:* ]] && GDYN=true; done
         git_why "${sub#w:}" ${args[@]+"${args[@]}"}
       fi
       [[ -n "$WHY" ]] && { DENY=$text DENY_WHY=$WHY; } ;;
@@ -425,6 +467,13 @@ check_simple() {
 }
 
 check_line "$cmd" "$cwd"
+if [[ -z "$DENY" && -n "$ASK" ]]; then
+  reason="jay-guard: \`git branch -D\` deletes the local branches${ASK} in the main checkout $main. \
+No worktree has them checked out, but they may hold work that is not merged: the user confirms."
+  jq -nc --arg r "$reason" \
+    '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: $r}}'
+  exit 0
+fi
 [[ -n "$DENY" ]] || exit 0
 DENY=${DENY//$'\n'/ }
 ((${#DENY} <= 120)) || DENY="${DENY:0:117}..."

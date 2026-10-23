@@ -373,7 +373,10 @@ What it denies in the main checkout:
 
 - `git checkout` and `git switch` (a branch, `-b`, `-c`, files), `git restore`, `git clean`,
   `git add`, `git rm`, `git mv`, `git apply`;
-- `git branch <name>`, `-d`, `-D`, `-m`, `-c`, `-f`, `-u`; `git tag <name>`, `-a`, `-d`;
+- `git branch <name>`, `-m`, `-c`, `-f`, `-u`; `git tag <name>`, `-a`, `-d`;
+- `git branch -d` and `-D` of the main checkout's branch, of a branch that a worktree has
+  checked out, of a name that is not a local branch, or of a name that it cannot read (`$b`,
+  `$(...)`, a glob, `{a,b}`, `-`, `@{-1}`); `git branch -d -r` (remote-tracking branches);
 - `git commit`, `reset`, `rebase`, `cherry-pick`, `revert`, `am`, `pull`, `push`, `stash` (not
   `stash list` or `stash show`);
 - `git merge` without `--ff-only` (also with `--squash` or `--no-ff`);
@@ -387,8 +390,13 @@ What it denies in the main checkout:
 What it allows: `git status`, `log`, `diff`, `show`, `branch` (a list), `tag` (a list),
 `rev-parse`, `merge-base`, `merge-tree` (a conflict check: it writes only objects), `fetch`,
 `worktree list`, `for-each-ref`, `stash list`, `remote -v`,
-`config --get` and other reads; `git merge --ff-only <branch>`; all `gh` commands except the
-ones above; all other programs.
+`config --get` and other reads; `git merge --ff-only <branch>`; `git branch -d <branch>...`
+(also `--delete`) when no worktree has these local branches checked out; all `gh` commands
+except the ones above; all other programs.
+
+What it asks you: `git branch -D <branch>...` (also `-df`, `-d --force`, `--delete --force`)
+with the same checks as `-d`. Such a branch can hold work that is not merged, so Claude shows
+you the command and the guard's reason, and you confirm it or not.
 
 It checks only git and gh. Other programs that write files (`sed -i`, a formatter, an
 install) are not checked: the orchestrator prompt covers them.
@@ -399,6 +407,9 @@ A denied call returns this JSON (exit 0), and Claude shows the reason as the too
 {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
  "permissionDecisionReason": "jay-guard: `git checkout -b fix` is denied in the main checkout ..."}}
 ```
+
+For `git branch -D`, the `permissionDecision` is `"ask"` and the reason names the branches. An
+allowed command gets no output: then Claude's own permission rules apply.
 
 The deny holds also with `--permission-mode bypassPermissions`. An orchestrator started before
 the guard has the old prompt, but the guard acts for it too: it looks only for the prompt's
