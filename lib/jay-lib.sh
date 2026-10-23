@@ -916,6 +916,8 @@ $JAY_ROOTS (a folder per client, then the repo; worktrees are siblings named <re
 - Reports: \`jay new\` tells the agent to report to you with SendMessage. After it, subscribe:
   SendMessage to the agent's name with notify_when_idle: true and no message. Never poll
   \`claude agents\` or \`claude logs\` in a loop or start background shell loops to wait.
+  A send that fails with "No agent named X is reachable": the list stopped that idle agent; run
+  \`jay wake X\`, then send again (also before a notify_when_idle subscription).
   "Workspace not trusted": Claude never ran in that repo. Do not change ~/.claude.json; tell the
   user to press n on one of its worktrees in the list, or N on its repo row (both ask to trust
   the repo), or to run \`c\` in it.
@@ -971,7 +973,8 @@ worktree (siblings named $1.<branch>). Keep the main checkout free of work.
   blocked; the report comes as a cross-session message. After \`jay new\`, subscribe to the
   worker's idle notice: SendMessage to its name with notify_when_idle: true and no message.
   Never poll \`claude agents\` or \`claude logs\` in a loop, and never start background shell
-  loops to wait.
+  loops to wait. A send that fails with "No agent named X is reachable": the list stopped that
+  idle agent; run \`jay wake X\`, then send again (also before a notify_when_idle subscription).
 - Do not edit files in the main checkout, and do not use EnterWorktree: a change that you make
   yourself takes you into its worktree. When the user tells you to make a change yourself, do
   as they say.

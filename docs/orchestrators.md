@@ -142,7 +142,8 @@ worktree (siblings named <repo>.<branch>). Keep the main checkout free of work.
   blocked; the report comes as a cross-session message. After `jay new`, subscribe to the
   worker's idle notice: SendMessage to its name with notify_when_idle: true and no message.
   Never poll `claude agents` or `claude logs` in a loop, and never start background shell
-  loops to wait.
+  loops to wait. A send that fails with "No agent named X is reachable": the list stopped that
+  idle agent; run `jay wake X`, then send again (also before a notify_when_idle subscription).
 - Do not edit files in the main checkout, and do not use EnterWorktree: a change that you make
   yourself takes you into its worktree. When the user tells you to make a change yourself, do
   as they say.
@@ -176,8 +177,8 @@ What each part tells the agent:
   the files, how to test). It starts workers only when you ask or agree.
 - **One worktree per code change**: read-only tasks and follow-ups share a worktree, with
   agents named by their role. See [Shared worktrees](#shared-worktrees).
-- **Reports**: how a worker's result comes back (its report, the idle notice), and no polling
-  loops. See [How it follows and steers workers](#how-it-follows-and-steers-workers).
+- **Reports**: how a worker's result comes back (its report, the idle notice), no polling
+  loops, and `jay wake` for a worker that the list stopped (`JAY_AUTO_STOP`). See [How it follows and steers workers](#how-it-follows-and-steers-workers).
 - **No edits in the main checkout, no `EnterWorktree`**: it does not do the work itself. When you
   tell it to make a change itself, it does as you say (it then goes into a worktree).
 - **Skills and commands**: one that changes the branch or writes runs in the worker of that
@@ -588,7 +589,8 @@ The hub Claude ([The hub Claude](working.md#the-hub-claude)) works across repos.
   goes to an agent; the Agent tool is for its own quick lookups. One worktree per code change;
   read-only tasks and follow-ups share one ([Shared worktrees](#shared-worktrees)).
 - The same reports: a worker that it starts reports to it (SendMessage), and it subscribes to the
-  worker's idle notice in place of a polling loop.
+  worker's idle notice in place of a polling loop. A worker that the list stopped, it wakes with
+  `jay wake` before it sends.
 
 So you can give a change to the hub Claude from anywhere: it goes to the right repo's
 orchestrator, or the hub Claude does the orchestrator's work itself (see

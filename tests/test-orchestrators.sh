@@ -34,6 +34,9 @@ has "the hub Claude prompt: in-depth work goes to an agent" "To an agent goes ev
 has "the hub Claude prompt: the Agent tool only for quick lookups" "Agent tool only for your own quick lookups" "$hub"
 has "the hub Claude prompt: subscribe to the idle notice" "notify_when_idle: true" "$hub"
 has "the hub Claude prompt: no polling loops" "Never poll" "$hub"
+has "the prompt: wake a stopped worker" "run \`jay wake X\`, then send again" "$prompt"
+has "the hub Claude prompt: wake a stopped agent" "run
+  \`jay wake X\`, then send again" "$hub"
 # respawnFlags: the options a background agent started with (claude keeps them in state.json).
 orch_flags() { jq -nc --arg p "$(jay_orchestrator_prompt "$1" "$2")" --arg n "$1/main" '["--name", $n, "--append-system-prompt", $p]'; }
 job 0000000a "{\"cwd\": \"$shop\", \"respawnFlags\": $(orch_flags shop "$shop")}"
