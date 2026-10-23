@@ -264,6 +264,17 @@ rows() {
   # The first row (the agent counts) goes to the status line only (send_sum), not to the list.
 }
 
+# The rows for the list's fzf, and a copy in $JAY_SIDEBAR_ROWS (the rows the list shows): the
+# list's tick reloads only when its rows are not the same.
+rows_shown() {
+  if [[ -z "${JAY_SIDEBAR_ROWS:-}" ]]; then
+    rows "$@"
+    return
+  fi
+  rows "$@" | tee "$JAY_SIDEBAR_ROWS.$$"
+  mv -f "$JAY_SIDEBAR_ROWS.$$" "$JAY_SIDEBAR_ROWS"
+}
+
 # Move the focus from the list $1 columns to the right (the hub's middle column is 1, review
 # and files are 2).
 focus_column() {
@@ -1069,7 +1080,7 @@ $failed"
 }
 
 case ${1:-} in
-  --rows) shift; rows "$@"; exit 0 ;;
+  --rows) shift; rows_shown "$@"; exit 0 ;;
   --prune) prune; exit 0 ;;
   --act) shift; act "$@"; exit 0 ;;
   --quick) shift; quick "$@"; exit 0 ;;
@@ -1102,7 +1113,8 @@ done
 
 sock="$STATE/sidebar.$$.sock"
 export JAY_SIDEBAR_SOCK=$sock JAY_SIDEBAR_COUNT="$STATE/sidebar.$$.count" JAY_SIDEBAR_SUM="$STATE/sidebar.$$.sum" \
-  JAY_SIDEBAR_HELP="$STATE/sidebar.$$.help" JAY_SIDEBAR_RESTART="$STATE/sidebar.$$.restart"
+  JAY_SIDEBAR_HELP="$STATE/sidebar.$$.help" JAY_SIDEBAR_RESTART="$STATE/sidebar.$$.restart" \
+  JAY_SIDEBAR_ROWS="$STATE/sidebar.$$.rows"
 post() { curl -s --max-time 2 --unix-socket "$sock" -X POST http://localhost -d "$1" >/dev/null 2>&1 || true; }
 
 # Send the agent counts (rows makes them as its first row, which the list does not show) to the
@@ -1129,7 +1141,7 @@ send_tasks() {
   (jay_mux_bar tasks "$tasks" &)
 }
 
-# Save the list's share of the hub's width when it changes (mouse drag, h/l), so `jay`
+# Save the list's share of the hub's width when it changes (mouse drag, - and +), so `jay`
 # starts it at that width.
 last_cols=""
 remember_width() {
@@ -1142,12 +1154,24 @@ remember_width() {
 }
 
 (
-  tick=0
+  tick=0 tick_rows="$JAY_SIDEBAR_ROWS.tick" rows_pid=""
   while sleep 3; do
     tick=$((tick + 1))
     jay_in_hub && remember_width
     before=$(cat "$JAY_SIDEBAR_COUNT" 2>/dev/null)
-    post 'reload-sync(jay-sidebar --rows)'
+    # A reload only when the rows changed: while a reload runs, fzf drops the keys (--track with
+    # --id-nth blocks its input). The rows from the newest jay-sidebar, as fzf's reloads have, and
+    # with no keys to read, as there. In the background, one at a time: the tick keeps its pace.
+    if [[ -z "$rows_pid" ]] || ! kill -0 "$rows_pid" 2>/dev/null; then
+      (
+        JAY_SIDEBAR_ROWS='' jay-sidebar --rows </dev/null >"$tick_rows" 2>/dev/null
+        if [[ -s "$tick_rows" ]] && ! cmp -s "$tick_rows" "$JAY_SIDEBAR_ROWS"; then
+          mv -f "$tick_rows" "$JAY_SIDEBAR_ROWS"
+          post 'reload-sync(cat "$JAY_SIDEBAR_ROWS")'
+        fi
+      ) &
+      rows_pid=$!
+    fi
     sleep 1
     after=$(cat "$JAY_SIDEBAR_COUNT" 2>/dev/null)
     if [[ "$before" != "$after" ]] || ((tick % 10 == 0)); then post 'clear-screen'; fi
@@ -1163,12 +1187,15 @@ remember_width() {
 ) &
 loop=$!
 cleanup() {
+  # wait: bash's notice of the killed job (its whole code) goes nowhere, not over the list.
   kill $loop 2>/dev/null
-  rm -f "$sock" "$JAY_SIDEBAR_COUNT" "$JAY_SIDEBAR_SUM" "$JAY_SIDEBAR_HELP" "$JAY_SIDEBAR_RESTART"
+  wait $loop 2>/dev/null
+  rm -f "$sock" "$JAY_SIDEBAR_COUNT" "$JAY_SIDEBAR_SUM" "$JAY_SIDEBAR_HELP" "$JAY_SIDEBAR_RESTART" \
+    "$JAY_SIDEBAR_ROWS" "$JAY_SIDEBAR_ROWS.tick"
 }
 trap cleanup EXIT
 
-rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=hidden --no-scrollbar \
+rows_shown | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=hidden --no-scrollbar \
   --delimiter=$'\t' --with-nth=3 --track --id-nth=2 --pointer='▌' --marker='' --gutter=' ' --highlight-line \
   --footer="$(footer)" --color=footer:-1,pointer:173,bg+:238 \
   --bind '?:transform-footer(jay-sidebar --footer --toggle)' \

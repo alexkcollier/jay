@@ -38,7 +38,9 @@ git -C "$TMP/projects/acme/shop" worktree add -q -b fix-login "$TMP/projects/acm
 repo "$TMP/projects/acme/web"
 git -C "$TMP/projects/acme/web" worktree add -q -b fix "$TMP/projects/acme/web.fix"
 printf 'JAY_ORCHESTRATE=web\n' >"$HOME/.config/jay/config"
-now=$(($(date +%s) * 1000))
+# Started 3 days ago: the rows' ages ("3d") do not change while the test runs, so the list's
+# ticks find no change (no reload).
+now=$((($(date +%s) - 3 * 86400) * 1000))
 stub_agents "[
  {\"kind\":\"background\",\"id\":\"aaaa0001\",\"sessionId\":\"aaaa0001-0000-0000-0000-000000000001\",\"name\":\"fix-login\",
   \"cwd\":\"$TMP/projects/acme/shop.fix-login\",\"state\":\"working\",\"status\":\"idle\",\"startedAt\":$now,\"pid\":1},
@@ -116,7 +118,8 @@ is_window() { [[ "$(active_window)" == "$1" ]]; }
 place_of() { tm display -p -t "$1" '#{window_name}.#{pane_index}'; }
 is_at() { [[ "$(place_of "$1")" == "$2" ]]; }
 key() { printf '%s\n' "$1" >>"$TMP/client.out.keys"; }
-client_shows() { tr -d '\000' <"$TMP/client.out" | tail -c 8000 | grep -q "$1"; }
+# client_shows TEXT [BYTES]: TEXT in the last BYTES (8000) of the client's output.
+client_shows() { tr -d '\000' <"$TMP/client.out" | tail -c "${2:-8000}" | grep -q "$1"; }
 # The last terminal title tmux sent to the client (OSC 0 or 2).
 last_title() { perl -0777 -ne 'my @t = /\e\][02];([^\a\e]*)(?:\a|\e\\)/g; print $t[-1] // ""' "$TMP/client.out"; }
 title_is() { [[ "$(last_title)" == "$1" ]]; }
@@ -281,34 +284,54 @@ key 076a; within "Ctrl g j: down" 2 is_pane "$bottom"
 tm kill-window -t "$top"
 
 # The list's width: - narrower, + and = wider; h and l do nothing there.
-# list_key HEX NAME CMD...: type HEX in the list until CMD succeeds (3 tries). fzf drops the keys
-# that come while the list's reload-sync (every 4 s) runs: --track with --id-nth blocks its input.
-list_key() {
-  local hex=$1 name=$2 i end
-  shift 2
-  for i in 1 2 3; do
-    key "$hex"
-    end=$((SECONDS + 2))
-    while ((SECONDS < end)); do
-      "$@" >/dev/null 2>&1 && { pass "$name"; return 0; }
-      sleep 0.2
-    done
-  done
-  fail "$name" "never: $*"
-}
 list_width() { tm display -p -t "$list" '#{pane_width}'; }
 width_is() { [[ "$(list_width)" == "$1" ]]; }
 width_below() { (($(list_width) < $1)); }
 key 0731; within "Ctrl g 1: the list" 2 is_pane "$list"
 w0=$(list_width)
-list_key 2d "list -: narrower" width_below "$w0"
+key 2d; within "list -: narrower" 2 width_below "$w0"
 w1=$(list_width)
 key 68; key 6c; sleep 1
 eq "list h l: the width stays" "$w1" "$(list_width)"
 ok "list h l: the list stays" screen_has "$list" fix-login
-list_key 2b "list +: wider" width_is "$w0"
-list_key 2d "list -: narrower again" width_is "$w1"
-list_key 3d "list =: wider, as +" width_is "$w0"
+key 2b; within "list +: wider" 2 width_is "$w0"
+key 2d; within "list -: narrower again" 2 width_is "$w1"
+key 3d; within "list =: wider, as +" 2 width_is "$w0"
+
+# The list's ticks (every 4 s) reload only when the rows change: fzf drops the keys that come
+# during a reload (--track with --id-nth). With no change, no reload over two ticks, and each key
+# acts at once.
+shown_rows=$(ls "$HOME"/.local/state/jay/sidebar.*.rows 2>/dev/null | head -1)
+ok "list: the rows it shows are in a file" test -s "$shown_rows"
+sleep 5 # the tick after the last width change reloads (the rows fit the width)
+before_rows=$(cksum <"$shown_rows")
+# until_ok CMD...: CMD succeeds within a second (no pass or fail).
+until_ok() {
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    "$@" >/dev/null 2>&1 && return 0
+    sleep 0.1
+  done
+  return 1
+}
+cursor_row() { tm capture-pane -p -t "$list" | grep '▌' | head -1; }
+cursor_is() { [[ "$(cursor_row)" == "$1" ]]; }
+cursor_isnt() { ! cursor_is "$1"; }
+row0=$(cursor_row) moved=0
+for i in 1 2 3 4 5 6 7 8; do
+  key 6b; until_ok cursor_isnt "$row0" && moved=$((moved + 1))
+  key 6a; until_ok cursor_is "$row0" && moved=$((moved + 1))
+  sleep 0.8
+done
+eq "list: 16 keys over two idle ticks, each acts at once" 16 "$moved"
+eq "list: no reload on an idle tick" "$before_rows" "$(cksum <"$shown_rows")"
+# A change only the tick sees (a new agent, then gone): the next tick reloads.
+jq -c --arg c "$TMP/projects/acme/shop.fix-login" --argjson t "$now" '. + [{kind: "background", id: "eeee0001",
+  sessionId: "eeee0001-0000-0000-0000-000000000001", name: "probe", cwd: $c, state: "working", status: "idle",
+  startedAt: $t, pid: 1}]' "$STUB/agents.json" >"$STUB/agents.new" && mv "$STUB/agents.new" "$STUB/agents.json"
+within "list: a new agent shows at a tick" 10 screen_has "$list" probe
+jq -c 'map(select(.id != "eeee0001"))' "$STUB/agents.json" >"$STUB/agents.new" && mv "$STUB/agents.new" "$STUB/agents.json"
+within "list: a gone agent goes at a tick" 10 screen_hasnt "$list" probe
 key 0732; within "Ctrl g 2: the agent" 2 is_pane "$agent"
 
 # Files over review (e in review) and back (q in yazi; or from outside).
@@ -405,7 +428,8 @@ has "ls: the name without the ports" "  web  " "$(jay run ls)"
 has "log" "Serving" "$(jay run log web)"
 key 0709; within "Ctrl g Tab: the picked worktree's tasks window" 3 is_window 'shop/fix-login · acme'
 key 0709; within "Ctrl g Tab again: the hub" 3 is_window hub
-key 0774; within "Ctrl g t: the tasks picker" 3 client_shows 'task ❯'
+# A redraw of the picker's popup (big) writes its prompt row first, then the borders of all rows.
+key 0774; within "Ctrl g t: the tasks picker" 3 client_shows 'task ❯' 40000
 sleep 0.5
 key 0d; within "picker, Enter: the task's window (shop first)" 3 is_window 'shop/main · acme'
 key 0709; within "Ctrl g Tab from a tasks window: the hub" 3 is_window hub
@@ -419,10 +443,11 @@ within "launcher: the line ran in the console" 5 screen_has "$console" "launched
 within "launcher: the output in a popup" 5 client_shows "any key: close"
 within "launcher: the popup's title, worktree and line" 2 client_shows "shop/fix-login · acme: echo launched-$$"
 popup_open() { tr -d '\000' <"$TMP/client.out" | tail -c 3000 | grep -q 'any key: close'; }
-: >"$TMP/client.out"
+# Closed: its program ended and the last screen has no popup. (A redraw before the key, say a
+# reload of the list, can draw the popup once more.)
+output_closed() { ! pgrep -f "${TMP##*/}/home/.local/bin/jay-run --show" >/dev/null && ! popup_open; }
 key 71
-sleep 1
-ok "launcher: a key closes the output" bash -c "! grep -q 'any key: close' '$TMP/client.out'"
+within "launcher: a key closes the output" 2 output_closed
 # A command that runs on: the launcher closes, no output popup.
 key 0772; within "Ctrl g r again" 3 client_shows 'run in shop/fix-login'
 sleep 0.5
