@@ -82,6 +82,20 @@ describe('model', () => {
     expect(phaseOf('blocked', 'idle')).toBe('input')
     expect(phaseOf('done', 'idle')).toBe('idle')
     expect(phaseOf('failed', 'idle')).toBe('failed')
+    // Its process is gone (no pid, no status): nobody waits for an answer.
+    expect(phaseOf('blocked', null)).toBe('idle')
+    expect(phaseOf('blocked', undefined)).toBe('idle')
+  })
+
+  test('a blocked agent that asks nothing gives no needs-input toast', () => {
+    const rows = parseWorktrees(worktreeLines)
+    // A /clear after its question: jay agents --json says idle.
+    const cleared = parseAgents(JSON.stringify([hub, { ...worker('blocked'), status: 'idle', phase: 'idle' }]))
+    // Its process is gone: no status.
+    const detached = parseAgents(JSON.stringify([hub, { ...worker('blocked'), status: null }]))
+    expect(transitions([], cleared, rows, 'hub-0000', T0)).toEqual([])
+    expect(transitions([], detached, rows, 'hub-0000', T0)).toEqual([])
+    expect(summaryOf(detached, 'hub-0000')).not.toContain('input')
   })
 
   test('the phase from jay agents --json wins: it knows what the user saw', () => {

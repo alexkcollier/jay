@@ -4,7 +4,7 @@
 # --append-system-prompt), name, short id and process; only the session id changes, so the turn
 # chain, the hub Claude's id file and a `claude attach` that shows the agent stay right.
 # Only an idle agent (see idle(): the phase rule of the list): /clear typed into a question or a
-# permission prompt would answer it. Exit 0 when the session id changed, 1 when it did not, 2 for
+# permission prompt would answer it. An agent that asked something before a /clear asks nothing now. Exit 0 when the session id changed, 1 when it did not, 2 for
 # usage, 3 when the agent is missing or not idle.
 #
 # Facts found by test (Claude Code 2.1.306): all attach clients share one input box, and the
@@ -26,21 +26,18 @@ def agent(short):
 
 
 def idle(a):
-    """The phase rule of jay_agent_phases (lib/jay-lib.sh) without its marks: the agent is idle or
-    unread, not working, input or failed. Its process is idle (status idle), so a state working
-    only means that it waits for its workers. A blocked agent asks something, except a new one
-    that waits for its first prompt (jay_fresh_ids)."""
-    state = a.get("state")
-    if a.get("status") != "idle" or state in ("failed", "stopped"):
+    """The phase rule of the list (jay_agent_phases in lib/jay-lib.sh): the agent is idle or
+    unread, not working, input or failed. Its process runs and is idle too (status idle): an
+    agent with no process has no input box."""
+    if a.get("status") != "idle" or a.get("state") == "stopped":
         return False
-    if state == "blocked":
-        jobs = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
-        try:
-            with open(os.path.join(jobs, "jobs", a.get("id", ""), "state.json")) as f:
-                return json.load(f).get("needs") == "send a prompt to start"
-        except (OSError, ValueError):
-            return False
-    return True
+    lib = os.path.expanduser("~/.local/lib/jay-lib.sh")
+    try:
+        out = subprocess.run(["bash", "-c", 'source "$1" && jay_agent_phases "$2" ""', "-", lib,
+                              json.dumps([a])], capture_output=True, text=True, timeout=20).stdout
+        return json.loads(out)[0].get("phase") in ("idle", "unread")
+    except (OSError, ValueError, IndexError, subprocess.TimeoutExpired):
+        return False
 
 
 def client_size(short):

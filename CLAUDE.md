@@ -82,6 +82,10 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   name, short id and process; only the session id changes. All `claude attach` clients of a
   session share one input box (Ctrl+U clears a line of a draft), and the session's screen takes
   the size of the client that joined last, also after that client leaves (`bin/jay-clear`).
+  A /clear in a blocked session keeps `state: blocked` and the old `needs` (state.json and
+  `claude agents`); the new session's transcript (state.json `linkScanPath`) has no `assistant`
+  entry until its next answer (`jay_fresh_ids`). A stopped agent has no pid and no status but
+  keeps the state of its last turn, also `blocked`.
 - Claude: `claude respawn <id>` (2.1.308, tested on one version) restarts a background agent on
   the installed binary in ~1 s: same id, name, session id, conversation, respawnFlags, cwd and
   entered worktree; new pid and startedAt; a `claude attach` client stays. It ends a running

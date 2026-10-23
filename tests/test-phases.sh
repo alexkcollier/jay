@@ -55,6 +55,55 @@ eq "the shown agent is never unread (session id)" idle "$(phase "$agents" s-0011
 eq "no marks: idle" idle "$(phase "$agents" aaaa0012)"
 eq "every agent gets a phase" 12 "$(jay_agent_phases "$agents" "" | jq '[.[] | select(.phase)] | length')"
 
+# Blocked agents that ask nothing now. A /clear after a question keeps the job's state blocked
+# and its needs, and gives a new session id: its transcript (the job's linkScanPath, else found
+# by session id under projects/) has no answer of the agent yet. With no process (no pid, no
+# status), nobody waits for an answer: unread or idle by the marks, as a done agent.
+# transcript SESSION [TYPE...]: a transcript under projects/-tmp-shop with one line of each type.
+transcript() {
+  local f="$HOME/.claude/projects/-tmp-shop/$1.jsonl" t
+  mkdir -p "${f%/*}" && : >"$f"
+  shift
+  for t in "$@"; do printf '{"type":"%s","message":{"content":"x"}}\n' "$t" >>"$f"; done
+  printf '%s\n' "$f"
+}
+blocked='[
+  {"kind": "background", "id": "aaaa0021", "sessionId": "s-0021", "state": "blocked", "status": "idle", "pid": 1},
+  {"kind": "background", "id": "aaaa0022", "sessionId": "s-0022", "state": "blocked", "status": "idle", "pid": 1},
+  {"kind": "background", "id": "aaaa0023", "sessionId": "s-0023", "state": "blocked", "status": "idle", "pid": 1},
+  {"kind": "background", "id": "aaaa0024", "sessionId": "s-0024", "state": "blocked", "status": "idle", "pid": 1},
+  {"kind": "background", "id": "aaaa0025", "sessionId": "s-0025", "state": "blocked"},
+  {"kind": "background", "id": "aaaa0026", "sessionId": "s-0026", "state": "blocked", "status": null, "pid": null}
+]'
+q='"state": "blocked", "needs": "Which colour do you like?"'
+job aaaa0021 "{$q, \"linkScanPath\": \"$(transcript s-0021 user system user)\"}"
+job aaaa0022 "{$q, \"linkScanPath\": \"$(transcript s-0022 user assistant)\"}"
+# linkScanPath still names the session before the /clear: the current session id counts.
+transcript s-0023 user >/dev/null
+job aaaa0023 "{$q, \"linkScanPath\": \"$(transcript s-0023-old user assistant)\"}"
+job aaaa0024 "{$q}"
+job aaaa0025 "{$q}"
+job aaaa0026 "{$q}"
+mark_at seen aaaa0026 202601010000.00
+mark_at ended aaaa0026 202601010001.00
+eq "blocked, /clear after the question: idle" idle "$(phase "$blocked" aaaa0021)"
+eq "blocked, it asked in this session: input" input "$(phase "$blocked" aaaa0022)"
+eq "blocked, /clear, linkScanPath of the old session: idle" idle "$(phase "$blocked" aaaa0023)"
+eq "blocked, no transcript found: input" input "$(phase "$blocked" aaaa0024)"
+eq "blocked, no process: idle" idle "$(phase "$blocked" aaaa0025)"
+eq "blocked, no process, a turn ended after seen: unread" unread "$(phase "$blocked" aaaa0026)"
+eq "fresh ids: the new agent and the cleared ones" '["aaaa0021","aaaa0023"]' "$(jay_fresh_ids "$blocked")"
+
+# jay clear takes the phase rule of the list: it refuses an agent that asks (exit 3) and one with
+# no process; it goes on for a /clear after a question (the stub's claude attach then fails: 1).
+stub_agents "$blocked"
+JAY_MUX=zellij jay-clear aaaa0022 >/dev/null 2>&1
+eq "jay clear: blocked with a question, refused" 3 $?
+JAY_MUX=zellij jay-clear aaaa0025 >/dev/null 2>&1
+eq "jay clear: no process, refused" 3 $?
+JAY_MUX=zellij jay-clear aaaa0021 >/dev/null 2>&1
+eq "jay clear: blocked from before a /clear, goes on" 1 $?
+
 # The Stop hook writes the ended mark: seen, then a new Stop, gives unread.
 stop() {
   jq -nc --arg s "$1" --arg c "$TMP" --argjson bg "${2:-[]}" \

@@ -440,12 +440,15 @@ jay_trust() {
 }
 
 # --- Agent phases: the one rule of the list, jay all, jay agents and the mod (`jay agents --json`) ---
-# input    blocked, or it asks (status waiting)
+# input    it asks (status waiting), or blocked: it asked something in its session and its process
+#          runs. Not input: a blocked agent that asks nothing (jay_fresh_ids), and one with no
+#          process (no status; `claude attach` opens it again), which is unread or idle.
 # failed   state failed
 # unread   a turn ended after the user last saw the agent
 # working  the process works (status busy); state working with status idle (it waits for its
 #          workers) is not working
-# idle     seen since its last turn, shown in the middle column now, or new (no first prompt)
+# idle     seen since its last turn, shown in the middle column now, new (no first prompt), or
+#          blocked from before a /clear
 # The marks are empty files; their mtime is the time: $JAY_MARKS/ended/<key> (a turn ended:
 # the Stop hook, jay-notify) and seen/<key> (the agent came into or left the middle column,
 # `jay go` showed it, or its own Ghostty tab was in front when its turn ended). <key> is the id
@@ -478,13 +481,25 @@ jay_agent_marks() {
       | reduce .[] as $m ({seen: {}, ended: {}}; .[$m.k[-2]][$m.k[-1]] = $m.t)'
 }
 
-# The background agents in agents JSON $1 that wait for their first prompt, as a JSON array of
-# ids. `claude agents` calls such a new idle agent "blocked", as it does an agent that asks you
-# something; its job state says "send a prompt to start".
+# The background agents in agents JSON $1 that are blocked but ask nothing in their session now,
+# as a JSON array of ids. `claude agents` calls an agent "blocked" when it asks you something,
+# but also when it is new and waits for its first prompt (its job state says "send a prompt to
+# start"), and after a /clear that came after a question: the job keeps state blocked and the
+# old needs, while the new session (sessionId; the job's linkScanPath) has no answer of the agent
+# yet. Only agents whose process runs (a status): jay_agent_phases never calls the others input.
 jay_fresh_ids() {
-  local id jobs="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs"
-  jq -r '.[] | select(.kind == "background" and .state == "blocked") | .id // empty' <<<"$1" | while IFS= read -r id; do
-    [[ "$(jq -r '.needs // ""' "$jobs/$id/state.json" 2>/dev/null)" == "send a prompt to start" ]] && printf '%s\n' "$id"
+  local id sid state log cfg="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  jq -r '.[] | select(.kind == "background" and .state == "blocked" and .status != null and .id != null)
+    | [.id, .sessionId // ""] | @tsv' <<<"$1" | while IFS=$'\t' read -r id sid; do
+    state="$cfg/jobs/$id/state.json"
+    if [[ "$(jq -r '.needs // ""' "$state" 2>/dev/null || true)" == "send a prompt to start" ]]; then
+      printf '%s\n' "$id"
+      continue
+    fi
+    [[ -n "$sid" ]] || continue
+    log=$(jq -r '.linkScanPath // ""' "$state" 2>/dev/null || true)
+    [[ "$log" == */"$sid.jsonl" ]] || for log in "$cfg/projects/"*/"$sid.jsonl"; do break; done
+    if [[ -f "$log" ]] && ! grep -q '"type":"assistant"' "$log"; then printf '%s\n' "$id"; fi
   done | jq -Rsc 'split("\n") | map(select(. != ""))'
 }
 
@@ -498,7 +513,7 @@ jay_agent_phases() {
     map(. + {phase: (
       if .state == "failed" then "failed"
       elif (.id // "") as $i | $fresh | index([$i]) then "idle"
-      elif .state == "blocked" or .status == "waiting" then "input"
+      elif (.state == "blocked" and .status != null) or .status == "waiting" then "input"
       elif (.state == "working" and .status != "idle") or (.state == null and .status == "busy") then "working"
       elif $shown != "" and (.id // .sessionId) == $shown then "idle"
       elif at("ended") > at("seen") then "unread"

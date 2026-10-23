@@ -8,12 +8,14 @@ const text = (value: unknown) => (typeof value === 'string' ? value : '')
 const PHASES: readonly Phase[] = ['input', 'failed', 'unread', 'working', 'idle']
 
 // The phase comes from `jay agents --json` (jay_agent_phases in jay-lib.sh), the rule of the list
-// and jay all, which also knows what the user saw (unread). Without it, this fallback: state working
-// with status idle (an agent that waits for its workers) is not working.
+// and jay all, which also knows what the user saw (unread) and which blocked agent asks nothing
+// (new, or a /clear after its question). Without it, this fallback: state working with status idle
+// (an agent that waits for its workers) is not working, and a blocked agent with no process (no
+// status) does not need input: nobody waits for an answer.
 export function phaseOf(state: unknown, status: unknown, phase?: unknown): Phase {
   if (PHASES.includes(phase as Phase)) return phase as Phase
   if (state === 'failed') return 'failed'
-  if (state === 'blocked' || status === 'waiting') return 'input'
+  if ((state === 'blocked' && status !== null && status !== undefined) || status === 'waiting') return 'input'
   if ((state === 'working' && status !== 'idle') || ((state === null || state === undefined) && status === 'busy')) return 'working'
   return 'idle'
 }

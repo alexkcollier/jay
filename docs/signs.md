@@ -50,11 +50,11 @@ point.
 | `→ feat` (dim, after the age) | the agent from the main checkout is in that worktree now (`EnterWorktree`); it shows under its main checkout |
 | `home gone` yellow, after the age | the folder the agent came from is gone, so it cannot wake; a pick continues it as a copy in the worktree it is in ([When the folder an agent came from goes](working.md#when-the-folder-an-agent-came-from-goes)) |
 | `lost` red, after the age | the folder it came from and the worktree it was in are gone; a pick offers a copy in the main checkout, or removal |
-| `!` bold yellow | agent needs input: it is blocked, or it asks you something |
+| `!` bold yellow | agent needs input: it asks you something, or it waits for a permission. Not after a `/clear` that came after its question, and not when its process is gone (Enter on the row opens it again) |
 | `✗` red | agent failed |
 | `✓` bold magenta | done, unread: a turn ended after you last saw the agent |
 | `●` dim green | agent works: its process is busy |
-| `○` dim | idle: you saw it since its last turn, it is in the middle column now, or it waits for its first prompt |
+| `○` dim | idle: you saw it since its last turn, it is in the middle column now, it waits for its first prompt, or you ran `/clear` in it |
 | `bg 12m` (dim, after the name) | background agent; age (m, h, d) |
 | Octicon home (U+F46D), before the branch | the main checkout |
 | Octicon diff (U+F440), yellow | uncommitted changes |
