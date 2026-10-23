@@ -19,7 +19,7 @@ The review column (right) has three choices. They do not depend on each other.
 | Choice | Options | How to change | When it applies |
 |---|---|---|---|
 | What you review (the mode) | **turns** (default): the agent's work, one commit per turn. **commits**: the branch's own commits | `t` in review | at once; it stays for the next picks |
-| The program in the review column | **tuicr** (default) or **lazygit** | `JAY_REVIEW=tuicr\|lazygit` in `~/.config/jay/config` | at the next hub start (Ctrl g, Ctrl q, then `jay`) |
+| The program in the review column | **tuicr** (default) or **lazygit** | `JAY_REVIEW=tuicr\|lazygit` in `~/.config/jay/config` | at the next hub start (`tmux -L jay kill-server`, or Ctrl g, Ctrl q in the zellij hub; then `jay`) |
 | How lazygit draws the patch (lazygit only) | **delta** (default), **difft** or **plain** | `JAY_REVIEW_DIFF=delta\|difft\|plain` in `~/.config/jay/config`; `\|` in lazygit cycles them for now | at the next start of lazygit in the pane (a pick, `t` or `q`) |
 
 `e` in review opens [files](#files) (yazi) over review with either program, and Ctrl g `v`
@@ -161,8 +161,14 @@ Keys: [Review (lazygit)](keys.md#review-lazygit-jay_reviewlazygit).
 ## Files
 
 `e` in tuicr (NORMAL or SELECT mode) opens files: yazi in the review's worktree, over review.
-tuicr keeps running under it. `e` or `q` in yazi closes files, and review comes back. A new pick
-moves files to the new worktree.
+tuicr keeps running under it. `e` in yazi closes files at once (jay closes the pane), and review
+comes back with the focus. `q` quits yazi, with the same result. In a yazi prompt, `e` is text. A
+new pick moves files to the new worktree.
+
+In the tmux hub, files has no image previews, and yazi 26.9.1 takes 5 s to quit (`q`) and to
+run its first `o` after files opens: jay's tmux config keeps tmux's passthrough off, so the
+terminal's replies to yazi's queries do not reach a pane as keys, and yazi waits for a reply that
+does not come. Use `e`. A newer yazi should not wait (see [TODO.md](../TODO.md)).
 
 In files:
 
@@ -182,7 +188,8 @@ on a worktree row also show a hidden review, and move the focus to it.
 - Files closes when review hides, and opens again when review shows.
 - A fresh hub (`jay` after a quit) starts with review shown.
 
-zellij cannot hide a tiled pane, so a hidden review is a floating pane of no size in the bottom
+The tmux hub moves a hidden review to a hidden window, and back. zellij cannot hide a tiled
+pane, so in the zellij hub a hidden review is a floating pane of no size in the bottom
 right corner, and the hub tab's floating panes are hidden. A new floating pane (Ctrl g Tab,
 Ctrl g `r`) shows them again; the hub hides them again when that pane closes. Ctrl g `p` `w`
 (zellij's floating panes key) shows them too: the list hides them again within 3 s.

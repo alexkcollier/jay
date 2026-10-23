@@ -32,7 +32,7 @@ reads the front app with `lsappinfo`.
 | jq | 1.7.1 | `brew install jq` (in `/usr/bin` on recent macOS) | all JSON |
 | tuicr | 0.27.0 | `brew install tuicr` | review |
 | yazi | 26.9.1 (26.x) | `brew install yazi` | files |
-| Claude Code | 2.1.308 (2.1.304+; built on 2.1.304) | the native installer or `brew install --cask claude-code` ([Claude Code and its updates](#claude-code-and-its-updates)) | `claude --bg`, `claude attach`, `claude agents --json --all`, `claude rm`, `claude logs`, `claude --bg --resume`, `claude respawn`, hooks, the mod |
+| Claude Code | 2.1.308; `claude stop` and `jay wake` with 2.1.309 (2.1.304+; built on 2.1.304) | the native installer or `brew install --cask claude-code` ([Claude Code and its updates](#claude-code-and-its-updates)) | `claude --bg`, `claude attach`, `claude agents --json --all`, `claude rm`, `claude logs`, `claude --bg --resume`, `claude respawn` (`jay respawn`, `jay wake`), `claude stop` (idle agents stop), hooks, the mod |
 | git | 2.54.0 (Apple) | Xcode Command Line Tools | worktrees, turn chains |
 | bash | 3.2.57 (`/bin/bash`) | macOS | every script (`#!/usr/bin/env bash` finds `/bin/bash`) |
 | python3 | 3.9.6 (`/usr/bin/python3`) | Xcode Command Line Tools | `jay-keys`, `jay clear` |
@@ -64,7 +64,8 @@ What `./install.sh --check` checks:
 - lazygit 0.66.0 or newer and delta, only when `JAY_REVIEW=lazygit`; else a note. difftastic
   only when `JAY_REVIEW_DIFF=difft` too; else a note.
 - Claude Code 2.1.304 or newer, and the features of the hub in its help texts: `--bg`,
-  `agents --json --all`, `attach`, `rm`, `logs`; a note when it has no `respawn`.
+  `agents --json --all`, `attach`, `rm`, `logs`; a note when it has no `respawn` (then
+  `jay respawn` and `jay wake` do not work).
 - git, perl, curl and `/usr/bin/python3`. Without the Xcode Command Line Tools, `/usr/bin/git`
   and `/usr/bin/python3` only ask macOS to install them: the check can open that dialog. Run
   `xcode-select --install` first.
@@ -110,7 +111,7 @@ it off. Without tab control:
 1. Install the tools with Homebrew:
 
    ```sh
-   brew install worktrunk zellij fzf jq tuicr yazi
+   brew install worktrunk tmux zellij fzf jq tuicr yazi
    brew install --cask claude-code    # or the native installer (Claude Code and its updates)
    # optional:
    brew install terminal-notifier     # macOS notices when an agent finishes or needs input
@@ -137,8 +138,9 @@ it off. Without tab control:
    with "Ready", or with the TODO items. Run it again after a `git pull`: the copies do not
    change when the repo changes.
 3. Optional: the pane keys in `~/.config/zellij/config.kdl` (see [Pane keys](#pane-keys)).
-4. Start the hub: `jay`. At the first start, zellij asks for the status line's permissions:
-   click the top line and press `y`. The first click on a notice (or the first `jay` from a script)
+4. Start the hub: `jay` (the tmux hub; see [tmux or zellij](#tmux-or-zellij-jay_mux)). In the
+   zellij hub, at the first start, zellij asks for the status line's permissions: click the top
+   line and press `y`. The first click on a notice (or the first `jay` from a script)
    can make macOS ask for permission to control Ghostty: allow it.
 5. Optional: worktrunk's own Claude Code plugin:
    `claude plugin marketplace add max-sixty/worktrunk && claude plugin install worktrunk@worktrunk`.
@@ -262,6 +264,7 @@ environment; a `JAY_` name wins over a `WT_` name. `./install.sh --check` tells 
 `JAY_ROOTS` folder does not exist.
 
 Environment variables only: `JAY_SESSION` (default `jay`), `JAY_ZELLIJ_TIMEOUT` (default 5 s),
+`JAY_ZELLIJ_PIPE_TIMEOUT` (the zellij hub's status line updates, default 2 s),
 `JAY_TMUX_SOCKET` (the tmux hub's socket name, default `jay`), `JAY_TMUX_TIMEOUT` (default 5 s).
 The old `WT_HUB_SESSION` and `WT_ZELLIJ_TIMEOUT` still work.
 
@@ -287,12 +290,17 @@ normal {
     bind "v" { Run "/Users/<you>/.local/bin/jay-sidebar" "--review" "toggle" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }
     bind "Tab" { Run "/Users/<you>/.local/bin/jay-run" "--switch" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }
     bind "r" { Run "/Users/<you>/.local/bin/jay-run" "--launcher" { floating true; close_on_exit true; x "20%"; y "35%"; width "60%"; height "3"; }; SwitchToMode "locked"; }
+    bind "t" { Run "/Users/<you>/.local/bin/jay-run" "--pick" { floating true; close_on_exit true; x "10%"; y "15%"; width "80%"; height "60%"; }; SwitchToMode "locked"; }
 }
 ```
 
 `Tab`, `v` and `3` run a script in a floating pane of 1 cell that closes at once: zellij has no
 key action for a tab by name. What each key does: [Keys](keys.md#panes-zellij-every-session).
 Binds of wt-hub (`hub-run`, `wt-sidebar`) still work through the shims.
+
+`j` and `k` (the pane below and above) are new (2026-10-23). The installer never edits your
+`config.kdl`, so add these two lines by hand to binds from before; until then
+`./install.sh --check` prints the binds again in place of "pane keys".
 
 The tmux hub needs none of these: its keys ship in `~/.config/jay/tmux.conf`.
 
@@ -327,6 +335,14 @@ hub, unless `JAY_MUX` names the other.
 ends it (its tasks stop, the agents run on). Ghostty sends Shift+Enter and the other modified
 keys through tmux to Claude (extended keys, tested with `claude attach` in a tmux pane).
 
+What the tmux hub does not have, and the zellij hub has:
+
+- Alt+P and Alt+O: tmux makes Cmd+P and Cmd+O into Alt+P and Alt+O, so jay's config stops them.
+  In Claude, use `/model` and `/fast` ([Keys](keys.md#panes-the-tmux-hub)).
+- Image previews in files: jay's config keeps tmux's passthrough off, so the terminal's replies to
+  yazi do not reach a pane as keys. yazi 26.9.1 then takes 5 s to quit (`q`) and to run its
+  first `o`; `e` closes files at once ([Files](review.md#files)).
+
 ## Uninstall
 
 `./install.sh --uninstall` removes what it installed, the shims and the links at the old
@@ -346,8 +362,8 @@ into another checkout of jay. Tests: `tests/run.sh` (the shell part) and
 A checkout from before the rename can keep its folder name (say `wt-hub`). To give it the new
 name later, by hand:
 
-1. Quit the hub (Ctrl g, Ctrl q). Do this when no agent works in the checkout or its
-   worktrees.
+1. End the hub: `tmux -L jay kill-server` (the tmux hub; Ctrl g `q` only detaches), or Ctrl g,
+   Ctrl q (the zellij hub). Do this when no agent works in the checkout or its worktrees.
 2. `mv <projects>/wt-hub <projects>/jay`, then `cd <projects>/jay`.
 3. `git worktree repair`: the repo's worktrees find the moved checkout again.
 4. `./install.sh --link`: the links go into the new folder.

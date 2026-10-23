@@ -45,12 +45,19 @@ and Claude Code background agents.
 - **tmux or zellij**: a new hub runs on jay's own tmux server; `JAY_MUX=zellij jay` runs the
   same hub in zellij, also beside a tmux hub. Without `JAY_MUX`, the scripts use the hub that
   runs. See [tmux or zellij](docs/install.md#tmux-or-zellij-jay_mux).
+- **Idle agents stop**: the list stops a background agent that was idle for `JAY_AUTO_STOP`
+  minutes (default 15) and that nothing needs (never the hub Claude or an orchestrator). Its row
+  and its conversation stay; a pick or `jay wake <name>` starts it again. Until then SendMessage
+  to it fails ("No agent named X is reachable"). See
+  [Idle agents stop](docs/working.md#idle-agents-stop).
 - **Tasks tabs** (one per worktree, Ctrl g Tab). Shell panes for dev servers, watchers and
   `docker compose up`, which you and the agents both see. See [Tasks](docs/tasks.md).
 
 An agent in a repo's main checkout can be the repo's **orchestrator**: it plans and gives each
 change to a worker, a background agent in a worktree of its own. A repo has none by default: the
-hub Claude plans and starts workers for it. See [Orchestrators](docs/orchestrators.md).
+hub Claude plans and starts workers for it. A worker reports back with SendMessage; when a send
+fails because the list stopped the worker, `jay wake <name>` starts it again. See
+[Orchestrators](docs/orchestrators.md).
 
 ## Before you start
 
@@ -62,9 +69,10 @@ hub Claude plans and starts workers for it. See [Orchestrators](docs/orchestrato
   [Terminals](docs/install.md#terminals).
 - **A Nerd Font** for the git signs (Octicons). Ghostty's built-in font has the symbols; in
   another terminal, set a Nerd Font.
-- **Claude Code 2.1.304 or newer** (built on 2.1.304, tested with 2.1.306), logged in. The hub
-  uses background agents and their commands: `claude --bg`, `claude attach`,
-  `claude agents --json --all`, `claude rm`, `claude logs` and `claude --bg --resume`. It also
+- **Claude Code 2.1.304 or newer** (built on 2.1.304; tested versions:
+  [Requirements](docs/install.md#requirements)), logged in. The hub uses background agents and
+  their commands: `claude --bg`, `claude attach`, `claude agents --json --all`, `claude rm`,
+  `claude logs`, `claude --bg --resume`, `claude stop` and `claude respawn`. It also
   uses hooks (in `~/.claude/settings.json`), and plugins for the optional `/jay` mod.
   `./install.sh --check` checks the version and these commands.
 - **The tools that `install.sh` checks**:
@@ -108,8 +116,8 @@ hub Claude plans and starts workers for it. See [Orchestrators](docs/orchestrato
    Put `~/.local/bin` on PATH. Your repos go under `~/Documents/projects`
    (`<client>/<repo>` or `<repo>`); else set `JAY_ROOTS` in `~/.config/jay/config`. Optional:
    the pane keys that `./install.sh` prints. Details: [Install](docs/install.md).
-2. Start the hub: `jay`. At the first start, click the top line and press `y` (zjstatus asks for
-   its permissions).
+2. Start the hub: `jay` (the tmux hub). In the zellij hub (`JAY_MUX=zellij jay`), at the first
+   start, click the top line and press `y` (zjstatus asks for its permissions).
 3. The first agent: press `n` on a worktree row in the list. The agent shows in the middle
    column: type its first prompt. Or, in a shell, `c` in place of `claude`.
 4. The first worker: press `n` on the `main` row of a repo (the home sign). That starts the
@@ -118,8 +126,9 @@ hub Claude plans and starts workers for it. See [Orchestrators](docs/orchestrato
    row: the list asks for a branch and starts an idle agent in a new worktree.
 5. Pick an agent (Enter or a double click; a click selects) to see it in the middle column and
    its turns in review.
-   `?` in the list shows all keys and signs. Quit the hub with Ctrl g, Ctrl q: the agents keep
-   running.
+   `?` in the list shows all keys and signs. Ctrl g, `q` leaves the tmux hub (it runs on; `jay`
+   opens it again), and `tmux -L jay kill-server` ends it. In the zellij hub, Ctrl g, Ctrl q
+   quits. The agents keep running.
 
 `jay --help` lists all commands.
 
@@ -160,7 +169,8 @@ jay was called wt-hub. The commands, the variables and the folders have new name
 - [Install](docs/install.md): requirements, terminals, install steps, settings, pane keys,
   uninstall.
 - [Working in the hub](docs/working.md): start the hub and agents, pick, the middle column, the
-  hub Claude, your editor, notices, remove and prune, quit.
+  hub Claude, your editor, notices, remove and prune, idle agents stop (`jay wake`), Claude Code
+  updates, quit.
 - [Orchestrators](docs/orchestrators.md): when a repo gets one, the agent that plans and gives
   each change to a worker; its prompt, review and merge, fresh context, an example.
 - [Review](docs/review.md): the review options (turns or commits, tuicr or lazygit, the patch
@@ -172,7 +182,9 @@ jay was called wt-hub. The commands, the variables and the folders have new name
   the `/jay` mod.
 - [State and logs](docs/state-and-logs.md): the hub's files in `~/.local/state/jay` and
   elsewhere.
-- [Troubleshooting](docs/troubleshooting.md): what to do when the hub does not answer.
+- [Troubleshooting](docs/troubleshooting.md): symptoms and what to do (the hub does not answer,
+  a send that fails, text or a picker in Claude that you did not type, a list that ignores
+  clicks).
 - [Repo layout](docs/layout.md): what each file in this repo is.
 - [TODO.md](TODO.md): open items, known faults and the hub's decisions.
 - [CLAUDE.md](CLAUDE.md): rules for edits in this repo, zellij 0.45 facts and tmux facts.

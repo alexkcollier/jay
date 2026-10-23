@@ -30,6 +30,7 @@
 | `r` | reload the list (fresh git signs; starts the newest `jay-sidebar`) |
 | `j` / `k`, ↓ / ↑, wheel | move |
 | `-` / `+` (or `=`) | narrower / wider |
+| `h`, `l` | nothing (the width is `-` / `+`; Ctrl g `h` / `l` go to the pane left or right) |
 | `?` | all keys and signs (press again: fewer keys) |
 | `q`, Esc, Ctrl-C, Ctrl-G, Ctrl-Q, Ctrl-D | nothing (the list belongs to the hub; when it ends anyway, it starts again) |
 
@@ -42,7 +43,7 @@ The list's keys act in the list only. The list has no key for review's mode or f
 | any key | goes to the agent (`claude attach`) |
 | Ctrl+Z | leave the agent; it keeps running |
 | ← | leave the agent (Claude's agent view is stopped; the list is that view) |
-| Enter (after you left) | open the agent again |
+| Enter (after you left) | open the agent again; when it is gone, the agent that took its place (a `jay renew`, a copy, the current hub Claude), else the pane says it is gone |
 | Enter (after a failed attach) | try again |
 
 A pick shows "Opening <name>..." at once. A pick of the agent the column should show opens it
@@ -96,8 +97,8 @@ keys are yazi's own (yazi's help: `~` or F1).
 | Key | Action |
 |---|---|
 | `e` | back to review at once (jay closes the files pane; in a prompt, `e` is text) |
-| `q` | quit yazi: back to review (in the tmux hub yazi can take 5 s to quit) |
-| `o` | open the hovered file in this pane (yazi's open) |
+| `q` | quit yazi: back to review (in the tmux hub yazi takes 5 s to quit: use `e`) |
+| `o` | open the hovered file in this pane (yazi's open; in the tmux hub the first `o` after files opens waits 5 s) |
 | `O` | open the hovered file or folder in your editor, in its project, in a new tab (`jay edit`) |
 | `W` | open with... (yazi's "open with" menu) |
 
@@ -105,7 +106,8 @@ keys are yazi's own (yazi's help: `~` or F1).
 
 The hub runs zellij in locked mode. Ctrl g goes to normal mode; these keys act once and go back
 to locked mode. `1` `2` `3` `h` `j` `k` `l` `;` `v` Tab `r` `t` need the binds in
-[Install: pane keys](install.md#pane-keys).
+[Install: pane keys](install.md#pane-keys); `j` and `k` are new (2026-10-23): add them by hand
+to binds from before.
 
 | Keys | Action |
 |---|---|
@@ -138,7 +140,7 @@ place of the agent counts) while it waits.
 | Ctrl g, Tab | hub window ⇄ the picked worktree's tasks window (as in zellij) |
 | Ctrl g, `r` | the launcher, in a popup; its title says where the line runs. A command that ends shows its output in a popup of its size (any key closes it); one that runs on closes the launcher |
 | Ctrl g, `t` | all tasks in a popup picker; Enter: that task's window |
-| Ctrl g, `q` | quit this terminal's view (detach); the hub, the agents and the tasks run on |
+| Ctrl g, `q` | quit this terminal's view (detach); the hub, the agents and the tasks run on. Ctrl g, Ctrl q (zellij's quit) does nothing here |
 | Ctrl g, `[` | scroll mode (tmux's copy mode; `q` leaves it) |
 | Ctrl g, Ctrl g | a Ctrl g for the program in the pane |
 | any other key, Esc | back, nothing done |
@@ -153,7 +155,8 @@ not use itself (Cmd+P, Cmd+O) comes to the pane as Alt+P (Claude's model picker)
 (Claude's fast mode), and tmux cannot tell the two apart. In Claude, use `/model` and `/fast`.
 Alt+Shift+P does not reach them either: a terminal reply that comes late (`ESC P …`) gets to the
 pane as Alt+Shift+P and the reply's text, and Claude opens its model picker on it. Text such as
-`>|ghostty 1.3.2` in Claude's input box is such a reply.
+`>|ghostty 1.3.2` in Claude's input box is such a reply. See
+[Troubleshooting](troubleshooting.md).
 
 ## Pane titles
 

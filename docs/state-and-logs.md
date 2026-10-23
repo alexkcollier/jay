@@ -6,9 +6,10 @@ In `~/.local/state/jay/`:
 
 | File | What |
 |---|---|
-| `layout.kdl` | the layout that `jay` writes at a fresh start |
+| `layout.kdl` | the layout that `jay` writes at a fresh start (zellij hub) |
 | `agent.target`, `review.target`, `files.target` | what each hub pane shows; a pick writes it |
 | `agent.pane`, `review.pane`, `files.pane` | the zellij pane id and pid of each pane's `jay-pane` |
+| `tmux/` | the same pane state (`agent.target`, `agent.pane`, ...) for the tmux hub: each hub keeps its own, so both can run side by side |
 | `hub.lock/` | held while a pick moves the hub's panes (taken over after 5 s) |
 | `hub-claude` | the short id of the hub Claude (`hub-claude.lock/` while it starts) |
 | `review.mode` | `turns` or `commits` |
@@ -18,13 +19,14 @@ In `~/.local/state/jay/`:
 | `orchestrate.<n>` | a pick started the orchestrator of a repo in `JAY_ORCHESTRATE` (one file per main checkout); for a minute, a second pick does not start another one |
 | `worktrees.ndjson` | cache of `jay all --json` (refreshed after 30 s) |
 | `sidebar.<pid>.sock`, `.count`, `.sum`, `.help`, `.restart` | a running list: its fzf socket, row count, agent counts, `?` state, `r` flag |
+| `sidebar.late.<pid>` | there while a pick or `o` that took over half a second goes on in the background; the list reloads when it ends |
 | `turns/<id>.worktree`, `<id>.prompt`, `<id>.live` | the worktree of each turn chain; the prompt of the current turn; the time of the last live snapshot |
 | `lazygit/views/<id>` | the view repo of a turn chain for lazygit review (`JAY_REVIEW=lazygit`) |
 | `lazygit/state/` | the state of the hub's lazygit (its recent repos) |
 | `ended/<id>`, `seen/<id>` | empty files; the time of each is when the agent's last turn ended (Stop hook; not while the agent has background tasks) and when you last saw the agent (unread sign); removed after 14 days |
 | `prune.stamp` | time of the last automatic prune |
 | `prune.log` | each agent the list pruned, each turn chain removed, each respawn (`jay respawn` and the list's: the versions and Claude's answer), each idle agent the list stopped (its idle minutes and Claude's answer) and each `jay wake` |
-| `stopped/<id>` | an agent that the list stopped (or tried to); its time is when (the 10-minute rule, and the respawn step leaves it); removed after 14 days |
+| `stopped/<id>` | an agent that the list stopped (or tried to); its time is when (the 10-minute rule; for 2 minutes the respawn step leaves it: it wakes on the new version); removed after 14 days |
 | `stop.stamp` | time of the list's last stop step (at most one each minute) |
 | `respawned/<id>` | the version an agent was respawned onto; its time is when (the 10-minute rule); removed after 14 days |
 | `renewed/<id>` | an agent that `jay renew` started in place of an older one: the old agent's creation time (ms), which ranks the orchestrators, then the old agent's id and the ids that it renewed (Enter in a middle column left on an old id opens this agent); removed 14 days after `claude agents` no longer lists the agent |
@@ -37,6 +39,14 @@ In `~/.local/state/jay/`:
 | `tasks/console-<pane>.line` | the line the launcher typed into a console, while it runs (its name in the bar, `restart`) |
 | `tasks/idle-<pane>` | when an extra console came to its prompt (it closes after 10 minutes) |
 | `tasks/launcher.history` | the launcher's history, for a shell other than zsh |
+
+The lines of `prune.log` for a stop and a wake (`<id>` is the short id, then the agent's name,
+then Claude's answer on one line):
+
+```text
+2026-10-23 14:05:12 a1b2c3d4 (shop/fix-login): stop after 17 min idle: <claude stop's output>
+2026-10-23 14:31:40 a1b2c3d4 (shop/fix-login): wake: <claude respawn's output>
+```
 
 Before the rename, these files had other names directly in `~/.local/state` (`wt-hub-*`,
 `wt-worktrees.ndjson`, `wt-turns/`, `hub-tasks/`, `claude-notify.log`, `wt-hub/`). `./install.sh`
@@ -66,5 +76,5 @@ Elsewhere:
   the new id); the list hides it and removes it when its recorded worktree is gone.
 - `~/.claude.json`: Claude's folder trust, which `n`, `N` and `c` can write.
 
-Settings: `~/.config/jay/config` ([Settings](install.md#settings)). Environment variables
-only: `JAY_SESSION` (default `jay`), `JAY_ZELLIJ_TIMEOUT` (default 5 s).
+Settings: `~/.config/jay/config`, and the variables that only the environment sets
+(`JAY_SESSION`, the timeouts, the tmux socket): see [Settings](install.md#settings).

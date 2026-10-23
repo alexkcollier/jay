@@ -298,8 +298,13 @@ is lost: it does not wait in a queue, and it does not wake the worker. So, when 
 
 `jay wake` fails when the folder that Claude wakes the worker in is gone: `jay go --repair <id>`
 continues it as a copy. The list never stops an orchestrator or the hub Claude, nor a worker
-that works, asks something, or waits for an idle notice. The orchestrator prompt does not tell
-this yet: tell your orchestrator to run `jay wake` when a send fails.
+that works, asks something, or waits for an idle notice. The orchestrator prompt and the hub
+Claude's prompt do not tell this yet: tell your orchestrator (or the hub Claude) to run
+`jay wake` when a send fails.
+
+An idle notice that the orchestrator holds on a worker fires when the list stops that worker:
+"X has exited before going idle; it will not process further messages at that address". The
+worker did not end its work there: it was idle already. `jay wake X` makes it reachable again.
 
 ## Review and merge
 
@@ -316,7 +321,9 @@ flow:
 4. The worktree row now shows the dim check sign (safe to remove: integrated). `d` on the
    worktree row removes the worktree (`wt remove`), then its idle agents (`claude rm`), and
    closes its tasks tab. The branch is deleted only when it is merged. Or ask the orchestrator to
-   run `wt remove` and `claude rm`.
+   run `wt remove` and `claude rm`. A branch that is left after its worktree went: the
+   orchestrator can delete it with `git branch -d <branch>` (git refuses a branch that is not
+   merged); for `git branch -D`, Claude asks you first ([The guard](#the-guard)).
 
 ## Skills and slash commands
 

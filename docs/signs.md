@@ -73,7 +73,11 @@ for workers it started) does not work: it is unread or idle. You see an agent wh
 into or leaves the middle column, when `jay go` shows it, and when its turn ends while its own
 Ghostty tab is in front. The Stop hook (`jay-notify`) records when a turn ends; not while the
 agent has background tasks, because its turn goes on when they end. An agent with no turn since
-this record started is idle. The list, `jay all`, `jay agents` and the mod use one rule
+this record started is idle. An agent that does not run (the list stopped it after
+`JAY_AUTO_STOP` minutes idle, or Claude retired it) has no sign of its own: it keeps the sign of
+its last turn, and a pick wakes it ([Idle agents stop](working.md#idle-agents-stop)). An agent
+with no process does not need input (`!`), also when Claude still calls it blocked. The list,
+`jay all`, `jay agents` and the mod use one rule
 (`jay_agent_phases` in `lib/jay-lib.sh`). `c` and `d` use it too.
 
 "On the remote" means the branch has a tracking branch, or `origin/<branch>` exists (as for a PR

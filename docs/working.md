@@ -13,6 +13,7 @@
 - [Notices](#notices)
 - [Remove and prune](#remove-and-prune)
 - [When the folder an agent came from goes](#when-the-folder-an-agent-came-from-goes)
+- [Idle agents stop](#idle-agents-stop)
 - [Claude Code updates](#claude-code-updates)
 - [Tidy the list](#tidy-the-list)
 - [Quit](#quit)
@@ -132,7 +133,13 @@ column, the first click in the list only focuses it. In the tmux hub one click f
 and selects the row.
 
 A pick shows "Opening <name>..." in the middle column at once; the agent's screen follows in
-about half a second (also for a long conversation: `claude attach` draws the end of it).
+about half a second (also for a long conversation: `claude attach` draws the end of it). An
+agent that the list stopped wakes first, in some seconds. A pick (or `o`) that takes longer than
+half a second, as at a hub start, goes on in the background, and the list reloads when it ends:
+the list keeps its mouse.
+
+The list reloads its rows every 4 s and after a pick. fzf drops a key that comes during such a
+reload: when a key in the list seems to do nothing, press it again.
 
 ## The middle column
 
@@ -243,7 +250,8 @@ still on disk (no WorktreeRemove hook here) or has unpushed work. After that, th
 turn chains of gone agents (`jay snapshot --prune`). `p` prunes the dead agents now,
 after a confirm.
 
-Idle background agents stay until you remove them.
+Idle background agents stay in the list until you remove them. Their process stops after
+`JAY_AUTO_STOP` minutes idle (see [Idle agents stop](#idle-agents-stop)); the row stays.
 
 ## When the folder an agent came from goes
 
@@ -290,7 +298,9 @@ and that nothing needs, at most once a minute. Each stop goes into
 `~/.local/state/jay/prune.log`. The agent keeps its conversation and its row. It does not run
 then, as an agent that Claude retired after some hours idle: a pick in the list, `jay go` or
 `claude attach` wakes it in some seconds. `jay wake <id or name>` wakes it without opening it
-and without a turn (`claude respawn`).
+and without a turn (`claude respawn`), and says `"<name>" (<id>) runs again: SendMessage reaches
+it now.` In the list a stopped agent looks as before: its row and its sign (`○`, `✓`) stay.
+`JAY_AUTO_STOP` is a setting in `~/.config/jay/config` ([Settings](install.md#settings)).
 
 An agent stops only when all of these are true:
 
@@ -384,8 +394,14 @@ its process: the path of the binary under Claude's `claude bg-pty-host` process.
 
 ## Quit
 
-Quit the hub: Ctrl g, then Ctrl q. The status line shows "Ctrl g" while zellij waits for the key. The agents keep
-running. Closing the hub's Ghostty tab only detaches it: `jay` attaches it again. The list has
+The tmux hub (the default): Ctrl g, then `q` detaches this terminal; the hub, its tasks and the
+agents run on, and `jay` attaches again. `tmux -L jay kill-server` ends the hub: its tasks stop,
+the agents keep running. Ctrl g, Ctrl q does nothing there.
+
+The zellij hub: Ctrl g, then Ctrl q quits it. The status line shows "Ctrl g" while zellij waits
+for the key. The agents keep running.
+
+In both, closing the hub's Ghostty tab only detaches it: `jay` attaches it again. The list has
 no quit key, and fzf's own (Esc, Ctrl-C, Ctrl-G, Ctrl-Q, Ctrl-D) do nothing there.
 
 The list, the middle column and review cannot be lost. Their programs start again when they end
@@ -393,6 +409,3 @@ The list, the middle column and review cannot be lost. Their programs start agai
 in its pane). A pane that was closed, or that zellij holds after its program was killed, comes
 back with `jay` (run it in any terminal while the hub runs), in its column at its saved width;
 also the whole hub tab. In the tmux hub, Ctrl g `1` `2` `3` bring back the missing pane too.
-
-The tmux hub: Ctrl g, then `q` detaches this terminal (the hub and its tasks run on; `jay`
-attaches again). `tmux -L jay kill-server` ends it.

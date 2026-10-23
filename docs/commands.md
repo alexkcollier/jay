@@ -13,7 +13,7 @@ worktrunk's `wt <name>` dispatch.
 
 | Command | What it does |
 |---|---|
-| `jay [--here \| --tab \| --print-layout]` | Go to the hub's Ghostty tab, else open the hub in this terminal (attach, or a fresh start). A new tab without a terminal or inside another zellij session. `--here`: this terminal. `--tab`: a new tab. `--print-layout`: print the zellij layout. It does not start while the old hub (the zellij session `hub`, from before the rename) runs. |
+| `jay [--here \| --tab \| --print-layout]` | Go to the hub's Ghostty tab, else open the hub in this terminal (attach, or a fresh start). The hub that runs, else a tmux hub; `JAY_MUX=zellij jay`: the zellij hub ([tmux or zellij](install.md#tmux-or-zellij-jay_mux)). A new tab without a terminal or inside another tmux or zellij session. `--here`: this terminal. `--tab`: a new tab. `--print-layout`: print the zellij layout. It does not start while the old hub (the zellij session `hub`, from before the rename) runs. |
 | `jay --help` | The commands, one line each. |
 | `c [claude --bg options] [prompt]` | Claude in this folder as a background agent, attached here. Use it in place of `claude`. `jay c` is the same. Its name: `--name` when given, else `<repo>/<branch>`; `-2`, `-3`, ... when another agent has it (see [Agent names](working.md#agent-names)). |
 | `jay run <command>` | Run a command in a new pane of this worktree's tasks tab in the hub; `ls`, `log`, `wait`, `stop`, `restart`, `port`. See [Tasks](tasks.md). |
@@ -30,7 +30,7 @@ worktrunk's `wt <name>` dispatch.
 | `jay agents --orchestrators [main checkout]` | The orchestrator of each repo, one line each: main checkout, id, name (see [Orchestrators](orchestrators.md)). |
 | `jay clear <id>` | Type `/clear` into idle background agent `<id>` through a hidden `claude attach` (`c` in the list). Exit 0 when its session id changed. See [Fresh context](orchestrators.md#fresh-context). |
 | `jay renew <id or name>` | A fresh context with jay's current prompt for an idle orchestrator or the hub Claude (`y` after `c` in the list, on a row with `⇡`): a new agent with the same name and options in the same folder, the hub's references move to it, and the old agent is removed (its transcript stays). Not for an agent in a worktree it entered. When the prompt is current, nothing changes. See [A newer prompt: renew](orchestrators.md#a-newer-prompt-renew). |
-| `jay wake <id or name>` | Start a background agent that does not run (the list stopped it after `JAY_AUTO_STOP` minutes idle, or Claude retired it) with `claude respawn`: same id, name and conversation, no turn. SendMessage reaches it again. An agent that runs: nothing to do. Exit 1 when it does not wake (its folder is gone: `jay go --repair`). See [Idle agents stop](working.md#idle-agents-stop). |
+| `jay wake <id or name>` | Start a background agent that does not run (the list stopped it after `JAY_AUTO_STOP` minutes idle, you stopped it, or Claude retired it) with `claude respawn`: same id, name and conversation, no turn. It waits until the agent runs (up to 10 s). SendMessage reaches it again: use it when SendMessage says "No agent named X is reachable". The agent: an id, a session id, or a name (any case; every background agent, also outside `JAY_ROOTS`); two agents with that name: give the id. An agent that runs: nothing to do. Each wake goes into `prune.log`. Exit 1 when it does not wake (its folder is gone: `jay go --repair`), 2 for a usage error. See [Idle agents stop](working.md#idle-agents-stop). |
 | `jay respawn` | The background agents that run an older Claude Code than the installed one, with the version they run and why each one waits (or "ready"). See [Claude Code updates](working.md#claude-code-updates). |
 | `jay respawn --idle` | Respawn (`claude respawn`) each of them that is quiet now: the step that the list does by itself at most once a minute (`JAY_AUTO_RESPAWN=idle`). The others: why they wait. |
 | `jay respawn <id or name>` | Respawn that agent when it is quiet; else say why not, and exit 1. An agent on the installed version: nothing to do. |
@@ -50,16 +50,19 @@ Not for hand use:
 
 - `jay-notify` (Stop, Notification)
 - `jay-snapshot` (UserPromptSubmit, Stop, PostToolUse)
-- `jay-guard` (PreToolUse on Bash: an orchestrator's git commands in its main checkout; see
-  [Skills and slash commands](orchestrators.md#skills-and-slash-commands))
+- `jay-guard` (PreToolUse on Bash: an orchestrator's git commands in its main checkout; it
+  denies the ones that change it, and asks you for `git branch -D`; see
+  [The guard](orchestrators.md#the-guard))
 - `jay-run --hook` (SessionStart), `jay-run --bar` (the bar's tasks), `jay-run --tick` (the
   list's tick: a console in each tasks tab, the pane names, the extra consoles, then the bar's
   tasks), `jay-run --where` (the hub banner's worktree, at each pick), `jay-run --switch`
   (Ctrl g Tab), `jay-run --launcher` (Ctrl g r), `jay-run --worktree-tab <dir> --name|--tasks`
   and `jay-run --close-tab <name>` (`d` on a worktree), `jay-run --exec` (a pane that `jay run`
   started)
-- `jay-sidebar` (the list), `jay-sidebar --review toggle|show` (Ctrl g `v`, Ctrl g `3`),
-  `jay-sidebar --files` (`e` in tuicr), `jay-sidebar --clear <kind> <id>` (`c`)
+- `jay-sidebar` (the list), `jay-sidebar --review toggle|show|back` (Ctrl g `v`, Ctrl g `3`,
+  `e` in files), `jay-sidebar --focus list|agent|review` (Ctrl g `1` `2` `3` of the tmux hub when
+  a pane is missing), `jay-sidebar --files` (`e` in tuicr), `jay-sidebar --clear <kind> <id>`
+  (`c`), `jay-sidebar --quick ...` (a pick or `o`: on in the background after half a second)
 - `jay-pane agent|review|files` (the panes), `jay-keys` (tuicr's `t` and `e`)
 - `jay-lazygit` (review with `JAY_REVIEW=lazygit`), `jay-diff` (its patch)
 

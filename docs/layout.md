@@ -17,7 +17,7 @@ bin/
   jay-edit               jay edit: open a file or folder in your editor, in its project
   jay-go                 jay go: bring an agent in front (hub, tab or pane)
   jay-guard              hook (PreToolUse on Bash): denies an orchestrator's git and gh commands
-                         that change its main checkout
+                         that change its main checkout; asks the user for git branch -D
   jay-keys               pty wrapper around tuicr: t (toggle mode), e (files)
   jay-lazygit            lazygit as review (JAY_REVIEW=lazygit): a turn chain's view repo
   jay-mux                one function of the mux layer from outside bash (jay-keys, fzf binds):
@@ -33,8 +33,9 @@ bin/
                          restart, port; --switch (Ctrl g Tab), --pick (Ctrl g t), --launcher
                          (Ctrl g r), --tick, --bar, --note, --hook, --exec
   jay-setup              jay setup: optional worktrunk pre-start hook: ignored files, dependencies
-  jay-sidebar            the list (fzf): rows, keys, remove, prune, new agents; --review
-                         (Ctrl g v, 3: hide or show review)
+  jay-sidebar            the list (fzf): rows, keys, remove, prune, new agents, the stop of idle
+                         agents (JAY_AUTO_STOP); --review (Ctrl g v, 3: hide or show review; e
+                         in files: back to review); --quick (a slow pick goes on in the background)
   jay-snapshot           hook (UserPromptSubmit, Stop, PostToolUse): turn chains; --list, --prune
   jay-wake               jay wake: start a background agent that does not run, without a turn
                          (the list stops idle ones: JAY_AUTO_STOP)
@@ -58,7 +59,8 @@ config/
   lazygit/hub.yml              the hub's lazygit settings and keys (JAY_REVIEW=lazygit)
   lazygit/diff-*.yml           another diff renderer first (JAY_REVIEW_DIFF=difft, plain)
   tmux/jay.conf                the tmux hub's own config (~/.config/jay/tmux.conf): Ctrl g keys,
-                               one status line at the top, mouse, extended keys
+                               one status line at the top, mouse, extended keys; stops Alt+P,
+                               Alt+O and the terminal's replies (passthrough off)
   tuicr/config.toml            q_quits: q in review goes back
   worktrunk/config.toml        hub settings to copy into ~: worktree path <repo>.<branch>, Task column, task alias
   yazi/keymap.toml             hub-only yazi keys: e, O, W
@@ -77,7 +79,8 @@ tests/
   test-*.sh              the test files (test-mux.sh, test-mux-tmux.sh: the mux layer)
   smoke-tmux.sh          a throwaway tmux hub in a pty, about a minute: tests/run.sh smoke
   smoke-zellij.sh        a throwaway zellij hub: panes that cannot be lost (jay brings them back)
-  pty-client.py          the pty "terminal" of the smoke tests (keys from a file)
+  pty-client.py          the pty "terminal" of the smoke tests (keys from a file; PTY_GHOSTTY:
+                         it answers terminal queries as Ghostty)
 docs/                    the documentation (this file, install, working, orchestrators, ...)
 notes/
   lazygit-review.md      the study behind review with lazygit (7: the diff renderers)
