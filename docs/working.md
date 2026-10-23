@@ -282,6 +282,47 @@ folder in its transcript.
   worktree from a WorktreeCreate hook (worktrunk), `claude rm` and the agent view (ctrl+x) keep
   the entry while the worktree is on disk.
 
+## Idle agents stop
+
+Each background agent that runs is a full Claude Code process (350–600 MB). The list stops an
+agent (`claude stop <id>`) that was idle for `JAY_AUTO_STOP` minutes (default 15, `off`: never)
+and that nothing needs, at most once a minute. Each stop goes into
+`~/.local/state/jay/prune.log`. The agent keeps its conversation and its row. It does not run
+then, as an agent that Claude retired after some hours idle: a pick in the list, `jay go` or
+`claude attach` wakes it in some seconds. `jay wake <id or name>` wakes it without opening it
+and without a turn (`claude respawn`).
+
+An agent stops only when all of these are true:
+
+- Its process runs and is idle, its state is done or idle, and no turn runs. An agent that asks
+  you something (`!`, also a permission prompt), that waits for its first prompt, that failed, or
+  that says it works (an agent that waits for an idle notice from another agent says so) stays.
+- It has no background tasks, crons or wakeups (`inFlight` in its `state.json`), and no child
+  process other than `caffeinate`: a Bash command that runs in the background (a test run, a
+  dev server) keeps it.
+- It is not in the middle column of a hub (zellij or tmux), and no `claude attach` shows it.
+- It is not the hub Claude and not an orchestrator: they wait for reports and idle notices.
+- The folder that Claude wakes it in is on disk (else it could not wake), and no copy replaced
+  it.
+- Its last change (`updatedAt` in its `state.json`: a turn, a respawn), its start (a wake) and
+  the last time you saw it in the hub or its turn ended are `JAY_AUTO_STOP` minutes ago or more.
+- The list did not try to stop it in the last 10 minutes (`~/.local/state/jay/stopped/<id>`).
+
+A stopped agent is not reachable for other agents (tested with Claude Code 2.1.309):
+
+- SendMessage to it fails at once: "No agent named X is reachable". The message does not wait
+  in a queue, and it does not wake the agent. The sender runs `jay wake X`, then sends again
+  (see [Orchestrators](orchestrators.md#a-worker-that-does-not-run)).
+- An idle notice (`notify_when_idle`) that it waits for does not come, also not after it wakes.
+  The rule keeps this case out: an agent that waits for a notice says it works.
+- An agent subscribed to it gets a notice at the stop: "X has exited before going idle; it will
+  not process further messages at that address". A subscription to an agent that is idle fires
+  at once, so after 15 idle minutes none is left.
+
+Limits: the list sees background work only as child processes of the agent: a process that
+left its tree (`nohup`, a double fork) does not count, and a stdio MCP server would keep the
+agent running. A Monitor, cron or wakeup counts only through `inFlight`.
+
 ## Claude Code updates
 
 An update puts a new `claude` binary in place (see

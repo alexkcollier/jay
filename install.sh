@@ -486,6 +486,10 @@ install_settings() {
 # binary onto the new one at a quiet moment (claude respawn); off — only jay respawn does.
 # JAY_AUTO_RESPAWN=idle
 
+# Minutes: the list stops (claude stop) a background agent that was idle that long and that
+# nothing needs; its conversation stays, and a pick in the list or jay wake wakes it. off: never.
+# JAY_AUTO_STOP=15
+
 # The hub's multiplexer: tmux (jay's own tmux server; tmux 3.5 or newer) or zellij. Without
 # this line: in a hub's pane, that hub; else the hub that runs, and tmux when both or none run.
 # JAY_MUX=tmux

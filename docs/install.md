@@ -253,6 +253,7 @@ hooks in background agents and a notice click.
 | `JAY_REVIEW` | `tuicr` | the review pane: `tuicr` (review comments) or `lazygit` (git actions); see [Review with lazygit](review.md#review-with-lazygit) |
 | `JAY_REVIEW_DIFF` | `delta` | the patch in lazygit review: `delta`, `difft` (difftastic) or `plain` (delta, no wrap); see [The patch in lazygit](review.md#the-patch-in-lazygit) |
 | `JAY_AUTO_RESPAWN` | `idle` | after a Claude Code update: `idle`, the list moves each agent that runs the old version onto the new one at a quiet moment; `off`, only `jay respawn` does; see [Claude Code updates](working.md#claude-code-updates) |
+| `JAY_AUTO_STOP` | `15` | minutes: the list stops (`claude stop`) a background agent that was idle that long and that nothing needs; a pick in the list or `jay wake` wakes it; `off`, never; see [Idle agents stop](working.md#idle-agents-stop) |
 | `JAY_MUX` | the hub that runs, else `tmux` | the hub's multiplexer: `tmux` (jay's own tmux server) or `zellij`; see [tmux or zellij](#tmux-or-zellij-jay_mux) |
 | `JAY_ORCHESTRATE` | none | the repos that always get an orchestrator, `:` between them: a repo's name as the list shows it (`shop`), or `client/repo` (`acme/shop`) when two clients have a repo of that name; any case. A pick of a row of such a repo starts its orchestrator when it has none; see [When to start one](orchestrators.md#when-to-start-one) |
 

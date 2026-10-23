@@ -38,6 +38,8 @@ Commands:
   clear <id>                a fresh context (/clear) for an idle background agent
   renew <id|name>           a fresh context with jay's current prompt for an orchestrator
                             or the hub Claude: a new agent, same name; the old one goes
+  wake <id|name>            start a background agent that does not run, without a turn
+                            (SendMessage reaches it again)
   respawn [<id> | --idle]   agents on an old Claude Code: list them, or move them onto the
                             installed one when they are quiet (--force <id>: also when not)
   snapshot --list | --prune the turn chains of a worktree; remove the old ones

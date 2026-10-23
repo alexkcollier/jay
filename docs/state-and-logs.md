@@ -23,7 +23,9 @@ In `~/.local/state/jay/`:
 | `lazygit/state/` | the state of the hub's lazygit (its recent repos) |
 | `ended/<id>`, `seen/<id>` | empty files; the time of each is when the agent's last turn ended (Stop hook; not while the agent has background tasks) and when you last saw the agent (unread sign); removed after 14 days |
 | `prune.stamp` | time of the last automatic prune |
-| `prune.log` | each agent the list pruned, each turn chain removed, and each respawn (`jay respawn` and the list's: the versions and Claude's answer) |
+| `prune.log` | each agent the list pruned, each turn chain removed, each respawn (`jay respawn` and the list's: the versions and Claude's answer), each idle agent the list stopped (its idle minutes and Claude's answer) and each `jay wake` |
+| `stopped/<id>` | an agent that the list stopped (or tried to); its time is when (the 10-minute rule, and the respawn step leaves it); removed after 14 days |
+| `stop.stamp` | time of the list's last stop step (at most one each minute) |
 | `respawned/<id>` | the version an agent was respawned onto; its time is when (the 10-minute rule); removed after 14 days |
 | `renewed/<id>` | an agent that `jay renew` started in place of an older one: the old agent's creation time (ms), which ranks the orchestrators, then the old agent's id and the ids that it renewed (Enter in a middle column left on an old id opens this agent); removed 14 days after `claude agents` no longer lists the agent |
 | `respawn.stamp` | time of the list's last respawn step (at most one each minute) |

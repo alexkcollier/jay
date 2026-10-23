@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# jay wake <id | session id | name> — wake a background agent that does not run (the hub stopped
+# it after JAY_AUTO_STOP minutes idle, you stopped it, or Claude retired it), without opening it
+# and without a turn (`claude respawn`, see jay_wake in lib/jay-lib.sh). SendMessage reaches it
+# again then: to a stopped agent it fails with "No agent named X is reachable". An agent that
+# runs stays as it is. Waits until it runs (up to 10 s). Each wake goes to
+# ~/.local/state/jay/prune.log.
+set -uo pipefail
+source "$HOME/.local/lib/jay-lib.sh"
+
+usage() { sed -n '2,7s/^# \{0,1\}//p' "$0"; }
+
+case ${1:-} in
+  -h | --help) usage; exit 0 ;;
+  "") usage >&2; exit 2 ;;
+  -*) echo "jay wake: unknown option $1 (jay wake --help)" >&2; exit 2 ;;
+esac
+(($# == 1)) || { echo "jay wake: one agent at a time" >&2; exit 2; }
+query=$1
+
+# Every background agent, also one outside JAY_ROOTS: by id or session id, else its exact name,
+# else its name in any case.
+agents=$(claude agents --json --all 2>/dev/null) || { echo "jay wake: claude agents failed." >&2; exit 1; }
+match=$(jq -c --arg q "$query" '[.[] | select(.kind == "background" and .id != null)]
+  | ([.[] | select(.id == $q or .sessionId == $q)]) as $same
+  | ([.[] | select(.name == $q)]) as $exact
+  | ([.[] | select((.name // "" | ascii_downcase) == ($q | ascii_downcase))]) as $any
+  | if ($same | length) > 0 then $same[:1] elif ($exact | length) > 0 then $exact else $any end' <<<"$agents")
+case $(jq length <<<"$match") in
+  0) echo "jay wake: no background agent $query (claude agents --all)" >&2; exit 1 ;;
+  1) ;;
+  *) echo "jay wake: more than one agent is named $query; give its id:" >&2
+     jq -r '.[] | "  \(.id)  \(.name // "")"' <<<"$match" >&2
+     exit 1 ;;
+esac
+id=$(jq -r '.[0].id' <<<"$match")
+name=$(jq -r '.[0].name // .[0].id' <<<"$match")
+if [[ -n "$(jq -r '.[0].pid // empty' <<<"$match")" ]]; then
+  echo "\"$name\" ($id) runs: nothing to wake."
+  exit 0
+fi
+# Claude wakes an agent in its home (state.json cwd, see jay_jobs); when that folder is gone,
+# `claude respawn` fails.
+home=$(jq -r '.cwd // .originCwd // empty' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$id/state.json" 2>/dev/null)
+if [[ -n "$home" && ! -d "$home" ]]; then
+  echo "\"$name\" ($id) cannot wake: Claude wakes it in the folder it came from, and that folder is gone ($home).
+  jay go --repair $id   continues it as a copy (same conversation, new id)" >&2
+  exit 1
+fi
+if ! out=$(jay_wake "$id" "$name"); then
+  printf '%s\n' "$out" >&2
+  echo "jay wake: \"$name\" ($id) did not wake." >&2
+  exit 1
+fi
+echo "\"$name\" ($id) runs again: SendMessage reaches it now."

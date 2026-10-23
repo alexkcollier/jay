@@ -65,7 +65,16 @@ case "\${1:-} \${2:-}" in
       && mv "$STUB/agents.new" "$STUB/agents.json"
     echo "backgrounded · cccc0001" ;;
   "agents "*) printf 'AGENT VIEW enter to return · space to reply\n'; sleep 100000 ;;
+  # claude stop: the agent has no process then.
+  "stop "*)
+    printf '%s\n' "\$*" >>"$STUB/stop.calls"
+    jq -c --arg i "\$2" 'map(if .id == \$i then .pid = null | .status = null else . end)' "$STUB/agents.json" >"$STUB/agents.new" \
+      && mv "$STUB/agents.new" "$STUB/agents.json"
+    echo "stopped \$2" ;;
   "attach "*)
+    # An attach wakes an agent that does not run, as Claude does.
+    jq -c --arg i "\$2" 'map(if .id == \$i and .pid == null then .pid = 4242 | .status = "idle" else . end)' "$STUB/agents.json" >"$STUB/agents.new" \
+      && mv "$STUB/agents.new" "$STUB/agents.json"
     # As claude attach: the process keeps its args. Left arrow: the agent view, by exec (as
     # Claude does), or in the same process when \$STUB/inproc exists.
     # As claude attach in a tmux pane: it appends ',*:RGB' to the server's terminal-features.
@@ -597,6 +606,26 @@ if [[ -x "$real_yazi" ]]; then
 else
   printf '%-20s no yazi: the terminal replies are not tested\n' "$TEST_NAME"
 fi
+
+# Idle agents stop (JAY_AUTO_STOP, default 15 min): the list's loop stops an agent idle for 30
+# min that nothing needs; its row stays, and a pick wakes it (claude attach). Its process: a
+# sleep with no children (jay_agent_children).
+sleeper=$( (sleep 100000 >/dev/null 2>&1 & echo $!) )
+idle_ms=$((($(date +%s) - 30 * 60) * 1000))
+jq -c --arg c "$TMP/projects/acme/shop.fix-login" --argjson t "$idle_ms" --argjson p "$sleeper" '. + [{kind: "background",
+  id: "eeee0001", sessionId: "eeee0001-0000-0000-0000-000000000001", name: "sleepy", cwd: $c, state: "done",
+  status: "idle", startedAt: $t, pid: $p}]' "$STUB/agents.json" >"$STUB/agents.new" && mv "$STUB/agents.new" "$STUB/agents.json"
+job eeee0001 "$(jq -nc --arg c "$TMP/projects/acme/shop.fix-login" '{cwd: $c, updatedAt: "2026-10-01T10:00:00.000Z",
+  tempo: "idle", inFlight: {tasks: 0, queued: 0, kinds: []}}')"
+touch -t 202601010000 "$HOME/.local/state/jay/stop.stamp"
+within "auto stop: the list stops the idle agent" 15 grep -q 'stop eeee0001' "$STUB/stop.calls"
+eq "auto stop: no other agent" "stop eeee0001" "$(cat "$STUB/stop.calls")"
+within "auto stop: in prune.log" 3 grep -q 'eeee0001 (sleepy): stop after 30 min idle: stopped eeee0001' "$HOME/.local/state/jay/prune.log"
+within "auto stop: its row stays" 5 screen_has "$(pane_of list)" sleepy
+jay go eeee0001
+within "auto stop: a pick opens it" 5 screen_has "$(pane_of agent)" 'ATTACHED eeee0001'
+within "auto stop: the pick woke it" 3 jq -e 'any(.[]; .id == "eeee0001" and .pid != null)' "$STUB/agents.json"
+kill "$sleeper" 2>/dev/null
 
 # Ctrl g q: the client goes, the hub runs on.
 key 0771

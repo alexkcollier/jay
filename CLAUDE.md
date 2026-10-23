@@ -96,6 +96,15 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   (also after an attach wakes a retired agent): the running binary is the path after `--` in the
   parent `claude bg-pty-host` process. The daemon starts every worker from its own binary.
 - Claude: a notify_when_idle subscription to an idle session fires at once.
+- Claude (2.1.309): a stopped background agent (`claude stop`) is not in ListAgents. SendMessage to
+  it fails at once ("No agent named X is reachable", by name, old ref or id): no queue, no wake.
+  A notify_when_idle that it holds never fires (not after a wake). One that another session
+  holds on it fires at the stop: "X has exited before going idle; it will not process further
+  messages at that address" (the subscriber got it only after its own turn ended). `claude stop` of an idle agent keeps state done; of a busy one it
+  sets state stopped and the turn is lost. `claude respawn <id>` of a stopped agent wakes it in
+  ~3 s with the same id, name, session id, cwd and respawnFlags, and no turn (`jay wake`); its
+  ListAgents ref changes. An agent that waits for an idle notice reports state working (status
+  idle), also after the notice. No file records the subscriptions.
 - Claude: ← in `claude attach` execs the same pid as `claude agents` (its args change; SIGTERM
   ends it). From that view Enter attaches the chosen agent. `claude --bg --resume <session-id>
   --name x` of an ended session took the same ids (no copy) and wrote the new title into that

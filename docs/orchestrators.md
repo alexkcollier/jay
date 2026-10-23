@@ -282,6 +282,25 @@ You see the same in the hub: the worker's row and its sign, its turns in review,
 its turn ends or it needs input. An orchestrator that only waits for its workers (state
 `working`, status `idle`) does not count as working: the list shows it as unread or idle.
 
+### A worker that does not run
+
+The list stops a worker that was idle for `JAY_AUTO_STOP` minutes (default 15; see
+[Idle agents stop](working.md#idle-agents-stop)), and Claude retires idle agents after some
+hours. A stopped worker keeps its conversation, but it is not reachable: ListAgents does not
+list it, and SendMessage to it fails at once with "No agent named X is reachable". The message
+is lost: it does not wait in a queue, and it does not wake the worker. So, when SendMessage says
+"No agent named X is reachable":
+
+1. Run `jay wake X` (X: the worker's name or id). It starts the worker again in some seconds,
+   with the same id, name, conversation and options, and without a turn (`claude respawn`). It
+   says when the worker runs; an agent that runs already stays as it is.
+2. Send the message again.
+
+`jay wake` fails when the folder that Claude wakes the worker in is gone: `jay go --repair <id>`
+continues it as a copy. The list never stops an orchestrator or the hub Claude, nor a worker
+that works, asks something, or waits for an idle notice. The orchestrator prompt does not tell
+this yet: tell your orchestrator to run `jay wake` when a send fails.
+
 ## Review and merge
 
 The prompt says: never merge, and never remove worktrees or agents, unless you ask. The usual

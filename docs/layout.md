@@ -36,6 +36,8 @@ bin/
   jay-sidebar            the list (fzf): rows, keys, remove, prune, new agents; --review
                          (Ctrl g v, 3: hide or show review)
   jay-snapshot           hook (UserPromptSubmit, Stop, PostToolUse): turn chains; --list, --prune
+  jay-wake               jay wake: start a background agent that does not run, without a turn
+                         (the list stops idle ones: JAY_AUTO_STOP)
 compat/                  shims under the old wt-hub names (wt-new, hub-run, claude-notify, ...):
                          each runs the new command; ./install.sh --no-compat removes them
 lib/

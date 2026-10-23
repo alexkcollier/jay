@@ -20,7 +20,8 @@
 # p: prune dead agents (folder gone; asks first). The list also prunes them by itself, every
 # 10 minutes, with plain `claude rm` (it keeps an agent whose worktree has work to lose), and
 # then the turn chains of gone agents; log in ~/.local/state/jay/prune.log. An agent on an old
-# Claude Code (↻) is respawned at a quiet moment (jay_respawn_auto, JAY_AUTO_RESPAWN), same log.
+# Claude Code (↻) is respawned at a quiet moment (jay_respawn_auto, JAY_AUTO_RESPAWN), and an agent
+# idle for JAY_AUTO_STOP minutes that nothing needs is stopped (jay_stop_auto), same log.
 # r: reload this agent list (git signs now; the list starts again: new code and keys too)
 # -/+ (= as +): narrower/wider
 # ?: keys. No quit key: the list belongs to the hub. fzf's own quit keys (Esc, Ctrl-C, Ctrl-G,
@@ -76,8 +77,9 @@ rows() {
     | {(.[0]): {tree: .[3], fix: .[4], runs: (.[5] == "1")}}) | add // {}')
   (auto_prune "$agents" &) >/dev/null 2>&1
   # The agents on an old Claude Code (↻), and their respawn at a quiet moment (jay_respawn_auto).
+  # First the agents idle for JAY_AUTO_STOP minutes stop (jay_stop_auto): the respawn leaves them.
   stale=$(jay_stale "$agents" "$jobs") || stale='{}'
-  (jay_respawn_auto "$agents" "$jobs" "$shown" "$stale" &) >/dev/null 2>&1
+  ({ jay_stop_auto "$agents" "$jobs"; jay_respawn_auto "$agents" "$jobs" "$shown" "$stale"; } &) >/dev/null 2>&1
   # The orchestrators and the hub Claude with an older prompt than jay's (⇡, see jay_prompt_old).
   local oldp
   oldp=$(jay_old_prompts "$agents" "$jobs") || oldp='{}'
