@@ -277,6 +277,8 @@ with `Ctrl g` to normal mode and `Ctrl q` to quit. Add these binds to the `norma
 normal {
     bind "h" { MoveFocus "left"; SwitchToMode "locked"; }
     bind "l" { MoveFocus "right"; SwitchToMode "locked"; }
+    bind "j" { MoveFocus "down"; SwitchToMode "locked"; }
+    bind "k" { MoveFocus "up"; SwitchToMode "locked"; }
     bind "1" { MoveFocus "left"; MoveFocus "left"; SwitchToMode "locked"; }
     bind "2" { MoveFocus "left"; MoveFocus "left"; MoveFocus "right"; SwitchToMode "locked"; }
     bind "3" { MoveFocus "right"; MoveFocus "right"; Run "/Users/<you>/.local/bin/jay-sidebar" "--review" "show" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }

@@ -259,8 +259,17 @@ key 0732; within "Ctrl g 2: the agent" 2 is_pane "$agent"
 within "tab title back on the agent" 3 title_is 'jay | fix-login'
 key 0768; within "Ctrl g h: left" 2 is_pane "$list"
 key 076c; within "Ctrl g l: right" 2 is_pane "$agent"
-key 07; within "Ctrl g: the bar shows the keys" 2 client_shows 'h l 1 2 3 ; v Tab r t q'
+key 07; within "Ctrl g: the bar shows the keys" 2 client_shows 'h j k l 1 2 3 ; v Tab r t q'
 key 1b
+
+# Ctrl g j / k: the pane below / above, in a window of two stacked panes.
+top=$(tm new-window -P -F '#{pane_id}' -t =jay: -n stacked 'exec sleep 100000')
+bottom=$(tm split-window -v -P -F '#{pane_id}' -t "$top" 'exec sleep 100000')
+tm select-window -t "$top"
+within "stacked: the lower pane has the focus" 2 is_pane "$bottom"
+key 076b; within "Ctrl g k: up" 2 is_pane "$top"
+key 076a; within "Ctrl g j: down" 2 is_pane "$bottom"
+tm kill-window -t "$top"
 
 # The list's width: - narrower, + and = wider; h and l do nothing there.
 # list_key HEX NAME CMD...: type HEX in the list until CMD succeeds (3 tries). fzf drops the keys

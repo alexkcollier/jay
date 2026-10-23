@@ -104,13 +104,14 @@ keys are yazi's own (yazi's help: `~` or F1).
 ## Panes (zellij, every session)
 
 The hub runs zellij in locked mode. Ctrl g goes to normal mode; these keys act once and go back
-to locked mode. `1` `2` `3` `h` `l` `;` `v` Tab `r` need the binds in
+to locked mode. `1` `2` `3` `h` `j` `k` `l` `;` `v` Tab `r` `t` need the binds in
 [Install: pane keys](install.md#pane-keys).
 
 | Keys | Action |
 |---|---|
 | Ctrl g, `1` / `2` / `3` | list / middle / right column (`3` also shows a hidden review) |
 | Ctrl g, `h` / `l` | pane to the left / right |
+| Ctrl g, `j` / `k` | pane below / above |
 | Ctrl g, `;` | last pane |
 | Ctrl g, `v` | hide or show review (see [Hide review](review.md#hide-review)) |
 | Ctrl g, Tab | hub tab ⇄ the picked worktree's tasks tab (or the tab of the newest task that the picked agent started) |
@@ -131,6 +132,7 @@ place of the agent counts) while it waits.
 |---|---|
 | Ctrl g, `1` / `2` / `3` | list / middle / right column (`3` also shows a hidden review); a column whose pane was closed gets it back first |
 | Ctrl g, `h` / `l` | pane to the left / right |
+| Ctrl g, `j` / `k` | pane below / above |
 | Ctrl g, `;` | last pane |
 | Ctrl g, `v` | hide or show review |
 | Ctrl g, Tab | hub window ⇄ the picked worktree's tasks window (as in zellij) |

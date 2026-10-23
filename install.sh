@@ -647,10 +647,11 @@ check_zellij() {
   head_ "zellij keys (optional, in ~/.config/zellij/config.kdl; this script never edits it)"
   local conf="$HOME/.config/zellij/config.kdl"
   if [[ -f "$conf" ]] && grep -qF 'MoveFocus "left"; MoveFocus "left"; MoveFocus "right"' "$conf" \
+    && grep -qF 'MoveFocus "down"' "$conf" && grep -qF 'MoveFocus "up"' "$conf" \
     && grep -qF 'jay-run" "--switch"' "$conf" && grep -qF 'jay-run" "--launcher"' "$conf" \
     && grep -qF 'jay-sidebar" "--review" "toggle"' "$conf" && grep -qF 'jay-sidebar" "--review" "show"' "$conf" \
     && grep -qF 'jay-run" "--pick"' "$conf"; then
-    ok "pane keys (Ctrl g, then 1 2 3 h l ; v Tab r t)"
+    ok "pane keys (Ctrl g, then 1 2 3 h j k l ; v Tab r t)"
     return 0
   fi
   if [[ -f "$conf" ]] && grep -qE '(hub-run|wt-sidebar)" "--' "$conf"; then
@@ -665,6 +666,8 @@ check_zellij() {
           normal {
               bind "h" { MoveFocus "left"; SwitchToMode "locked"; }
               bind "l" { MoveFocus "right"; SwitchToMode "locked"; }
+              bind "j" { MoveFocus "down"; SwitchToMode "locked"; }
+              bind "k" { MoveFocus "up"; SwitchToMode "locked"; }
               bind "1" { MoveFocus "left"; MoveFocus "left"; SwitchToMode "locked"; }
               bind "2" { MoveFocus "left"; MoveFocus "left"; MoveFocus "right"; SwitchToMode "locked"; }
               bind "3" { MoveFocus "right"; MoveFocus "right"; Run "$BIN/jay-sidebar" "--review" "show" { floating true; close_on_exit true; x "100%"; y "100%"; width "1"; height "1"; }; SwitchToMode "locked"; }

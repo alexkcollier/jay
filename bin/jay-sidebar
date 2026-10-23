@@ -767,6 +767,7 @@ ${KEY}?${OFF}      fewer keys
 ${HEAD}Panes${OFF} (${KEY}Ctrl g${OFF}, then)
 ${KEY}1 2 3${OFF}  list / middle / right
 ${KEY}h l${OFF}    pane left / right
+${KEY}j k${OFF}    pane below / above
 ${KEY};${OFF}      last pane
 ${KEY}v${OFF}      hide/show review
 
