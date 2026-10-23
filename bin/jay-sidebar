@@ -416,8 +416,28 @@ pick_action() {
   if [[ "${2:-}" == repair ]]; then
     printf '%s' 'execute(jay-sidebar --repair {2})+reload-sync(jay-sidebar --rows --fresh)+clear-screen'
   else
-    printf 'execute-silent(jay-sidebar --act {1} {2}%s)+reload-sync(jay-sidebar --rows)' "${1:+ $1}"
+    printf 'execute-silent(jay-sidebar --quick --act {1} {2}%s)+reload-sync(jay-sidebar --rows)' "${1:+ $1}"
   fi
+}
+
+# Run jay-sidebar with options "$@" for an execute-silent of fzf, and return within half a
+# second. fzf (0.74) turns the terminal's mouse modes off when such a command runs over a second,
+# and does not turn them on again after it: the list did not take clicks any more. A command that
+# runs longer goes on in the background, and the list reloads when it ends (through fzf's
+# socket).
+quick() {
+  local late="$STATE/sidebar.late.$$" i=0 pid
+  ( "$0" "$@"
+    if [[ -f "$late" ]]; then
+      rm -f "$late"
+      curl -s --max-time 2 --unix-socket "${JAY_SIDEBAR_SOCK:-}" -X POST http://localhost \
+        -d 'reload-sync(jay-sidebar --rows)' >/dev/null 2>&1
+    fi ) &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    ((i++ < 5)) || { : >"$late"; return 0; }
+    sleep 0.1
+  done
 }
 
 # Repair the agent with session id $1 that cannot wake because its home is gone (see
@@ -1045,6 +1065,7 @@ case ${1:-} in
   --rows) shift; rows "$@"; exit 0 ;;
   --prune) prune; exit 0 ;;
   --act) shift; act "$@"; exit 0 ;;
+  --quick) shift; quick "$@"; exit 0 ;;
   --pick) shift; pick_action "$@"; exit 0 ;;
   --repair) shift; repair "$@"; exit 0 ;;
   # For the tests: the agents that d on folder $2 finds (agents_in).
@@ -1073,7 +1094,7 @@ for f in "$STATE"/sidebar.*.*; do
 done
 
 sock="$STATE/sidebar.$$.sock"
-export JAY_SIDEBAR_COUNT="$STATE/sidebar.$$.count" JAY_SIDEBAR_SUM="$STATE/sidebar.$$.sum" \
+export JAY_SIDEBAR_SOCK=$sock JAY_SIDEBAR_COUNT="$STATE/sidebar.$$.count" JAY_SIDEBAR_SUM="$STATE/sidebar.$$.sum" \
   JAY_SIDEBAR_HELP="$STATE/sidebar.$$.help" JAY_SIDEBAR_RESTART="$STATE/sidebar.$$.restart"
 post() { curl -s --max-time 2 --unix-socket "$sock" -X POST http://localhost -d "$1" >/dev/null 2>&1 || true; }
 
@@ -1152,7 +1173,7 @@ rows | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=
   --bind 'enter:transform(jay-sidebar --pick --focus {4})' \
   --bind 'double-click:transform(jay-sidebar --pick --focus {4})' \
   --bind 'r:execute-silent(: >"$JAY_SIDEBAR_RESTART")+abort' \
-  --bind 'o:execute-silent(jay-sidebar --view open {1} {2})' \
+  --bind 'o:execute-silent(jay-sidebar --quick --view open {1} {2})' \
   --bind 'a:execute-silent(jay-sidebar --idle)+reload-sync(jay-sidebar --rows)+clear-screen' \
   --bind 'p:execute(jay-sidebar --prune)+reload-sync(jay-sidebar --rows)+clear-screen' \
   --bind 'h:execute-silent(jay-mux resize_list decrease)' \

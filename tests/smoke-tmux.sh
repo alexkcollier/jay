@@ -136,6 +136,8 @@ first_row_is_hub() { tm capture-pane -p -t "$list" | grep -v '^[[:space:]]*$' | 
 within "the list has no counts row: its first row is ◆ hub" 5 first_row_is_hub
 
 within "the focus starts in the middle" 2 is_pane "$agent"
+mouse_on() { [[ "$(tm display -p -t "$list" '#{mouse_any_flag}')" == 1 ]]; }
+within "the list takes the mouse after the start" 3 mouse_on
 eq "no JAY_MUX outside the hub: the tmux hub that runs" "tmux" "$(bash -c 'source "$HOME/.local/lib/jay-lib.sh" && printf %s "$JAY_MUX"')"
 ok "jay run ls from outside, no JAY_MUX: the hub answers" jay run ls
 
@@ -170,6 +172,16 @@ click_at "$list" '◆ hub'
 within "click on ◆ hub: selected" 3 cursor_on '◆ hub'
 sleep 1
 ok "click on ◆ hub: no pick" screen_has "$agent" 'ATTACHED aaaa0001'
+# A pick that takes over a second: fzf turned the mouse off for good after it (jay-sidebar
+# --quick).
+printf '#!/bin/bash\nsleep 1.5\nexec %q "$@"\n' "$REPO/bin/jay-go" >"$TMP/slow-jay-go"
+chmod +x "$TMP/slow-jay-go"
+ln -sfn "$TMP/slow-jay-go" "$HOME/.local/bin/jay-go"
+click_at "$list" '◆ hub' 2
+within "slow pick: the hub Claude opens" 6 screen_has "$agent" 'ATTACHED bbbb0001'
+sleep 1
+ok "slow pick: the list keeps the mouse" mouse_on
+ln -sfn "$REPO/bin/jay-go" "$HOME/.local/bin/jay-go"
 
 # A pick: the agent in the middle (Opening at once), its worktree in review, the banner.
 jay go aaaa0001

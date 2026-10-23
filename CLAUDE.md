@@ -68,6 +68,9 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   server must not inherit them either (`jay --here` removes them before zellij starts).
 - Never replace a suspended pane in place on the live hub; wait until it is visible.
 - Never write zellij's `permissions.kdl` yourself; a plugin asks for its permissions in the pane.
+- fzf (0.74): an `execute-silent` or `transform` command that runs over 1 s turns the mouse modes
+  off for good (after the next redraw); `execute` does not. A list bind that can be slow goes
+  through `jay-sidebar --quick`.
 - Bash: `if …; fi >file` truncates the file before the condition reads it.
 - Bash 3.2: `IFS=$'\t' read … < <(f)` runs `f` with that IFS, so `$(…)` lists in `f` do not split
   on newlines. Set `local IFS=$' \t\n'` in such functions.

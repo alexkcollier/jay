@@ -170,9 +170,9 @@ has "lost: under the (gone) row of its home" "gone:$gone" "$rows"
 # The pick: a repair row repairs, another row acts (Enter with --focus).
 eq "pick: repair" 'execute(jay-sidebar --repair {2})+reload-sync(jay-sidebar --rows --fresh)+clear-screen' \
   "$(jay-sidebar --pick --focus repair)"
-eq "pick: Enter" 'execute-silent(jay-sidebar --act {1} {2} --focus)+reload-sync(jay-sidebar --rows)' \
+eq "pick: Enter" 'execute-silent(jay-sidebar --quick --act {1} {2} --focus)+reload-sync(jay-sidebar --rows)' \
   "$(jay-sidebar --pick --focus '')"
-eq "pick: click" 'execute-silent(jay-sidebar --act {1} {2})+reload-sync(jay-sidebar --rows)' "$(jay-sidebar --pick '' '')"
+eq "pick: click" 'execute-silent(jay-sidebar --quick --act {1} {2})+reload-sync(jay-sidebar --rows)' "$(jay-sidebar --pick '' '')"
 
 # jay go: says what to do; --repair continues it.
 out=$(jay-go 000000s1 2>&1)
