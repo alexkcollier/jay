@@ -1,5 +1,10 @@
 node_modules/
 .DS_Store
 __pycache__/
+*.swp
+*~
+# Claude Code: your permissions for this checkout, and the worktrees of EnterWorktree
+.claude/settings.local.json
+.claude/worktrees/
 # Facts about your own machine for Claude (CLAUDE.local.md, see CLAUDE.md)
 *.local.md

@@ -16,6 +16,12 @@ has no row and no count.
   worktree, its agents. A repo row acts as its main checkout (`N`, `o`, click).
 - A removed worktree that still has agents shows as a dim `<branch> (gone)` row of its repo.
   `d` on it removes those agents.
+- A git worktree in a job folder (`~/.claude/jobs/<id>/`, where an agent compares revisions) is
+  a scratch worktree: a dim row `<folder> · scratch of <agent>`, with the name of its folder and
+  the agent of that job (the job's short id when no agent of the list has that job). It shows
+  under the row of that agent when the agent shows in the same repo, else in its place among the
+  repo's worktrees. It has no git signs. `jay rm` removes it with the agent. See
+  [Scratch worktrees](working.md#scratch-worktrees).
 - Agents in no repo (but in a root, say the root itself) show under "no repo" at the bottom,
   with their folder.
 - A main checkout without an agent is idle, and so is a repo with only an idle main checkout:

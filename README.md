@@ -170,8 +170,8 @@ jay was called wt-hub. The commands, the variables and the folders have new name
 - [Install](docs/install.md): requirements, terminals, install steps, settings, pane keys,
   uninstall.
 - [Working in the hub](docs/working.md): start the hub and agents, pick, the middle column, the
-  hub Claude, your editor, notices, remove and prune (`jay rm`), idle agents stop (`jay wake`), Claude Code
-  updates, quit.
+  hub Claude, your editor, notices, remove and prune (`jay rm`), scratch worktrees, idle agents
+  stop (`jay wake`), Claude Code updates, quit.
 - [Orchestrators](docs/orchestrators.md): when a repo gets one, the agent that plans and gives
   each change to a worker; its prompt, review and merge, fresh context, an example.
 - [Review](docs/review.md): the review options (turns or commits, tuicr or lazygit, the patch
