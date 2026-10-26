@@ -148,9 +148,11 @@ worktree (siblings named <repo>.<branch>). Keep the main checkout free of work.
   yourself takes you into its worktree. When the user tells you to make a change yourself, do
   as they say.
 - Skills and commands that change the branch or write (make or switch a branch, commit, rebase,
-  push, stash, edit files) run in the worker of that branch, never here; the jay-guard hook
-  denies such git commands here. A skill that only the user can start: tell the user which
-  worker is ready for which command.
+  push a worker's branch, stash, edit files) run in the worker of that branch, never here; the
+  jay-guard hook denies such git commands here. Here you push only this checkout's own branch,
+  when the user asks (`git push`, `git push origin <branch>`; never a force push or a
+  delete); the host's branch protection guards it, not jay. A skill that only the user can
+  start: tell the user which worker is ready for which command.
 - Workers, for the user's questions about their status: `claude agents --json --all` (id,
   name, cwd, state, status); recent output: `claude logs <id>`; what a worker did per turn:
   `git log refs/wt-turns/<id>/base..refs/wt-turns/<id>/head` in its worktree. Send a prompt
@@ -324,7 +326,7 @@ flow:
    worker what to change (SendMessage).
 3. You tell the orchestrator to merge. It merges in the main checkout with
    `git merge --ff-only <branch>`. A fast-forward fails when main moved on: then the worker
-   rebases again.
+   rebases again. When you tell it to, it pushes main after the merge (`git push`).
 4. The worktree row now shows the dim check sign (safe to remove: integrated). `d` on the
    worktree row removes the worktree (`wt remove`), then its idle agents (`claude rm`), and
    closes its tasks tab. The branch is deleted only when it is merged. Or ask the orchestrator to
@@ -337,7 +339,9 @@ flow:
 
 The rule: a command that changes the branch or writes runs in a worktree. In its main checkout,
 an orchestrator only reads, plans, reviews what workers deliver and steers workers. It merges there only with
-`git merge --ff-only <branch>`, and only when you tell it to.
+`git merge --ff-only <branch>`, and only when you tell it to. It pushes there only the main
+checkout's own branch (no force push, no delete), when you tell it to. jay does not protect that
+branch on the remote: that is the job of the repo's settings on the host (branch protection).
 
 Why a rule for skills: Claude stops a background agent's file edits (Edit, Write) in the main
 checkout, but it does not stop git through Bash. The project skills of a repo
@@ -357,7 +361,7 @@ only the worker's branch.
 | Read and report | questions about the code, an audit or explain skill that only reads, `/context`, `/cost` | the orchestrator |
 | Review with a target | `/code-review <branch>`, `/code-review <PR number>` | the orchestrator |
 | Review that writes | `/code-review --fix` (it applies the findings to the files) | the worker of that branch |
-| Branch, commit, history, push | a pull request skill, a squash or rebase skill, a skill that fixes review comments | the worker of that branch |
+| Branch, commit, history, push of a worker's branch | a pull request skill, a squash or rebase skill, a skill that fixes review comments | the worker of that branch |
 | Checkout of another branch | an audit skill that checks out a PR branch, `gh pr checkout` | a worker on that branch: `jay new pr:<N>` |
 | Files and stash | a skill that edits, formats or generates files; `git stash`, `git clean` | the worker of that branch |
 
@@ -411,8 +415,16 @@ What it denies in the main checkout:
 - `git branch -d` and `-D` of the main checkout's branch, of a branch that a worktree has
   checked out, of a name that is not a local branch, or of a name that it cannot read (`$b`,
   `$(...)`, a glob, `{a,b}`, `-`, `@{-1}`); `git branch -d -r` (remote-tracking branches);
-- `git commit`, `reset`, `rebase`, `cherry-pick`, `revert`, `am`, `pull`, `push`, `stash` (not
+- `git commit`, `reset`, `rebase`, `cherry-pick`, `revert`, `am`, `pull`, `stash` (not
   `stash list` or `stash show`);
+- `git push` of another branch (workers push their own branches) or of a ref that is not a
+  branch (`refs/wt-turns/...`, `refs/notes/...`); `--all`, `--branches`, `--mirror`; tags
+  (`--tags`, `--follow-tags`, `tag v1`, `refs/tags/...`); a delete (`--delete`, `-d`,
+  `:<branch>`, `--prune`); a force push (`-f`, `--force`, `--force-with-lease`,
+  `--force-if-includes`, a `+` refspec). A force push or delete of main destroys the remote
+  history, so these stay denied for main too. Also a push that the config makes push more
+  (`push.default matching`, `push.followTags`, a `remote.<name>.push` refspec, a mirror remote),
+  a push with `git -c` or `GIT_CONFIG*` set, and options it does not know;
 - `git merge` without `--ff-only` (also with `--squash` or `--no-ff`);
 - `git worktree add`, `remove`, `move`, `prune` (worktrees come from `jay new`, a removal from
   `wt remove`);
@@ -424,7 +436,12 @@ What it denies in the main checkout:
 What it allows: `git status`, `log`, `diff`, `show`, `branch` (a list), `tag` (a list),
 `rev-parse`, `merge-base`, `merge-tree` (a conflict check: it writes only objects), `fetch`,
 `worktree list`, `for-each-ref`, `stash list`, `remote -v`,
-`config --get` and other reads; `git merge --ff-only <branch>`; `git branch -d <branch>...`
+`config --get` and other reads; `git merge --ff-only <branch>`; a push of the main checkout's
+own branch (the branch it has checked out, `main` or `master`: no fixed name): `git push`,
+`git push <remote>`, `git push [-u|--set-upstream] <remote> <branch>`, and `HEAD`,
+`HEAD:<branch>`, `<branch>:<branch>` or `refs/heads/<branch>` for that branch (jay does not
+protect main on the remote: branch protection in the repo's settings on the host does);
+`git branch -d <branch>...`
 (also `--delete`) when no worktree has these local branches checked out; all `gh` commands
 except the ones above; all other programs.
 

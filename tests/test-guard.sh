@@ -1,8 +1,9 @@
 #!/bin/bash
 # jay-guard (the PreToolUse hook on Bash): in an orchestrator's main checkout it denies the git
 # and gh commands that change the branch, the history or the files, and allows reads,
-# `git merge --ff-only` and `git branch -d` of a branch with no worktree (`-D` asks). A
-# worktree, a plain agent and an interactive session pass.
+# `git merge --ff-only`, a push of the main checkout's own branch (no force, delete or tags) and
+# `git branch -d` of a branch with no worktree (`-D` asks). A worktree, a plain agent and an
+# interactive session pass.
 source "$(dirname "$0")/lib.sh"
 link_install
 source "$HOME/.local/lib/jay-lib.sh"
@@ -37,13 +38,13 @@ asks() { eq "asks: $3 (in ${2##*/})" ask "$(decision "$@")"; }
 for cmd in "git checkout -b fix" "git checkout feat" "git checkout -- a.txt" "git switch -c fix" \
   "git switch feat" "git branch fix" "git branch -D feat" "git branch -m old new" "git commit -m x" \
   "git commit -am 'a fix'" "git reset --soft HEAD~1" "git reset --hard" "git rebase main" \
-  "git cherry-pick abc" "git revert HEAD" "git am x.patch" "git push" "git push -u origin feat" \
+  "git cherry-pick abc" "git revert HEAD" "git am x.patch" "git push -u origin feat" \
   "git pull" "git stash" "git stash push -m x" "git stash pop" "git merge feat" "git merge --no-ff feat" \
   "git merge --squash feat" "git restore a.txt" "git clean -fd" "git tag v1" "git tag -a v1 -m x" \
   "git add ." "git worktree add ../shop.x" "git fetch origin feat:feat" "git config user.name x" \
   "git lg" "gh pr checkout 12" "gh pr create --fill" "gh -R acme/shop pr create" "gh pr merge 12" \
   "/usr/bin/git commit -m x" "git -c core.x=y commit -m x" "GIT_EDITOR=true git rebase --continue" \
-  "command git push" "env FOO=1 git push"; do
+  "command git push origin feat" "env FOO=1 git push --force"; do
   denies orch0001 "$shop" "$cmd"
 done
 denies orch0001 "$shop/src" "git commit -m x"
@@ -84,25 +85,25 @@ allows orch0001 "$shop" "cd .claude/worktrees/w1 && git commit -m x"
 denies orch0001 "$shop" "git status && git checkout -b fix"
 denies orch0001 "$shop" "git fetch; git rebase origin/main"
 denies orch0001 "$shop" "git log | head -1 || git reset --hard"
-denies orch0001 "$shop" $'git status\ngit push'
+denies orch0001 "$shop" $'git status\ngit push origin feat'
 denies orch0001 "$shop" "echo \$(git stash)"
 denies orch0001 "$shop" "x=\`git commit -m y\`"
 denies orch0001 "$shop" "bash -c 'git commit -m x'"
-denies orch0001 "$shop" "eval git push"
+denies orch0001 "$shop" "eval git push origin feat"
 denies orch0001 "$shop" "{ git add -A; git commit -m x; }"
-denies orch0001 "$shop" "if true; then git push; fi"
+denies orch0001 "$shop" "if true; then git push -f; fi"
 allows orch0001 "$shop" "git log 2>&1 | head -5 >/dev/null"
 allows orch0001 "$shop" "echo 'git push' && echo \"git commit\""
 allows orch0001 "$shop" "git status # git push"
 allows orch0001 "$shop" $'cat <<\'EOF\'\ngit push\ngit commit -m x\nEOF\ngit status'
-denies orch0001 "$shop" $'cat <<EOF >/dev/null\nnothing\nEOF\ngit push'
+denies orch0001 "$shop" $'cat <<EOF >/dev/null\nnothing\nEOF\ngit push origin feat'
 
 # The reason that Claude gets.
 reason=$(guard orch0001 "$shop" "git checkout -b fix" | jq -r '.hookSpecificOutput.permissionDecisionReason')
 has "the reason names the command" '`git checkout -b fix`' "$reason"
 has "the reason names the main checkout" "$shop" "$reason"
 has "the reason: give it to the worker" "worker of that branch" "$reason"
-eq "the event name" PreToolUse "$(guard orch0001 "$shop" "git push" | jq -r '.hookSpecificOutput.hookEventName')"
+eq "the event name" PreToolUse "$(guard orch0001 "$shop" "git commit -m x" | jq -r '.hookSpecificOutput.hookEventName')"
 
 # Deleting local branches that no worktree has checked out: -d passes, -D asks the user.
 git -C "$shop" branch old1 && git -C "$shop" branch old2
@@ -123,7 +124,7 @@ for cmd in "git branch -d $cur" "git branch -D $cur" "git branch -d feat" "git b
   "git branch -d {old1,old2}" "git branch -d nosuch" "git branch -D old1 nosuch" "git branch -d -" \
   "git branch -d @{-1}" "git branch -d -r origin/old1" "git branch -dr origin/old1" \
   "git branch -d --remotes origin/old1" "git branch -d -m old1" "git branch -d -v old1" \
-  "git branch -D old1 && git push" "git branch -m old1 new1" "git branch -f old1 HEAD" \
+  "git branch -D old1 && git push origin feat" "git branch -m old1 new1" "git branch -f old1 HEAD" \
   "git branch --set-upstream-to=origin/main old1" "git -C \"\$X\" branch -d old1"; do
   denies orch0001 "$shop" "$cmd"
 done
@@ -137,6 +138,58 @@ has "the deny: the branch of the main checkout" "$cur is the branch of the main 
 reason=$(guard orch0001 "$shop" "git branch -d nosuch" | jq -r '.hookSpecificOutput.permissionDecisionReason')
 has "the deny: not a local branch" '`nosuch` is not a local branch' "$reason"
 eq "the guard deletes no branch" "old1 old2" "$(git -C "$shop" for-each-ref --format='%(refname:short)' refs/heads/old1 refs/heads/old2 | xargs)"
+
+# A push of the main checkout's own branch ($cur, not a fixed name) passes; the host guards it.
+for cmd in "git push" "git push origin" "git push origin $cur" "git push -u origin $cur" \
+  "git push --set-upstream origin $cur" "git push origin $cur:$cur" "git push origin HEAD" \
+  "git push origin HEAD:$cur" "git push origin refs/heads/$cur" "git push origin HEAD:refs/heads/$cur" \
+  "git push -uq origin $cur" "git push --dry-run origin $cur" "git push origin -- $cur" \
+  "cd src && git push origin $cur" "git fetch && git merge --ff-only feat && git push origin $cur"; do
+  allows orch0001 "$shop" "$cmd"
+done
+# Any other branch or ref, all refs, tags, a delete, a force push; a word it cannot read.
+for cmd in "git push origin feat" "git push -u origin feat" "git push origin $cur feat" \
+  "git push origin $cur:feat" "git push origin feat:$cur" "git push origin HEAD:feat" "git push origin HEAD~1:$cur" "git push origin HEAD:HEAD" \
+  "git push --all" "git push --all origin" "git push --branches origin" "git push --mirror origin" \
+  "git push --tags" "git push origin --tags" "git push --follow-tags origin $cur" "git push origin v1" \
+  "git push origin tag v1" "git push origin refs/tags/v1" "git push origin refs/wt-turns/x/head" \
+  "git push origin HEAD:refs/wt-turns/x/head" "git push origin refs/notes/commits" \
+  "git push origin 'refs/heads/*'" "git push origin ^$cur" \
+  "git push --delete origin $cur" "git push -d origin feat" "git push origin :$cur" "git push origin --prune" \
+  "git push -f" "git push -f origin $cur" "git push -uf origin $cur" "git push --force origin $cur" \
+  "git push --force-with-lease origin $cur" "git push --force-with-lease=$cur origin $cur" \
+  "git push --force-if-includes origin $cur" "git push origin +$cur" "git push origin +HEAD:$cur" \
+  "git push origin \$b" "git push \"\$R\" $cur" "git push origin \$(git branch --show-current)" \
+  "git -C \"\$X\" push origin $cur" "git -c push.default=matching push" "GIT_CONFIG_COUNT=1 git push" \
+  "git push --repo=origin" "git push -o ci.skip origin $cur" "git push --recurse-submodules=on-demand"; do
+  denies orch0001 "$shop" "$cmd"
+done
+reason=$(guard orch0001 "$shop" "git push --force origin $cur" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+has "the deny: a force push destroys history" "can destroy its history" "$reason"
+reason=$(guard orch0001 "$shop" "git push origin :$cur" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+has "the deny: a delete destroys history" "a delete of $cur destroys its history" "$reason"
+reason=$(guard orch0001 "$shop" "git push origin feat" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+has "the deny: another branch comes from its worker" "the push of \`feat\` comes from the worker of its branch" "$reason"
+reason=$(guard orch0001 "$shop" "git push origin refs/wt-turns/x/head" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+has "the deny: not a branch" "is not a branch" "$reason"
+has "the reason: it can push its own branch" "push the main checkout's own branch" "$reason"
+# The config can make a plain push send more.
+for cfg in "push.default matching" "push.followTags true" "remote.origin.push refs/heads/*:refs/heads/*" \
+  "remote.origin.mirror true"; do
+  git -C "$shop" config ${cfg% *} "${cfg#* }"
+  denies orch0001 "$shop" "git push"
+  git -C "$shop" config --unset ${cfg% *}
+done
+git -C "$shop" config push.default upstream
+denies orch0001 "$shop" "git push"
+git -C "$shop" config "branch.$cur.merge" "refs/heads/$cur"
+allows orch0001 "$shop" "git push"
+git -C "$shop" config --unset push.default
+# A main checkout with no branch (detached): no push.
+git -C "$shop" checkout -q --detach
+denies orch0001 "$shop" "git push origin HEAD"
+git -C "$shop" checkout -q "$cur"
+allows orch0001 "$shop" "git push origin HEAD"
 
 # Other sessions pass.
 allows "" "$shop" "git checkout -b fix"

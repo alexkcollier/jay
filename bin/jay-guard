@@ -3,15 +3,16 @@
 # free of work. It acts only for an orchestrator (a background agent whose job state.json has the
 # orchestrator prompt in its respawnFlags) whose main checkout is the main checkout of its repo.
 # There it denies git and gh commands that change the branch, the history or the files (checkout,
-# switch, branch <name>, commit, reset, rebase, push, stash, merge without --ff-only, gh pr
-# create...), and tells Claude to give the step to the worker of that branch. It allows reads
-# (status, log, diff, fetch...), `git merge --ff-only <branch>`, and `git branch -d <branch>...`
-# of local branches that no worktree has checked out; for `git branch -D` of such branches it
-# asks the user. A command in another folder (a worktree, `cd <worktree> &&`, `git -C
-# <worktree>`) passes. When it cannot tell the folder, the git command or a branch name, it
-# denies. Every other session: it exits at once.
+# switch, branch <name>, commit, reset, rebase, stash, merge without --ff-only, a push of another
+# branch or ref, a force push, gh pr create...), and tells Claude to give the step to the worker
+# of that branch. It allows reads (status, log, diff, fetch...), `git merge --ff-only <branch>`,
+# `git push [-u] [<remote> [<branch>]]` of the main checkout's own branch (the host's branch
+# protection guards it, not jay), and `git branch -d <branch>...` of local branches that no
+# worktree has checked out; for `git branch -D` of such branches it asks the user. A command in
+# another folder (a worktree, `cd <worktree> &&`, `git -C <worktree>`) passes. When it cannot
+# tell the folder, the git command or a branch name, it denies. Other sessions: it exits at once.
 set -uo pipefail
-[[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,12s/^# \{0,1\}//p' "$0"; exit 0; }
+[[ "${1:-}" == -h || "${1:-}" == --help ]] && { sed -n '2,13s/^# \{0,1\}//p' "$0"; exit 0; }
 
 input=$(cat)
 job=${CLAUDE_JOB_DIR:-}
@@ -276,6 +277,68 @@ branch_delete() {
   if $force; then for b in "${names[@]}"; do [[ " $ASK " == *" $b "* ]] || ASK+=" $b"; done; fi
 }
 
+# `git push` (the args in $@): only the branch of the main checkout ($mb), to its own name, with
+# no force, no delete and no tags. Else WHY. GCFG: the command sets git config (-c, GIT_CONFIG*).
+push_check() {
+  local a mb rest=false pos=() spec src dst cfg
+  if $GDYN || $GCFG || [[ "$GDIR" == "?" ]]; then WHY="the guard cannot tell what it pushes"; return; fi
+  mb=$(git -C "$main" symbolic-ref -q --short HEAD 2>/dev/null)
+  [[ -n "$mb" ]] || { WHY="the main checkout has no branch"; return; }
+  local force="a force push rewrites the remote branch and can destroy its history; a force push of $mb is never allowed"
+  local delete="it deletes a remote branch; a delete of $mb destroys its history and is never allowed"
+  for a in "$@"; do
+    if $rest; then pos+=("$a"); continue; fi
+    case $a in
+      --) rest=true ;;
+      --force | --force-with-lease | --force-with-lease=* | --force-if-includes) WHY=$force; return ;;
+      --delete | --prune) WHY=$delete; return ;;
+      --all | --branches | --mirror) WHY="it pushes all branches or refs; push only $mb here"; return ;;
+      --tags | --follow-tags) WHY="it pushes tags"; return ;;
+      --set-upstream | --quiet | --verbose | --progress | --no-progress | --dry-run | --no-verify \
+        | --verify | --porcelain | --atomic | --no-atomic | --ipv4 | --ipv6 | --thin | --no-thin) ;;
+      --*) WHY="the guard cannot read the option \`$a\`"; return ;;
+      -*f*) WHY=$force; return ;;
+      -*d*) WHY=$delete; return ;;
+      -*[!uqvn46]*) WHY="the guard cannot read the option \`$a\`"; return ;;
+      -*) ;;
+      *) pos+=("$a") ;;
+    esac
+  done
+  # The config can make a push send more than the refspecs say.
+  cfg=$(git -C "$main" config --get push.default 2>/dev/null)
+  case $cfg in
+    '' | simple | current) ;;
+    upstream | tracking)
+      [[ "$(git -C "$main" config --get "branch.$mb.merge" 2>/dev/null)" == "refs/heads/$mb" ]] \
+        || { WHY="push.default $cfg pushes $mb to another remote branch"; return; } ;;
+    *) WHY="push.default $cfg pushes more than $mb"; return ;;
+  esac
+  [[ "$(git -C "$main" config --bool --get push.followTags 2>/dev/null)" == true ]] \
+    && { WHY="push.followTags pushes tags"; return; }
+  git -C "$main" config --get-regexp '^remote\..*\.push$' >/dev/null 2>&1 \
+    && { WHY="a remote.<name>.push refspec in the config pushes more than $mb"; return; }
+  [[ "$(git -C "$main" config --bool --get-regexp '^remote\..*\.mirror$' 2>/dev/null)" == *true* ]] \
+    && { WHY="a remote with mirror set pushes all refs"; return; }
+  # pos: the remote, then the refspecs. No refspec: the checked-out branch, $mb.
+  for spec in ${pos[@]+"${pos[@]:1}"}; do
+    case $spec in
+      +*) WHY=$force; return ;;
+      :*) WHY=$delete; return ;;
+      tag | refs/tags/*) WHY="it pushes tags"; return ;;
+      *\** | ^*) WHY="the guard cannot read the refspec \`$spec\`"; return ;;
+    esac
+    src=${spec%%:*} dst=${spec#*:}
+    [[ "$src" == HEAD ]] && src=$mb
+    [[ "$spec" == *:* ]] || dst=$src
+    src=${src#refs/heads/} dst=${dst#refs/heads/}
+    if [[ "$src" != "$mb" || "$dst" != "$mb" ]]; then
+      [[ "$src" == refs/* || "$dst" == refs/* ]] && { WHY="\`$spec\` is not a branch; push only $mb here"; return; }
+      WHY="only $mb, the branch of the main checkout, is pushed here; the push of \`$spec\` comes from the worker of its branch"
+      return
+    fi
+  done
+}
+
 git_why() {
   local sub=$1
   shift
@@ -341,12 +404,12 @@ git_why() {
         ((${#POS[@]} <= 1)) && return
       } ;;
     checkout | switch) (($# == 0)) && return ;;
+    push) push_check "$@"; return ;;
   esac
   [[ -n "$WHY" ]] || case $sub in
     checkout | switch) WHY="it switches the branch or changes files" ;;
     commit | reset | rebase | cherry-pick | revert | am) WHY="it changes the history of the branch" ;;
     pull) WHY="it changes the branch" ;;
-    push) WHY="a push comes from the worker of its branch" ;;
     stash) WHY="it changes the files, and all worktrees share the stash" ;;
     restore | clean | rm | mv | add | apply) WHY="it changes the files or the index" ;;
     config) WHY="it changes the git config" ;;
@@ -370,7 +433,7 @@ gh_why() {
 
 # --- The walk: each command of command line $1, run in folder $2. DENY: the first denied
 # command and why. ASK: the branches that a `git branch -D` deletes, a space before each.
-DENY="" DENY_WHY="" ASK="" GDYN=false GDIR=""
+DENY="" DENY_WHY="" ASK="" GDYN=false GDIR="" GCFG=false
 
 check_line() {
   local dir=$2 t
@@ -394,11 +457,12 @@ check_line() {
 
 # One simple command, its words as tokens (w:/d:). It can change dir (cd), a local of check_line.
 check_simple() {
-  local gitenv=false w0 a target gdir sub text inner=""
+  local gitenv=false gitcfg=false w0 a target gdir sub text inner=""
   # VAR=value before the command; keywords and wrappers that run the rest.
   while (($#)); do
     case $1 in
       w:GIT_DIR=* | d:GIT_DIR=* | w:GIT_WORK_TREE=* | d:GIT_WORK_TREE=*) gitenv=true ;;
+      [wd]:GIT_CONFIG*=*) gitcfg=true ;;
       [wd]:[A-Za-z_]*=*) [[ "${1#?:}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || break ;;
       "w:{" | "w:}" | "w:!" | w:if | w:then | w:else | w:elif | w:do | w:while | w:until | w:time \
         | w:command | w:builtin | w:exec | w:nohup | w:sudo | w:env | w:-*) ;;
@@ -433,7 +497,9 @@ check_simple() {
       while [[ "${1:-}" == ?:-* ]]; do
         case ${1#?:} in
           -C) [[ "${2:-}" == d:* ]] && gdir="?" || gdir=$(join_dir "${2#w:}" "$gdir"); shift ;;
-          -c | --namespace | --config-env) shift ;;
+          -c | --config-env) gitcfg=true; shift ;;
+          --config-env=*) gitcfg=true ;;
+          --namespace) shift ;;
           --git-dir | --work-tree) gdir="?"; shift ;;
           --git-dir=* | --work-tree=*) gdir="?" ;;
           --version | --help | -h | -v) return 0 ;;
@@ -449,7 +515,7 @@ check_simple() {
       if [[ "$sub" == d:* ]]; then WHY="the guard cannot tell the git command"
       else
         local args=()
-        GDYN=false GDIR=$gdir
+        GDYN=false GDIR=$gdir GCFG=$gitcfg
         for a in "$@"; do args+=("${a#?:}"); [[ "$a" == d:* ]] && GDYN=true; done
         git_why "${sub#w:}" ${args[@]+"${args[@]}"}
       fi
@@ -479,8 +545,9 @@ DENY=${DENY//$'\n'/ }
 ((${#DENY} <= 120)) || DENY="${DENY:0:117}..."
 
 reason="jay-guard: \`$DENY\` is denied in the main checkout $main ($DENY_WHY). You are the \
-orchestrator of this repo: here you only read, plan and review, and merge with \`git merge \
---ff-only <branch>\` when the user says so. Give this step to the worker of that branch \
+orchestrator of this repo: here you only read, plan and review, merge with \`git merge \
+--ff-only <branch>\` when the user says so, and push the main checkout's own branch (no force, \
+no delete, no tags). Give this step to the worker of that branch \
 (SendMessage), or run it in that branch's worktree. When the step is a skill or command that \
 only the user can start, tell the user which worker is ready for which command."
 jq -nc --arg r "$reason" \

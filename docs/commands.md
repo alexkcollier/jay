@@ -52,7 +52,8 @@ Not for hand use:
 - `jay-notify` (Stop, Notification)
 - `jay-snapshot` (UserPromptSubmit, Stop, PostToolUse)
 - `jay-guard` (PreToolUse on Bash: an orchestrator's git commands in its main checkout; it
-  denies the ones that change it, and asks you for `git branch -D`; see
+  denies the ones that change it and pushes of other branches or with force, allows a push of
+  its own branch, and asks you for `git branch -D`; see
   [The guard](orchestrators.md#the-guard))
 - `jay-run --hook` (SessionStart), `jay-run --bar` (the bar's tasks), `jay-run --tick` (the
   list's tick: a console in each tasks tab, the pane names, the extra consoles, then the bar's

@@ -995,9 +995,11 @@ worktree (siblings named $1.<branch>). Keep the main checkout free of work.
   yourself takes you into its worktree. When the user tells you to make a change yourself, do
   as they say.
 - Skills and commands that change the branch or write (make or switch a branch, commit, rebase,
-  push, stash, edit files) run in the worker of that branch, never here; the jay-guard hook
-  denies such git commands here. A skill that only the user can start: tell the user which
-  worker is ready for which command.
+  push a worker's branch, stash, edit files) run in the worker of that branch, never here; the
+  jay-guard hook denies such git commands here. Here you push only this checkout's own branch,
+  when the user asks (\`git push\`, \`git push origin <branch>\`; never a force push or a
+  delete); the host's branch protection guards it, not jay. A skill that only the user can
+  start: tell the user which worker is ready for which command.
 - Workers, for the user's questions about their status: \`claude agents --json --all\` (id,
   name, cwd, state, status); recent output: \`claude logs <id>\`; what a worker did per turn:
   \`git log refs/wt-turns/<id>/base..refs/wt-turns/<id>/head\` in its worktree. Send a prompt
