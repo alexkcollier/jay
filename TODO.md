@@ -104,7 +104,7 @@ at a time). Be careful with `wt step prune` in your own repos: in one repo it wo
   the first pick, after a retarget, after a list click, and with a real Claude in the suspended
   hub pane.
 - Possible cause, fixed: Ghostty passed an agent's CLAUDE_* env into every tab, and the hub
-  server inherited it (f040335: `wt hub --here` removes CLAUDE*/ANTHROPIC* before zellij
+  server inherited it (1000bfa: `wt hub --here` removes CLAUDE*/ANTHROPIC* before zellij
   starts). After a clean restart all worked.
 - Next step: wait. If the fault comes back in the clean hub, look at the suspended `zellij:link`
   plugin pane over the middle column, or at how zellij handles the pane under the suspended hub
@@ -126,9 +126,9 @@ at a time). Be careful with `wt step prune` in your own repos: in one repo it wo
 ## Done 2026-10-20
 
 - Lost viewer pane: a pick opened a viewer in place over the already suspended hub Claude; zellij
-  lost that pane, and every later pick went to it. Fixed in wtl_hub_role / wtl_hub_show (a334f58).
+  lost that pane, and every later pick went to it. Fixed in wtl_hub_role / wtl_hub_show (88ec5e8).
 - Interactive picks show a note in the middle column; a failed attach keeps its error; the list
-  prunes dead agents every 10 minutes (a334f58).
+  prunes dead agents every 10 minutes (88ec5e8).
 - Background-first: `c` starts every new session as a background agent and attaches the
   terminal; `b` in the list moves an idle interactive session to the background; ← in the hub
   viewer leaves the agent (it went back to the hub Claude until that was removed).

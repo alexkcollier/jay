@@ -7,7 +7,7 @@
 source "$(dirname "$0")/lib.sh"
 
 # The last commit of wt-hub, before the rename.
-OLD_REV=cf8465b
+OLD_REV=b515aa1
 old="$TMP/old"
 mkdir -p "$old"
 git -C "$REPO" archive "$OLD_REV" | tar -x -C "$old" || { fail "git archive $OLD_REV" "the repo needs its history"; finish; exit 1; }

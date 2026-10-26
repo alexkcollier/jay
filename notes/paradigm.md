@@ -118,7 +118,7 @@ lock, `jay-keys` in front of tuicr, `pgrep -a`).
 | 2026-10-19 11:25 | The hub's server outlived the session. Every zellij command hung, also in other sessions | A dead hub; the timeout wrapper; the kill-and-start-fresh logic in `jay` | Worked around (A1, A2) |
 | 2026-10-19 | The mouse stopped in the agent viewer, twice. zellij ignored the pane's mouse mode | Hours of tests; not reproduced | Open. Not seen since a clean restart (TODO.md, item 5) |
 | 2026-10-19 | "The hub adds a new panel instead of changing it out" | The pane-loop design (`jay-pane`) | Fixed |
-| 2026-10-20 morning | A lost viewer pane (in place over a suspended pane) took every pick | a334f58, the lost-pane check | Fixed (B5) |
+| 2026-10-20 morning | A lost viewer pane (in place over a suspended pane) took every pick | 88ec5e8, the lost-pane check | Fixed (B5) |
 | 2026-10-21 | Ctrl g Tab, hide review | The 1-cell pane trick, 110 lines of hide/show | Works |
 
 The pattern: zellij is fast enough (about 19 ms a call), but its state is hidden (suspended,
