@@ -52,6 +52,18 @@ bin/jay-pane) ⇄ files (yazi).
   - A worktree whose PR was squash-merged shows as merged (the dim check sign, `wt list`): its
     branch is not in main's history, so it looks unmerged now.
 
+Done 2026-10-26: scratch worktrees. A worker (ui-audit repo) made three detached worktrees in
+its job folder (`~/.claude/jobs/<id>/tmp/base`, `v1`, `v2`) for before/after screenshots; they
+showed as loose "(detached)" rows, and git kept their entries after the job went. Now the
+prompts of `jay new`, the hub Claude and the orchestrators say to compare in a plain copy
+(`git archive | tar -x`), and in a detached worktree only when git must work in it (removed
+before the report). `jay rm` (also `--self`) removes the git worktrees under the agent's job
+folder and prunes (`jay_remove_scratch`); the list's prune runs `git worktree prune` in the
+hub's repos (`jay_prune_worktrees`); the list marks a scratch worktree (dim, "scratch of
+<agent>", under the agent's row). The need is legitimate: nothing forbids such a worktree.
+Open: `wt remove` of a worktree does not remove the scratch worktrees of its agents (only `jay
+rm` does); the list's `d` on a scratch row runs `wt remove` on it like any worktree.
+
 Dropped 2026-10-20: `wt step prune` (bulk removal; the list's dim ✓ and `d` do it one worktree
 at a time). Be careful with `wt step prune` in your own repos: in one repo it would have deleted
 `main`.

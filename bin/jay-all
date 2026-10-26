@@ -15,14 +15,6 @@ esac
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-repos() {
-  local root
-  IFS=: read -ra roots <<<"$JAY_ROOTS"
-  for root in "${roots[@]}"; do
-    find "$root" -mindepth 2 -maxdepth 3 -name node_modules -prune -o -type d -name .git -print 2>/dev/null
-  done | sed 's#/.git$##' | sort -u
-}
-
 # Commits to push / to pull for the worktrees of repo $1 (wt list JSON $2) whose branch has no
 # tracking branch but is on origin (pushed without -u, as a PR branch can be): one JSON object
 # per worktree path. Local refs only, no fetch.
@@ -44,7 +36,7 @@ while IFS= read -r repo; do
   { printf '%s\t%s\n' "$repo" "$(jay_client "$repo")" >"$tmp/$i.meta"
     wt -C "$repo" list --format json >"$tmp/$i.json" 2>/dev/null || echo '{"items":[]}' >"$tmp/$i.json"
     remote_counts "$repo" "$tmp/$i.json" >"$tmp/$i.remote"; } &
-done < <(repos)
+done < <(jay_repos)
 wait
 
 rows=$(

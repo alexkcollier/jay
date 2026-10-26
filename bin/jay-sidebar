@@ -19,7 +19,8 @@
 # b: an idle interactive session goes on as a background agent (asks first)
 # p: prune dead agents (folder gone; asks first). The list also prunes them by itself, every
 # 10 minutes, with plain `claude rm` (it keeps an agent whose worktree has work to lose), and
-# then the turn chains of gone agents; log in ~/.local/state/jay/prune.log. An agent on an old
+# then the turn chains of gone agents and the git entries of worktrees whose folder is gone (p
+# too); log in ~/.local/state/jay/prune.log. An agent on an old
 # Claude Code (↻) is respawned at a quiet moment (jay_respawn_auto, JAY_AUTO_RESPAWN), and an agent
 # idle for JAY_AUTO_STOP minutes that nothing needs is stopped (jay_stop_auto), same log.
 # r: reload this agent list (git signs now; the list starts again: new code and keys too)
@@ -93,6 +94,7 @@ rows() {
     --argjson jobs "$jobs" --argjson orchs "$(jay_orch_ranks "$agents" "$jobs")" \
     --argjson stranded "$stranded" --argjson replaced "$(jay_replaced_ids)" --argjson stale "$stale" \
     --argjson notes "$(jay_agent_notes)" --argjson oldp "$oldp" \
+    --argjson jobdirs "$(jay_jobs_dirs | jq -Rsc 'split("\n") | map(select(. != ""))')" \
     --argjson gl "$(jq -nc --arg diff "$G_DIFF" --arg up "$G_UP" --arg alert "$G_ALERT" --arg ok "$G_OK" \
       --arg merge "$G_MERGE" --arg push "$G_PUSH" --arg pull "$G_PULL" --arg home "$G_HOME" '$ARGS.named')" \
     --argjson width "$width" --argjson now "$(date +%s)" '
@@ -117,11 +119,16 @@ rows() {
     # rows have the short id after the name.
     ($agents | map(select(.state != "stopped") | .name // "" | ascii_downcase) | group_by(.)
       | map(select(length > 1 and .[0] != "") | .[0])) as $dup
+    | ($agents | map(select(.id != null) | {(.id): (.name // "")}) | add // {}) as $names
     | def dupid: if (.name // "" | ascii_downcase | IN($dup[])) then " " + c("2") + (.id // .sessionId[0:8]) + c("0") else "" end;
       # An orchestrator (see $mains below) has a cyan ◇ before its name, an extra one a yellow ◇.
       def title: ({main: (c("36") + "◇ " + c("0")), extra: (c("33") + "◇ " + c("0"))}[.orch] // "")
       + (if shown then c("1;36") + (.name | narrow) + c("0") else (.name | narrow) end) + dupid;
-    . as $wts
+    # A scratch worktree: one in a job folder (jobs/<id>/...: an agent compares revisions there,
+    # see jay_remove_scratch). .scratch is the job id, else null.
+    map(.path as $p | . + {scratch: (first($jobdirs[] as $d | select($p | startswith($d + "/"))
+      | $p[($d | length) + 1:] | split("/")[0]) // null)})
+    | . as $wts
     | ($wts | map(.path) | sort_by(length) | reverse) as $paths
     | def owner($cwd): first($paths[] | select($cwd == . or ($cwd | startswith(. + "/")))) // "";
       # An agent from a main checkout in a worktree it entered stays under its main checkout, and
@@ -166,8 +173,13 @@ rows() {
       ($wts | map(. as $w | . + {agents: ($ag | map(select(.wt == $w.path)) | byrank)}
                  | . + {idle: (.main and (.agents | length == 0))})
         | group_by(.client + "/" + .repo | ascii_downcase)
+        # .scratch: the scratch worktrees whose agent has a row in the repo: they show under
+        # that row, the others in their place among .trees.
         | map(first(.[] | select(.main)) as $main | ($main.path // "//none") as $m
-              | {client: .[0].client, repo: .[0].repo, main: $main, trees: .,
+              | ([.[] | select(.scratch == null) | .agents[].id // empty]) as $here
+              | def placed: .scratch != null and (.scratch as $s | $here | index([$s]) != null);
+              {client: .[0].client, repo: .[0].repo, main: $main,
+                 trees: map(select(placed | not)), scratch: map(select(placed)),
                  loose: ($rootdirs | index([$m | sub("/[^/]*$"; "")]) != null),
                  dead: ($ag | map(select(.gone and (.cwd | startswith($m + ".") or startswith($m + "/")))) | group_by(.cwd)
                    | map({path: .[0].cwd, agents: byrank,
@@ -232,14 +244,21 @@ rows() {
           + (if $sw > 0 then " " + $s else "" end)
           + (if $t != "" then c("2") + $t + c("0") else "" end)
           + (if $hint and $left >= 6 then c("2") + " " + ("n: orchestrator" | fit($left)) + c("0") else "" end);
+      # A scratch worktree (dim): the name of its folder and "scratch of <agent>", or of the
+      # short id of the job when no agent of the list has that job. No git signs.
+      def scratchrow($col): (($names[.scratch] // "") as $n | if $n == "" then .scratch else $n | narrow end) as $who
+        | "wt\t" + .path + "\t" + (" " * $col) + c("2")
+          + ((.path | split("/") | last | narrow) + " · scratch of " + $who | fit([$width - $col, 6] | max)) + c("0");
       # With $hideidle, an idle repo goes; the main checkout row stays while its repo shows: it is
-      # the anchor of the other rows of the repo.
+      # the anchor of the other rows of the repo. A scratch worktree comes after the row of its agent.
       def reporows: select((.idle and $hideidle) | not)
-        | .hint as $hint
+        | .hint as $hint | .scratch as $sc
         | ("repo\t" + .main.path + "\t " + (if .idle then c("2") else c("1") end) + .repo + c("0")),
           (.trees[]
-            | treerow(.main and $hint),
-              (if (.agents | length) > 1 then (.agents[] | agrow(4; notetail(4))) else (.agents[] | agrow(4; bgage)) end)),
+            | (if .scratch != null then scratchrow(2) else treerow(.main and $hint) end),
+              ((.agents | length) as $n | .agents[]
+                | (if $n > 1 then agrow(4; notetail(4)) else agrow(4; bgage) end),
+                  (.id as $i | $sc[] | select(.scratch == $i) | scratchrow(6)))),
           (.dead[] | ("gone\tgone:" + .path + "\t  " + c("2") + .label + " (gone)" + c("0")),
                      (.agents[] | agrow(4; bgage)));
       def heading($key; $name; $idle): " \tgap:" + $key + "\t ",
@@ -1051,6 +1070,8 @@ auto_prune() {
   # seen/ended marks (jay_agent_phases): with both gone an agent is idle, and a seen mark goes
   # first only when a newer turn made the agent unread already.
   jay-snapshot --prune >>"$STATE/prune.log" 2>&1
+  # The entries of git worktrees whose folder is gone (a deleted job's scratch worktrees).
+  jay_prune_worktrees
   find "$JAY_MARKS/seen" "$JAY_MARKS/ended" -type f -mtime +14 -delete 2>/dev/null
   # The task notes and renewed marks of agents that are gone, after 14 days too. Every agent
   # counts, also one outside JAY_ROOTS: it is not gone.
@@ -1058,9 +1079,11 @@ auto_prune() {
   return 0
 }
 
-# Remove the dead agents, after a confirm. `claude rm` deletes the session.
+# Remove the dead agents, after a confirm. `claude rm` deletes the session. First, without a
+# confirm, the entries of git worktrees whose folder is gone (jay_prune_worktrees).
 prune() {
   local agents dead id name failed="" out
+  jay_prune_worktrees
   agents=$(jay_claude_agents) || agents='[]'
   dead=$(dead_agents "$agents")
   if [[ -z "$dead" ]]; then

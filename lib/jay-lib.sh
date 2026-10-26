@@ -86,6 +86,16 @@ jay_client() {
   basename "$parent"
 }
 
+# The repos of the hub (jay all's): each folder with a .git one or two levels under a root (a
+# client folder, then the repo), one per line.
+jay_repos() {
+  local root roots
+  IFS=: read -ra roots <<<"$JAY_ROOTS"
+  for root in "${roots[@]}"; do
+    find "$root" -mindepth 2 -maxdepth 3 -name node_modules -prune -o -type d -name .git -print 2>/dev/null
+  done | sed 's#/.git$##' | sort -u
+}
+
 # Prints: client<TAB>repo<TAB>branch<TAB>worktree-root
 jay_describe() {
   local top primary branch
@@ -938,6 +948,9 @@ $JAY_ROOTS (a folder per client, then the repo; worktrees are siblings named <re
 - At the end of a worktree, when the user asks: \`wt remove <branch>\` in its repo, then
   \`jay rm <id or name>\` for each of its agents (it stops the agent and deletes it; its
   transcript stays). An agent can remove itself: \`jay rm --self\` removes it when its turn ends.
+- Old and new side by side (screenshots, two dev servers): a plain copy, not a worktree:
+  \`git archive <rev> | tar -x -C "\$CLAUDE_JOB_DIR/tmp/<name>"\`. Only when git must work in it:
+  \`git worktree add --detach "\$CLAUDE_JOB_DIR/tmp/<name>" <rev>\`, and \`git worktree remove --force\` it before the report.
 EOF
 }
 
@@ -995,6 +1008,9 @@ worktree (siblings named $1.<branch>). Keep the main checkout free of work.
 - At the end of a worktree, when the user asks: \`wt remove <branch>\`, then \`jay rm <id or
   name>\` for each of its workers (it stops the worker and deletes it; its transcript stays). A
   worker can remove itself: \`jay rm --self\` removes it when its turn ends.
+- Old and new side by side (screenshots, two dev servers): a plain copy, not a worktree:
+  \`git archive <rev> | tar -x -C "\$CLAUDE_JOB_DIR/tmp/<name>"\`. Only when git must work in it:
+  \`git worktree add --detach "\$CLAUDE_JOB_DIR/tmp/<name>" <rev>\`, and \`git worktree remove --force\` it before the report.
 EOF
 }
 
@@ -2014,10 +2030,70 @@ jay_forget_agent() {
   return 0
 }
 
+# --- Scratch worktrees: an agent can make git worktrees in its own job folder
+# (jobs/<id>/tmp/<name>: old and new side by side), which git lists with the repo's worktrees.
+# jay rm removes them with the agent, the list's prune drops their entries once the folder is
+# gone, and the list marks them (dim, "scratch of <agent>").
+
+# The folders of Claude's jobs: the path, and its real path when a symlink makes that differ
+# (git records a worktree by its real path), one per line.
+jay_jobs_dirs() {
+  local d="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs" real
+  printf '%s\n' "$d"
+  real=$(cd -P "$d" 2>/dev/null && pwd) && [[ "$real" != "$d" ]] && printf '%s\n' "$real"
+  return 0
+}
+
+# Remove the git worktrees under the job folder of agent $1 (short id; name $2) with `git
+# worktree remove --force`, then `git worktree prune` in their repos: the repo of its state.json
+# cwd, and the repo of each worktree found in the job folder (its cwd can be gone: wt remove
+# first). Only paths under that job folder: it is the agent's own scratch. Notes each in
+# prune.log.
+jay_remove_scratch() {
+  local IFS=$' \t\n' id=$1 name=${2:-$1} job dirs cwd main p d under out
+  [[ -n "$id" && "$id" != */* ]] || return 0
+  job="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$id"
+  dirs=$(printf '%s\n' "$job"; cd -P "$job" 2>/dev/null && pwd)
+  cwd=$(jq -r '.cwd // empty' "$job/state.json" 2>/dev/null)
+  jay_state_dir
+  while IFS= read -r main; do
+    [[ -n "$main" ]] || continue
+    while IFS= read -r p; do
+      under=false
+      while IFS= read -r d; do [[ "$p" == "$d"/* ]] && under=true; done <<<"$dirs"
+      [[ "$under" == true ]] || continue
+      out=$(git -C "$main" worktree remove --force "$p" 2>&1 </dev/null) && out=removed
+      printf '%s %s (%s): scratch worktree %s: %s\n' "$(date '+%F %T')" "$id" "$name" "$p" \
+        "$(tr '\n' ' ' <<<"$out" | sed 's/ *$//')" >>"$JAY_STATE/prune.log"
+    done < <(git -C "$main" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')
+    out=$(git -C "$main" worktree prune -v 2>&1 </dev/null)
+    [[ -z "$out" ]] || printf '%s %s (%s): git worktree prune in %s: %s\n' "$(date '+%F %T')" "$id" "$name" \
+      "$main" "$(tr '\n' ' ' <<<"$out" | sed 's/ *$//')" >>"$JAY_STATE/prune.log"
+  done < <({ [[ -n "$cwd" && -d "$cwd" ]] && printf '%s\n' "$cwd"
+             find "$job" -maxdepth 4 -name node_modules -prune -o -name .git -type f -print 2>/dev/null \
+               | sed 's#/\.git$##'; } | while IFS= read -r d; do jay_primary "$d"; done | sort -u)
+  return 0
+}
+
+# `git worktree prune` in each repo of the hub (jay_repos): it drops the entries of worktrees
+# whose folder is gone (a scratch worktree of a deleted job, a folder removed by hand), and
+# nothing else. Notes what it drops in prune.log.
+jay_prune_worktrees() {
+  local IFS=$' \t\n' repo out
+  jay_state_dir
+  while IFS= read -r repo; do
+    out=$(git -C "$repo" worktree prune -v 2>&1 </dev/null)
+    [[ -z "$out" ]] || printf '%s git worktree prune in %s: %s\n' "$(date '+%F %T')" "$repo" \
+      "$(tr '\n' ' ' <<<"$out" | sed 's/ *$//')" >>"$JAY_STATE/prune.log"
+  done < <(jay_repos)
+  return 0
+}
+
 # Remove background agent $1 (an id; name $2): `claude stop` when it runs (a turn that runs is
-# lost) and a wait (up to 10 s) until its process is gone, then `claude rm`, both without the
-# caller's CLAUDE*/ANTHROPIC* variables. Then jay_forget_agent. Notes the stop and the rm in
-# prune.log. Prints Claude's output of the rm; fails when `claude rm` fails.
+# lost) and a wait (up to 10 s) until its process is gone, then its scratch worktrees
+# (jay_remove_scratch), then `claude rm`; the stop and the rm without the caller's
+# CLAUDE*/ANTHROPIC* variables. Then jay_forget_agent. Notes the stop and the rm in prune.log. Prints Claude's
+# output of the rm; fails when `claude rm` fails.
 jay_remove_agent() {
   local IFS=$' \t\n' id=$1 name=${2:-$1} out rc=0 var strip=() sids i
   local state="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$1/state.json"
@@ -2035,6 +2111,7 @@ jay_remove_agent() {
       sleep 0.5
     done
   fi
+  jay_remove_scratch "$id" "$name"
   out=$(env ${strip[@]+"${strip[@]}"} claude rm "$id" 2>&1) || rc=$?
   printf '%s %s (%s): rm: %s\n' "$(date '+%F %T')" "$id" "$name" \
     "$(tr '\n' ' ' <<<"$out" | sed 's/ *$//')" >>"$JAY_STATE/prune.log"

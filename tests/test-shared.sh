@@ -68,6 +68,8 @@ eq "the worktree's task note" "evaluate the list" "$(note eval)"
 eq "its own note" "evaluate the list" "$(cat "$JAY_NOTES/b0000001")"
 has "an agent caller: the report line" "report to shop/main with SendMessage" "$(last_call)"
 hasnt "alone in the worktree: no line about other agents" "Other agents" "$(last_call)"
+has "a prompt: compare revisions in a plain copy" 'git archive <rev> | tar -x -C "$CLAUDE_JOB_DIR/tmp/<name>"' "$(last_call)"
+has "a prompt: a scratch worktree goes before the report" "git worktree remove --force it before your report" "$(last_call)"
 
 # --- A second agent in the same worktree, named by its role ---
 : >"$STUB/claude.calls"

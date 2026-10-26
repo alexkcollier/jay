@@ -264,8 +264,23 @@ now. An agent that came into the worktree with `EnterWorktree` is not dead. The 
 them by itself every 10 minutes, with plain `claude rm`, and logs each one in
 `~/.local/state/jay/prune.log`. `claude rm` keeps an agent when its recorded worktree is
 still on disk (no WorktreeRemove hook here) or has unpushed work. After that, the list prunes the
-turn chains of gone agents (`jay snapshot --prune`). `p` prunes the dead agents now,
-after a confirm.
+turn chains of gone agents (`jay snapshot --prune`), and runs `git worktree prune` in the hub's
+repos (the repos of `jay all`): git then drops the entries of worktrees whose folder is gone,
+and nothing else. `p` does the `git worktree prune` at once, and prunes the dead agents after a
+confirm.
+
+### Scratch worktrees
+
+To compare revisions side by side (screenshots, two dev servers), an agent can make a copy in
+its job folder (`$CLAUDE_JOB_DIR/tmp/<name>`). The prompts of `jay new`, the hub Claude and the
+orchestrators say how: a plain copy (`git archive <rev> | tar -x -C ...`), and a worktree
+(`git worktree add --detach`) only when git must work in it, which the agent removes before its
+report. A git worktree under a job folder (`~/.claude/jobs/<id>/`) is a scratch worktree: its
+row is dim, with the name of its folder and "scratch of <agent>" (the job's short id when no
+agent of the list has that job), under the row of that agent when the agent shows in the same
+repo, else in its place. It has no git signs. `jay rm` removes an agent's scratch worktrees with
+the agent ([Commands](commands.md)); when a job folder goes another way, the list's
+`git worktree prune` drops the entries.
 
 Idle background agents stay in the list until you remove them. Their process stops after
 `JAY_AUTO_STOP` minutes idle (see [Idle agents stop](#idle-agents-stop)); the row stays.

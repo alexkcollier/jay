@@ -101,8 +101,10 @@ if ((${#prompt[@]})) && [[ "$report" == true ]]; then
     prompt+=($'\n\n'"$line")
   fi
 fi
-# A session cannot end itself: jay rm --self removes the agent after its turn.
+# A session cannot end itself: jay rm --self removes the agent after its turn. Old and new side
+# by side: a copy in the job folder, which jay rm removes (a worktree there too).
 if ((${#prompt[@]})); then
+  prompt+=($'\n\n'"To compare revisions side by side (screenshots, two dev servers), use a plain copy, not a worktree: mkdir -p \"\$CLAUDE_JOB_DIR/tmp/<name>\" && git archive <rev> | tar -x -C \"\$CLAUDE_JOB_DIR/tmp/<name>\". Only when git must work in it: git worktree add --detach \"\$CLAUDE_JOB_DIR/tmp/<name>\" <rev>, and git worktree remove --force it before your report.")
   prompt+=($'\n\n'"When the user tells you to remove this worktree and yourself: wt remove removes the worktree, then jay rm --self removes you when this turn ends.")
 fi
 

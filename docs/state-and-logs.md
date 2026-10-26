@@ -25,7 +25,7 @@ In `~/.local/state/jay/`:
 | `lazygit/state/` | the state of the hub's lazygit (its recent repos) |
 | `ended/<id>`, `seen/<id>` | empty files; the time of each is when the agent's last turn ended (Stop hook; not while the agent has background tasks) and when you last saw the agent (unread sign); removed after 14 days |
 | `prune.stamp` | time of the last automatic prune |
-| `prune.log` | each agent the list pruned, each turn chain removed, each respawn (`jay respawn` and the list's: the versions and Claude's answer), each idle agent the list stopped (its idle minutes and Claude's answer), each `jay wake`, and each `jay rm` (the stop and the removal, with Claude's answers) |
+| `prune.log` | each agent the list pruned, each turn chain removed, each respawn (`jay respawn` and the list's: the versions and Claude's answer), each idle agent the list stopped (its idle minutes and Claude's answer), each `jay wake`, each `jay rm` (the stop, the scratch worktrees, the removal, with Claude's answers), and each entry that `git worktree prune` dropped |
 | `stopped/<id>` | an agent that the list stopped (or tried to); its time is when (the 10-minute rule; for 2 minutes the respawn step leaves it: it wakes on the new version); removed after 14 days |
 | `stop.stamp` | time of the list's last stop step (at most one each minute) |
 | `respawned/<id>` | the version an agent was respawned onto; its time is when (the 10-minute rule); removed after 14 days |
@@ -49,8 +49,14 @@ itself, when the process that waits for the end of its turn starts):
 2026-10-23 14:31:40 a1b2c3d4 (shop/fix-login): wake: <claude respawn's output>
 2026-10-23 15:02:07 a1b2c3d4 (shop/fix-login): rm after its turn: a process waits for the end of the turn
 2026-10-23 15:02:16 a1b2c3d4 (shop/fix-login): stop for rm: <claude stop's output>
+2026-10-23 15:02:16 a1b2c3d4 (shop/fix-login): scratch worktree /Users/<you>/.claude/jobs/a1b2c3d4/tmp/base: removed
+2026-10-23 15:02:16 a1b2c3d4 (shop/fix-login): git worktree prune in /Users/<you>/Documents/projects/acme/shop: <git's output>
 2026-10-23 15:02:17 a1b2c3d4 (shop/fix-login): rm: <claude rm's output>
+2026-10-23 15:10:02 git worktree prune in /Users/<you>/Documents/projects/acme/shop: Removing worktrees/v1: gitdir file points to non-existent location
 ```
+
+The last line is the list's prune (every 10 minutes, and `p`). A scratch worktree line says
+"removed", or git's error when `git worktree remove --force` failed.
 
 Before the rename, these files had other names directly in `~/.local/state` (`wt-hub-*`,
 `wt-worktrees.ndjson`, `wt-turns/`, `hub-tasks/`, `claude-notify.log`, `wt-hub/`). `./install.sh`
