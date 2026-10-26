@@ -154,6 +154,15 @@ You type to the agent here, as in any `claude attach`.
   is gone, and you pick another one. A pick of an agent opens that agent. A pick of the agent the pane should show opens it again whenever the pane
   does not show it (Claude's agent view, another agent opened from there, an error): the pick
   looks at the `claude attach` that really runs under the pane, not only at the pane's target.
+- A background agent that does not run and has no transcript yet (it never got a prompt, then
+  it stopped, or the background service went off) cannot open with `claude attach`: Claude says
+  "there is nothing to resume". The pane wakes it first (`jay wake`, see
+  [Idle agents stop](#idle-agents-stop)): same id, name and options. Then it attaches. An agent
+  with a transcript only attaches: `claude attach` continues its conversation. The transcript:
+  `linkScanPath` in the agent's `state.json`, else `<session id>.jsonl` in any folder of
+  `~/.claude/projects` (`jay_transcript` in `lib/jay-lib.sh`). An agent made with a first prompt
+  (`intent` in its `state.json`) whose transcript is gone is not woken: the wake would run that
+  prompt again.
 - When `claude attach` fails at once (for example, the agent's worktree is gone), its error stays
   on screen. Enter tries again.
 - The pane never closes.
@@ -176,7 +185,8 @@ folders), with a short system prompt about the hub's commands (`jay_hub_claude_p
   When that file is lost, the hub takes on the newest agent with the hub Claude's prompt, and does
   not start a second one.
   It is like any background agent: it keeps running when you leave it, and a stopped one opens
-  again on a pick.
+  again on a pick. A hub Claude that stopped before its first prompt has no transcript: the pick
+  wakes it first (see [The middle column](#the-middle-column)).
 - It knows the orchestrators (`jay agents --orchestrators`). It sends work for a repo to the
   orchestrator of that repo (SendMessage). A repo has none by default: then it plans the work
   and starts the workers itself (`jay new`): every change and every in-depth task, also a

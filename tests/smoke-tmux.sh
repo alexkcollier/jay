@@ -73,6 +73,7 @@ case "\${1:-} \${2:-}" in
     jq -c --arg i "\$2" 'map(if .id == \$i then .pid = null | .status = null else . end)' "$STUB/agents.json" >"$STUB/agents.new" \
       && mv "$STUB/agents.new" "$STUB/agents.json"
     echo "stopped \$2" ;;
+  "respawn "*) printf '%s\n' "\$*" >>"$STUB/respawn.calls"; exit 1 ;;
   "attach "*)
     # An attach wakes an agent that does not run, as Claude does.
     jq -c --arg i "\$2" 'map(if .id == \$i and .pid == null then .pid = 4242 | .status = "idle" else . end)' "$STUB/agents.json" >"$STUB/agents.new" \
@@ -633,15 +634,17 @@ else
 fi
 
 # Idle agents stop (JAY_AUTO_STOP, default 15 min): the list's loop stops an agent idle for 30
-# min that nothing needs; its row stays, and a pick wakes it (claude attach). Its process: a
-# sleep with no children (jay_agent_children).
+# min that nothing needs; its row stays, and a pick wakes it (claude attach; it has a
+# transcript, so no respawn first). Its process: a sleep with no children (jay_agent_children).
 sleeper=$( (sleep 100000 >/dev/null 2>&1 & echo $!) )
 idle_ms=$((($(date +%s) - 30 * 60) * 1000))
 jq -c --arg c "$TMP/projects/acme/shop.fix-login" --argjson t "$idle_ms" --argjson p "$sleeper" '. + [{kind: "background",
   id: "eeee0001", sessionId: "eeee0001-0000-0000-0000-000000000001", name: "sleepy", cwd: $c, state: "done",
   status: "idle", startedAt: $t, pid: $p}]' "$STUB/agents.json" >"$STUB/agents.new" && mv "$STUB/agents.new" "$STUB/agents.json"
-job eeee0001 "$(jq -nc --arg c "$TMP/projects/acme/shop.fix-login" '{cwd: $c, updatedAt: "2026-10-01T10:00:00.000Z",
-  tempo: "idle", inFlight: {tasks: 0, queued: 0, kinds: []}}')"
+log="$HOME/.claude/projects/-acme-shop-fix-login/eeee0001-0000-0000-0000-000000000001.jsonl"
+mkdir -p "${log%/*}" && printf '{"type":"user"}\n' >"$log"
+job eeee0001 "$(jq -nc --arg c "$TMP/projects/acme/shop.fix-login" --arg l "$log" '{cwd: $c, updatedAt: "2026-10-01T10:00:00.000Z",
+  tempo: "idle", inFlight: {tasks: 0, queued: 0, kinds: []}, linkScanPath: $l}')"
 touch -t 202601010000 "$HOME/.local/state/jay/stop.stamp"
 within "auto stop: the list stops the idle agent" 15 grep -q 'stop eeee0001' "$STUB/stop.calls"
 eq "auto stop: no other agent" "stop eeee0001" "$(cat "$STUB/stop.calls")"
@@ -650,6 +653,7 @@ within "auto stop: its row stays" 5 screen_has "$(pane_of list)" sleepy
 jay go eeee0001
 within "auto stop: a pick opens it" 5 screen_has "$(pane_of agent)" 'ATTACHED eeee0001'
 within "auto stop: the pick woke it" 3 jq -e 'any(.[]; .id == "eeee0001" and .pid != null)' "$STUB/agents.json"
+ok "auto stop: a transcript, so no respawn before the attach" test ! -e "$STUB/respawn.calls"
 kill "$sleeper" 2>/dev/null
 
 # Ctrl g q: the client goes, the hub runs on.

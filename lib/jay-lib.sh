@@ -1247,7 +1247,9 @@ jay_drop_replaced() {
 # Claude the file lost (a new state folder) is taken on. When there is none (never started, or
 # `claude rm` removed it), start it, and wait until `claude agents` lists it. Its name is "hub",
 # or "hub-2"... when another agent has that name. A stopped one stays: `claude attach` opens it
-# again. A lock keeps two callers (the pane at hub start, a list pick) from starting two.
+# again; one that never got a prompt has no transcript, and the attach in the hub's agent pane or
+# `jay go` wakes it first (jay_wake_for_attach). A lock keeps two callers (the pane at hub start,
+# a list pick) from starting two.
 jay_hub_claude() {
   local lock="$JAY_STATE/hub-claude.lock" id out var i agents rc=0
   local strip=() dirs=() args=()
@@ -1926,4 +1928,49 @@ jay_wake() {
     sleep 0.5
   done
   return 1
+}
+
+# The transcript of background agent $1 (short id): prints its path; fails when it is not on
+# disk, or the agent has no state.json. Claude writes it at the first prompt: an agent made
+# without one (the hub Claude) has none until then. state.json linkScanPath names it (a resumed
+# session's file is named after resumeSessionId, not sessionId); else the session's file in any
+# folder of ~/.claude/projects. The folder named after the cwd is not reliable: a session resumed
+# in another worktree keeps its file in the folder it began in.
+jay_transcript() {
+  local IFS=$' \t\n' cfg="${CLAUDE_CONFIG_DIR:-$HOME/.claude}" state log sid
+  state="$cfg/jobs/$1/state.json"
+  [[ -f "$state" ]] || return 1
+  log=$(jq -r '.linkScanPath // ""' "$state" 2>/dev/null)
+  [[ -n "$log" && -f "$log" ]] && { printf '%s\n' "$log"; return 0; }
+  for sid in $(jq -r '.resumeSessionId // empty, .sessionId // empty' "$state" 2>/dev/null); do
+    log=$(compgen -G "$cfg/projects/*/$sid.jsonl" | head -1)
+    [[ -n "$log" ]] && { printf '%s\n' "$log"; return 0; }
+  done
+  return 1
+}
+
+# Before `claude attach` on background agent $1 (id; name $2): wake it (jay_wake) when it does not
+# run and has no transcript. Such an agent never got a prompt, and stopped (the background service
+# went off, or `claude stop`); `claude attach` then fails ("nothing to resume") and leaves it as it
+# is. A wake keeps its id, name and options. One with a transcript is not woken: the attach
+# resumes it. Nor is one with a first prompt (state.json intent) and no transcript: the respawn
+# would run that prompt again. Prints the id to attach (a wake can give a new one). Notes go to
+# stderr. Fails when a wake did not work (the id is printed all the same).
+jay_wake_for_attach() {
+  local id=$1 out new state="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$1/state.json"
+  if [[ ! -f "$state" ]] || jay_transcript "$id" >/dev/null \
+    || [[ -n "$(jq -r '.intent // ""' "$state" 2>/dev/null)" ]] \
+    || ! claude agents --json --all 2>/dev/null \
+      | jq -e --arg i "$id" 'any(.[]; .id == $i and .kind == "background" and .pid == null)' >/dev/null; then
+    printf '%s\n' "$id"
+    return 0
+  fi
+  printf '  %s does not run and has no conversation yet: waking it...\n' "${2:-$id}" >&2
+  if ! out=$(jay_wake "$id" "${2:-$id}"); then
+    printf '%s\n' "$out" >&2
+    printf '%s\n' "$id"
+    return 1
+  fi
+  new=$(grep -oE '→ [0-9a-f]{8}' <<<"$out" | grep -oE '[0-9a-f]{8}' | tail -1)
+  printf '%s\n' "${new:-$id}"
 }

@@ -105,6 +105,12 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   ~3 s with the same id, name, session id, cwd and respawnFlags, and no turn (`jay wake`); its
   ListAgents ref changes. An agent that waits for an idle notice reports state working (status
   idle), also after the notice. No file records the subscriptions.
+- Claude (2.1.309): an agent made with no prompt has no transcript (state.json has no
+  linkScanPath). Stopped so (or "ended while the background service was off"), `claude attach`
+  fails: "nothing to resume"; `claude respawn` wakes it with no turn (its intent is empty: with
+  an intent, Claude says a respawn runs that first prompt again). The transcript: linkScanPath,
+  else `<resumeSessionId or sessionId>.jsonl` in any folder of `~/.claude/projects`; the folder
+  named after the cwd is wrong for a session resumed in another worktree (`jay_transcript`).
 - Claude: ← in `claude attach` execs the same pid as `claude agents` (its args change; SIGTERM
   ends it). From that view Enter attaches the chosen agent. `claude --bg --resume <session-id>
   --name x` of an ended session took the same ids (no copy) and wrote the new title into that

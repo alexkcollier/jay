@@ -141,6 +141,8 @@ if [[ "$kind" == background ]]; then
   if tab=$(jay_gh_tab_for_command "^claude attach $id"); then
     jay_gh_select "$tab"
   else
+    # One that does not run and has no transcript yet: claude attach cannot open it.
+    [[ -n "$pid" ]] || id=$(jay_wake_for_attach "$id" "$title") || true
     jay_gh_new_tab "$cwd" "claude attach $id" >/dev/null
   fi
   exit 0

@@ -7,8 +7,9 @@
 #         When you leave the agent (Ctrl+Z, or ←: the list is the agent view here), it keeps
 #         running and Enter opens it again. An interactive agent runs in its own terminal tab:
 #         the pane says so. A note of the list (kind note: "Starting the orchestrator of
-#         shop...", see jay-sidebar orchestrate) shows until the next target. When attach fails at once (say the agent's worktree is gone), its
-#         error stays on screen.
+#         shop...", see jay-sidebar orchestrate) shows until the next target. An agent that
+#         does not run and has no transcript yet is woken first (jay_wake_for_attach). When
+#         attach fails at once (say the agent's worktree is gone), its error stays on screen.
 # review: tuicr in one of two modes (review.mode), switched with `t` (jay-keys); the
 #         title starts with the mode.
 #         turns: the agent's turn chain (refs/wt-turns/<agent id or session8>), else the newest
@@ -195,6 +196,8 @@ run() {
       fi
       # At once, also while a long conversation loads.
       printf '\n  Opening %s...\n' "${name:-$id}"
+      # One that does not run and has no transcript yet: claude attach cannot open it.
+      id=$(jay_wake_for_attach "$id" "${name:-$id}") || true
       [[ "$id" == "$(jay_hub_claude_id)" ]] && hub_opened=$id
       leave_agent_view &
       claude attach "$id"
