@@ -99,9 +99,11 @@ has "jay new from an agent: its name from its job's state.json" "$report" "$(cat
 (cd "$shop" && CLAUDE_CODE_SESSION_ID=sid-0000000a jay-new feat --no-report -- write the tests) >/dev/null 2>&1
 hasnt "jay new --no-report: no report line" "report to" "$(cat "$STUB/claude.calls")"
 has "jay new --no-report: the prompt" "write the tests" "$(cat "$STUB/claude.calls")"
+has "jay new --no-report: the line on removing itself" "then jay rm --self removes you" "$(cat "$STUB/claude.calls")"
 : >"$STUB/claude.calls"
 (cd "$shop" && CLAUDE_CODE_SESSION_ID=sid-0000000a jay-new feat -a) >/dev/null 2>&1
 hasnt "jay new -a from an agent: no prompt, so no report line" "report to" "$(cat "$STUB/claude.calls")"
+hasnt "jay new -a: no prompt, so no line on removing itself" "jay rm --self" "$(cat "$STUB/claude.calls")"
 
 # --- jay c (and its link c) ---
 stub_agents "[$(agent 0000000e shop/feat)]"

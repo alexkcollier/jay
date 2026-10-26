@@ -4,11 +4,12 @@
 # or -a for an idle one, start a background Claude agent there (see it in the hub list or
 # `claude agents`), named <repo>/<branch> or <repo>/<name> (-n). Without -t, the first line of
 # the prompt becomes the task note. Run by a Claude agent, the prompt tells the new agent to
-# report back to it (--no-report: not). The main checkout's branch: no (it is the orchestrator's).
+# report back to it (--no-report: not). A prompt also tells the agent how to remove its worktree
+# and itself (wt remove, jay rm --self). The main checkout's branch: no (it is the orchestrator's).
 set -euo pipefail
 source "$HOME/.local/lib/jay-lib.sh"
 
-usage() { sed -n '2,7s/^# \{0,1\}//p' "$0"; }
+usage() { sed -n '2,8s/^# \{0,1\}//p' "$0"; }
 branch="" base="" task="" name="" agent=false report=true prompt=()
 while (($#)); do
   case $1 in
@@ -99,6 +100,10 @@ if ((${#prompt[@]})) && [[ "$report" == true ]]; then
     ((others == 0)) || line+=" Other agents work in this worktree: commit only your own files."
     prompt+=($'\n\n'"$line")
   fi
+fi
+# A session cannot end itself: jay rm --self removes the agent after its turn.
+if ((${#prompt[@]})); then
+  prompt+=($'\n\n'"When the user tells you to remove this worktree and yourself: wt remove removes the worktree, then jay rm --self removes you when this turn ends.")
 fi
 
 if [[ "$starts" != true ]]; then

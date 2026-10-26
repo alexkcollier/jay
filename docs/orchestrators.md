@@ -157,7 +157,10 @@ worktree (siblings named <repo>.<branch>). Keep the main checkout free of work.
   to a worker: the ListAgents and SendMessage tools.
 - Worktrees with git state and task notes: `wt list` (worktrunk).
 - Read the workers' worktrees in place; do not edit files in them. Never merge, and never remove
-  worktrees or agents (`wt merge`, `wt remove`, `claude rm`), unless the user asks.
+  worktrees or agents (`wt merge`, `wt remove`, `jay rm`), unless the user asks.
+- At the end of a worktree, when the user asks: `wt remove <branch>`, then `jay rm <id or
+  name>` for each of its workers (it stops the worker and deletes it; its transcript stays). A
+  worker can remove itself: `jay rm --self` removes it when its turn ends.
 ```
 
 `wt list`, `wt merge` and `wt remove` are worktrunk's own commands; `jay new` makes the worktree
@@ -217,7 +220,10 @@ The orchestrator runs `jay new <branch> -t "<task>" -- <prompt>` in the main che
    caller's name is the one that `claude agents` and ListAgents show (found by
    `CLAUDE_CODE_SESSION_ID`, else in the job's `state.json`), so SendMessage finds it. No such
    line when a person runs `jay new` in a shell, for an idle worker (`-a`), or with
-   `--no-report`.
+   `--no-report`. Each prompt also gets: "When the user tells you to remove this worktree and
+   yourself: wt remove removes the worktree, then jay rm --self removes you when this turn
+   ends." A session cannot end itself; `jay rm --self` removes it after its turn
+   ([Commands](commands.md)).
 5. `claude --bg --name "<repo>/<branch>" "<prompt>"` starts the worker in the worktree. `-a`
    in place of a prompt starts an idle worker. `-n <name>` names it by its role:
    `<repo>/<name>` (a name with a `/` stays as it is). The name goes through `jay_unique_name`:
@@ -322,7 +328,8 @@ flow:
 4. The worktree row now shows the dim check sign (safe to remove: integrated). `d` on the
    worktree row removes the worktree (`wt remove`), then its idle agents (`claude rm`), and
    closes its tasks tab. The branch is deleted only when it is merged. Or ask the orchestrator to
-   run `wt remove` and `claude rm`. A branch that is left after its worktree went: the
+   run `wt remove` and `jay rm <worker>`, or ask the worker to remove its worktree and itself
+   (`wt remove`, then `jay rm --self`: it goes when its turn ends). A branch that is left after its worktree went: the
    orchestrator can delete it with `git branch -d <branch>` (git refuses a branch that is not
    merged); for `git branch -D`, Claude asks you first ([The guard](#the-guard)).
 

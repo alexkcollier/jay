@@ -252,6 +252,11 @@ to `~/.local/state/jay/notify.log`.
 - **Removed worktree** (a dim `(gone)` row): `claude rm` for each of its agents, with the same
   rules.
 
+From a shell or an agent, `jay rm <id or name>` stops a background agent and deletes it, and
+`jay rm --self` lets an agent remove itself when its turn ends (after `wt remove` of its
+worktree, say). It refuses the hub Claude, orchestrators and an agent in a turn unless
+`--force`, and an agent whose recorded worktree is on disk ([Commands](commands.md)).
+
 Dead agents are background agents whose folder is gone (a removed worktree) and that do not run
 now. An agent that came into the worktree with `EnterWorktree` is not dead. The list removes
 them by itself every 10 minutes, with plain `claude rm`, and logs each one in

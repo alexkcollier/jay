@@ -56,8 +56,9 @@ and Claude Code background agents.
 An agent in a repo's main checkout can be the repo's **orchestrator**: it plans and gives each
 change to a worker, a background agent in a worktree of its own. A repo has none by default: the
 hub Claude plans and starts workers for it. A worker reports back with SendMessage; when a send
-fails because the list stopped the worker, `jay wake <name>` starts it again. See
-[Orchestrators](docs/orchestrators.md).
+fails because the list stopped the worker, `jay wake <name>` starts it again. At the end of its
+worktree, `jay rm <name>` removes a worker, and `jay rm --self` lets a worker remove itself
+after its turn. See [Orchestrators](docs/orchestrators.md).
 
 ## Before you start
 
@@ -169,7 +170,7 @@ jay was called wt-hub. The commands, the variables and the folders have new name
 - [Install](docs/install.md): requirements, terminals, install steps, settings, pane keys,
   uninstall.
 - [Working in the hub](docs/working.md): start the hub and agents, pick, the middle column, the
-  hub Claude, your editor, notices, remove and prune, idle agents stop (`jay wake`), Claude Code
+  hub Claude, your editor, notices, remove and prune (`jay rm`), idle agents stop (`jay wake`), Claude Code
   updates, quit.
 - [Orchestrators](docs/orchestrators.md): when a repo gets one, the agent that plans and gives
   each change to a worker; its prompt, review and merge, fresh context, an example.

@@ -21,11 +21,7 @@ query=$1
 # Every background agent, also one outside JAY_ROOTS: by id or session id, else its exact name,
 # else its name in any case.
 agents=$(claude agents --json --all 2>/dev/null) || { echo "jay wake: claude agents failed." >&2; exit 1; }
-match=$(jq -c --arg q "$query" '[.[] | select(.kind == "background" and .id != null)]
-  | ([.[] | select(.id == $q or .sessionId == $q)]) as $same
-  | ([.[] | select(.name == $q)]) as $exact
-  | ([.[] | select((.name // "" | ascii_downcase) == ($q | ascii_downcase))]) as $any
-  | if ($same | length) > 0 then $same[:1] elif ($exact | length) > 0 then $exact else $any end' <<<"$agents")
+match=$(jay_agent_find "$agents" "$query")
 case $(jq length <<<"$match") in
   0) echo "jay wake: no background agent $query (claude agents --all)" >&2; exit 1 ;;
   1) ;;

@@ -40,6 +40,8 @@ Commands:
                             or the hub Claude: a new agent, same name; the old one goes
   wake <id|name>            start a background agent that does not run, without a turn
                             (SendMessage reaches it again)
+  rm <id|name> | --self     stop a background agent and delete it (claude stop, claude rm);
+                            an agent can remove itself: it goes when its turn ends
   respawn [<id> | --idle]   agents on an old Claude Code: list them, or move them onto the
                             installed one when they are quiet (--force <id>: also when not)
   snapshot --list | --prune the turn chains of a worktree; remove the old ones

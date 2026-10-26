@@ -29,6 +29,8 @@ bin/
   jay-pane               a hub pane (agent | review | files) that follows its target
   jay-respawn            jay respawn: agents on an old Claude Code onto the installed one, when
                          quiet (the list does it by itself: JAY_AUTO_RESPAWN)
+  jay-rm                 jay rm: stop a background agent and delete it; --self: an agent
+                         removes itself after its turn (--after-turn: the detached process)
   jay-run                jay run: tasks in a tasks tab per worktree: start, ls, log, wait, stop,
                          restart, port; --switch (Ctrl g Tab), --pick (Ctrl g t), --launcher
                          (Ctrl g r), --tick, --bar, --note, --hook, --exec

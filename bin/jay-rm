@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# jay rm [--force] <id | session id | name>  |  jay rm --self — stop a background agent and delete
+# it: `claude stop` when it runs, then `claude rm` (jay_remove_agent in lib/jay-lib.sh). Its
+# transcript stays; its gone tasks (jay run ls) and jay's notes on it go. It refuses the hub
+# Claude, an orchestrator and an agent in a turn (--force removes those too), an interactive
+# session, and an agent whose recorded worktree is on disk (remove that first: wt remove). An
+# agent can remove itself (--self, or its own id or name): a detached process waits until its turn
+# ends, then removes it. Each removal goes to ~/.local/state/jay/prune.log.
+set -uo pipefail
+source "$HOME/.local/lib/jay-lib.sh"
+
+usage() { sed -n '2,8s/^# \{0,1\}//p' "$0"; }
+die() { printf 'jay rm: %s\n' "$*" >&2; exit 1; }
+CFG=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+
+# A line in prune.log for agent $1 (name $2): text $3.
+note() {
+  jay_state_dir
+  printf '%s %s (%s): %s\n' "$(date '+%F %T')" "$1" "$2" "$3" >>"$JAY_STATE/prune.log"
+}
+
+# The detached process of a self-removal (--after-turn <id> <name>): wait until the agent's turn
+# ends, then remove it. A turn runs while the job's tempo is active or the process is not idle
+# (as in jay_stop_plan); the state does not count: an agent that waits for an idle notice says
+# working after its turn too. It counts as ended after two quiet looks in a row
+# ($JAY_RM_POLL seconds apart, default 2). Gives up after an hour.
+after_turn() {
+  local id=$1 name=$2 poll=${JAY_RM_POLL:-2} quiet=0 start agents a tempo
+  start=$(date +%s)
+  while :; do
+    if agents=$(claude agents --json --all 2>/dev/null) && [[ -n "$agents" ]]; then
+      a=$(jq -c --arg i "$id" 'first(.[] | select(.id == $i)) // empty' <<<"$agents")
+      [[ -n "$a" ]] || { note "$id" "$name" "rm after its turn: gone already"; return 0; }
+      tempo=$(jq -r '.tempo // ""' "$CFG/jobs/$id/state.json" 2>/dev/null)
+      if jq -e '.pid == null' <<<"$a" >/dev/null; then
+        break
+      elif [[ "$tempo" != active ]] && jq -e '.status == null or .status == "idle"' <<<"$a" >/dev/null; then
+        quiet=$((quiet + 1))
+        ((quiet >= 2)) && break
+      else
+        quiet=0
+      fi
+    fi
+    if (($(date +%s) - start > 3600)); then
+      note "$id" "$name" "rm after its turn: a turn still runs after 60 min; not removed"
+      return 1
+    fi
+    sleep "$poll"
+  done
+  jay_remove_agent "$id" "$name" >/dev/null
+}
+
+force=false self=false query=""
+while (($#)); do
+  case $1 in
+    -h | --help) usage; exit 0 ;;
+    -f | --force) force=true ;;
+    --self) self=true ;;
+    --after-turn)
+      (($# == 3)) || { echo "jay rm --after-turn <id> <name>" >&2; exit 2; }
+      after_turn "$2" "$3"
+      exit $? ;;
+    -*) echo "jay rm: unknown option $1 (jay rm --help)" >&2; exit 2 ;;
+    *) [[ -z "$query" ]] || { echo "jay rm: one agent at a time" >&2; exit 2; }
+       query=$1 ;;
+  esac
+  shift
+done
+
+# The agent that runs this, when it is a background agent: its job folder is CLAUDE_JOB_DIR.
+me=${CLAUDE_JOB_DIR:-}
+me=${me%/}
+me=${me##*/}
+if [[ "$self" == true ]]; then
+  [[ -z "$query" ]] || { echo "jay rm: --self or an agent, not both" >&2; exit 2; }
+  [[ -n "$me" ]] || die "--self: only a background agent can remove itself (no CLAUDE_JOB_DIR here)."
+  query=$me
+fi
+[[ -n "$query" ]] || { usage >&2; exit 2; }
+
+agents=$(claude agents --json --all 2>/dev/null) || die "claude agents failed."
+match=$(jay_agent_find "$agents" "$query")
+case $(jq length <<<"$match") in
+  0)
+    if jq -e --arg q "$query" 'any(.[]; .kind != "background"
+        and (.sessionId == $q or ((.name // "" | ascii_downcase) == ($q | ascii_downcase))))' <<<"$agents" >/dev/null; then
+      die "$query is an interactive session, not a background agent: close it in its own tab or pane."
+    fi
+    die "no background agent $query (claude agents --all)" ;;
+  1) ;;
+  *) echo "jay rm: more than one agent is named $query; give its id:" >&2
+     jq -r '.[] | "  \(.id)  \(.name // "")"' <<<"$match" >&2
+     exit 1 ;;
+esac
+agent=$(jq -c '.[0]' <<<"$match")
+id=$(jq -r '.id' <<<"$agent")
+name=$(jq -r '.name // .id' <<<"$agent")
+state="$CFG/jobs/$id/state.json"
+isself=false
+[[ -n "$me" && "$me" == "$id" ]] && isself=true
+
+# What keeps it, unless --force. The caller's own turn does not: it ends before the removal.
+why=()
+[[ "$(jay_hub_claude_id)" == "$id" ]] && why+=("it is the hub Claude")
+jq -e --arg mark "$JAY_ORCH_MARK" '.respawnFlags // [] | any(.[]; type == "string" and startswith($mark))' \
+  "$state" >/dev/null 2>&1 && why+=("it is an orchestrator: its workers report to it")
+if [[ "$isself" == false ]] && jq -e '.pid != null' <<<"$agent" >/dev/null; then
+  if [[ "$(jq -r '.tempo // ""' "$state" 2>/dev/null)" == active ]] \
+    || jq -e '.status != null and .status != "idle"' <<<"$agent" >/dev/null; then
+    why+=("a turn runs: claude stop ends it, and that turn is lost")
+  elif jq -e '.state == "working"' <<<"$agent" >/dev/null; then
+    why+=("its state is working: it may wait for an idle notice")
+  fi
+fi
+if ((${#why[@]})) && [[ "$force" == false ]]; then
+  echo "jay rm: \"$name\" ($id) stays:" >&2
+  printf '  - %s\n' "${why[@]}" >&2
+  echo "  jay rm --force $id removes it all the same." >&2
+  exit 1
+fi
+
+# `claude rm` keeps an agent while the worktree that Claude recorded for it is on disk: say so
+# before the stop, so that the agent does not stay stopped.
+wt=$(jq -r '.worktreePath // empty' "$state" 2>/dev/null)
+if [[ -n "$wt" && -d "$wt" ]]; then
+  branch=$(git -C "$wt" branch --show-current 2>/dev/null)
+  die "\"$name\" ($id) stays: claude rm keeps an agent while the worktree that Claude recorded for it is on disk ($wt). Remove that worktree first (wt remove ${branch:-<branch>}, in its repo; or d on its row in the hub list), then run jay rm again."
+fi
+
+# Itself: its `claude stop` would end this command and the turn that runs it. A process outside
+# the agent's process tree (a new session; its parent is then launchd), with no tty and without
+# the CLAUDE*/ANTHROPIC* variables, waits until the turn ends and removes the agent then.
+if [[ "$isself" == true ]]; then
+  strip=()
+  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
+  prog="$(cd "$(dirname "$0")" && pwd -P)/${0##*/}"
+  (cd "$HOME" && exec env ${strip[@]+"${strip[@]}"} perl -MPOSIX=setsid -e \
+    '$SIG{HUP} = "IGNORE"; fork and exit 0; setsid(); fork and exit 0; exec @ARGV or exit 1' \
+    "$prog" --after-turn "$id" "$name") </dev/null >/dev/null 2>&1
+  note "$id" "$name" "rm after its turn: a process waits for the end of the turn"
+  echo "\"$name\" ($id) is this agent: it goes when this turn ends. A process waits for that, then stops it (claude stop) and removes it (claude rm); its transcript stays. End the turn now: give the user your last words, and start no more work. The result goes to ~/.local/state/jay/prune.log."
+  exit 0
+fi
+
+ran=false
+jq -e '.pid != null' <<<"$agent" >/dev/null && ran=true
+if out=$(jay_remove_agent "$id" "$name"); then
+  echo "\"$name\" ($id) is removed; its transcript stays."
+  # Claude names a worktree that it deleted with the agent.
+  grep -q '^ *worktree:' <<<"$out" && printf '%s\n' "$out" | sed -n 's/^ */  /;/worktree:/p'
+  exit 0
+fi
+printf '%s\n' "$out" | sed 's/^ */  /' >&2
+if grep -q 'worktree is still at' <<<"$out"; then
+  echo "jay rm: \"$name\" ($id) stays: claude rm keeps it while its worktree is on disk or has unpushed work. Push the branch, or remove the worktree first (wt remove, in its repo), then run jay rm again." >&2
+else
+  echo "jay rm: \"$name\" ($id) is not removed." >&2
+fi
+[[ "$ran" == true ]] && echo "  It is stopped now: jay wake $id starts it again." >&2
+exit 1

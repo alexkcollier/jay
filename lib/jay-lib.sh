@@ -933,8 +933,11 @@ $JAY_ROOTS (a folder per client, then the repo; worktrees are siblings named <re
 - Dev servers and other long-running commands: the hub's "tasks" tab (\`jay run ls --json\`,
   \`jay run log <task>\`, \`jay run -n <name> -w -- <command>\`), not a background Bash call.
 - Read other worktrees in place. Do not edit files in an agent's worktree, and never remove
-  worktrees or agents (\`wt remove\`, \`claude rm\`, \`wt step prune\`) unless the user asks.
+  worktrees or agents (\`wt remove\`, \`jay rm\`, \`wt step prune\`) unless the user asks.
   Never \`claude --resume\` a conversation that a live agent holds.
+- At the end of a worktree, when the user asks: \`wt remove <branch>\` in its repo, then
+  \`jay rm <id or name>\` for each of its agents (it stops the agent and deletes it; its
+  transcript stays). An agent can remove itself: \`jay rm --self\` removes it when its turn ends.
 EOF
 }
 
@@ -988,7 +991,10 @@ worktree (siblings named $1.<branch>). Keep the main checkout free of work.
   to a worker: the ListAgents and SendMessage tools.
 - Worktrees with git state and task notes: \`wt list\` (worktrunk).
 - Read the workers' worktrees in place; do not edit files in them. Never merge, and never remove
-  worktrees or agents (\`wt merge\`, \`wt remove\`, \`claude rm\`), unless the user asks.
+  worktrees or agents (\`wt merge\`, \`wt remove\`, \`jay rm\`), unless the user asks.
+- At the end of a worktree, when the user asks: \`wt remove <branch>\`, then \`jay rm <id or
+  name>\` for each of its workers (it stops the worker and deletes it; its transcript stays). A
+  worker can remove itself: \`jay rm --self\` removes it when its turn ends.
 EOF
 }
 
@@ -1973,4 +1979,66 @@ jay_wake_for_attach() {
   fi
   new=$(grep -oE '→ [0-9a-f]{8}' <<<"$out" | grep -oE '[0-9a-f]{8}' | tail -1)
   printf '%s\n' "${new:-$id}"
+}
+
+# The background agents in agents JSON $1 (`claude agents --json --all`: every agent, also one
+# outside JAY_ROOTS) that query $2 names, as a JSON array: the one with that id or session id,
+# else the ones with that exact name, else the ones with that name in any case. jay wake, jay rm.
+jay_agent_find() {
+  jq -c --arg q "$2" '[.[] | select(.kind == "background" and .id != null)]
+    | ([.[] | select(.id == $q or .sessionId == $q)]) as $same
+    | ([.[] | select(.name == $q)]) as $exact
+    | ([.[] | select((.name // "" | ascii_downcase) == ($q | ascii_downcase))]) as $any
+    | if ($same | length) > 0 then $same[:1] elif ($exact | length) > 0 then $exact else $any end' <<<"$1"
+}
+
+# --- Remove: jay rm stops a background agent and deletes it (bin/jay-rm) ---
+# `claude rm` (tested with Claude Code 2.1.310) deletes the session and the worktree Claude
+# recorded for it (state.json worktreePath), and stops it first when it runs. It keeps the agent
+# (exit 1, "kept <id> — its worktree is still at ...") while that worktree is on disk and git or
+# a hook manages it, or has unpushed commits. The transcript stays. An unknown id: "No job
+# matching '<id>'" (exit 1), from `claude stop` too.
+
+# Drop what jay keeps for removed agent $1 (short id; $2...: its session ids): its records of the
+# tasks that a hub restart took (`jay run ls`: gone; a record names the agent by its short id or
+# session id, see record_task in bin/jay-run), in both hubs, its task note, and its marks
+# replaced, stopped and respawned.
+jay_forget_agent() {
+  local id=$1 f
+  for f in "$JAY_STATE"/tasks/gone/*.json "$JAY_STATE"/tmux/tasks/gone/*.json; do
+    [[ -f "$f" ]] || continue
+    jq -e --args '.agent as $a | $a != null and ($ARGS.positional | index([$a]) != null)' "$@" <"$f" >/dev/null 2>&1 \
+      && rm -f "$f"
+  done
+  rm -f "$JAY_NOTES/$id" "$JAY_STATE/replaced/$id" "$JAY_STATE/stopped/$id" "$JAY_STATE/respawned/$id"
+  return 0
+}
+
+# Remove background agent $1 (an id; name $2): `claude stop` when it runs (a turn that runs is
+# lost) and a wait (up to 10 s) until its process is gone, then `claude rm`, both without the
+# caller's CLAUDE*/ANTHROPIC* variables. Then jay_forget_agent. Notes the stop and the rm in
+# prune.log. Prints Claude's output of the rm; fails when `claude rm` fails.
+jay_remove_agent() {
+  local IFS=$' \t\n' id=$1 name=${2:-$1} out rc=0 var strip=() sids i
+  local state="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/jobs/$1/state.json"
+  for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do strip+=(-u "$var"); done
+  # Its session ids before `claude rm` deletes its state.json.
+  sids=$(jq -r '.sessionId // empty, .resumeSessionId // empty' "$state" 2>/dev/null | sort -u)
+  jay_state_dir
+  if claude agents --json --all 2>/dev/null | jq -e --arg i "$id" 'any(.[]; .id == $i and .pid != null)' >/dev/null; then
+    out=$(env ${strip[@]+"${strip[@]}"} claude stop "$id" 2>&1)
+    printf '%s %s (%s): stop for rm: %s\n' "$(date '+%F %T')" "$id" "$name" \
+      "$(tr '\n' ' ' <<<"$out" | sed 's/ *$//')" >>"$JAY_STATE/prune.log"
+    for i in $(seq 20); do
+      claude agents --json --all 2>/dev/null \
+        | jq -e --arg i "$id" 'any(.[]; .id == $i and .pid != null)' >/dev/null || break
+      sleep 0.5
+    done
+  fi
+  out=$(env ${strip[@]+"${strip[@]}"} claude rm "$id" 2>&1) || rc=$?
+  printf '%s %s (%s): rm: %s\n' "$(date '+%F %T')" "$id" "$name" \
+    "$(tr '\n' ' ' <<<"$out" | sed 's/ *$//')" >>"$JAY_STATE/prune.log"
+  printf '%s\n' "$out"
+  ((rc == 0)) || return $rc
+  jay_forget_agent "$id" $sids
 }
