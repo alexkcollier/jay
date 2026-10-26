@@ -43,6 +43,14 @@ bin/jay-pane) ⇄ files (yazi).
   review column (gruvbox-dark, unified, wrap gutter, compact folders), and a revdiff trial with
   a turn picker that sends review notes to the agent (a switch to revdiff is fine if tuicr gets
   in the way).
+- Ideas from a worker (2026-10-26; it removed its worktree with `wt remove` and could not remove
+  itself, which led to `jay rm`), not built yet:
+  - `wt remove` (a worktrunk hook, or the hub's own step) offers to remove the worktree's
+    background agents too. `jay_remove_agent` (lib/jay-lib.sh) does the stop, `claude rm`, the
+    log and jay's cleanup for one agent; an agent in its turn must go after the turn (as `jay rm
+    --self` does).
+  - A worktree whose PR was squash-merged shows as merged (the dim check sign, `wt list`): its
+    branch is not in main's history, so it looks unmerged now.
 
 Dropped 2026-10-20: `wt step prune` (bulk removal; the list's dim ✓ and `d` do it one worktree
 at a time). Be careful with `wt step prune` in your own repos: in one repo it would have deleted
@@ -233,14 +241,32 @@ at a time). Be careful with `wt step prune` in your own repos: in one repo it wo
   wake; the list marks `home gone` / `lost` and a pick repairs; `jay go --repair`. Refusing `d`
   until the agent left B was the other option: it leaves the user no way to keep the agent in B.
 
+## Done 2026-10-23 to 2026-10-26
+
+- Idle agents stop (each running agent is a full Claude Code process): the list stops a
+  background agent idle for `JAY_AUTO_STOP` minutes (default 15) that nothing needs; never the
+  hub Claude or an orchestrator. A stopped agent is not reachable: SendMessage to it fails and
+  the message is lost, so senders run `jay wake X` and send again (the prompts say so).
+- The list reloads only when its rows change: a reload at each 4 s tick dropped the keys typed
+  during it. The tick makes the rows in the background and compares them with
+  `sidebar.<pid>.rows`.
+- The agent pane and `jay go` wake a stopped agent that has no transcript (it never got a
+  prompt) before `claude attach`, which says "nothing to resume" for it.
+- `jay rm`: stop a background agent and delete it (`claude stop`, then `claude rm`), also itself
+  (`--self`: a detached process waits for the end of its turn). Refuses the hub Claude,
+  orchestrators and a busy agent unless `--force` (Alex kept `--force` for all three), and an
+  agent whose recorded worktree is on disk. Probe (claude 2.1.310): `claude rm` stops a running
+  agent itself, and keeps one whose recorded worktree is on disk ("kept <id> — its worktree is
+  still at ..."), naming unpushed commits or hook-made files.
+
 ## How to work
 
 - Taste items: first show the user 2–3 concrete options (short ASCII previews, what each costs),
   let them pick, then build. Key items: propose the keys in one message, then build. Keys must
   be idiomatic ("q means quit").
 - Removing a worktree is destructive: confirm in the UI first, use `wt remove`, never remove a
-  main checkout, never run `wt step prune` (see "Open items"). Removing an agent: `claude rm
-  <id>` after a confirm. The agent viewer never closes; the hub Claude is a background agent
+  main checkout, never run `wt step prune` (see "Open items"). Removing an agent: `jay rm
+  <id>` (or `claude rm <id>`) after a confirm. The agent viewer never closes; the hub Claude is a background agent
   shown in it (since 2026-10-21), never a pane under it.
 - Test zellij behaviour in a throwaway session as CLAUDE.md says, never on the live hub. Apply to
   the live hub only when an item is done, and restart a live pane in place (focus it, `zellij -s

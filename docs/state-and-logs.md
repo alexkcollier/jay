@@ -18,7 +18,7 @@ In `~/.local/state/jay/`:
 | `sidebar.hide-idle` | there while `a` hides idle repos |
 | `orchestrate.<n>` | a pick started the orchestrator of a repo in `JAY_ORCHESTRATE` (one file per main checkout); for a minute, a second pick does not start another one |
 | `worktrees.ndjson` | cache of `jay all --json` (refreshed after 30 s) |
-| `sidebar.<pid>.sock`, `.count`, `.sum`, `.help`, `.restart` | a running list: its fzf socket, row count, agent counts, `?` state, `r` flag |
+| `sidebar.<pid>.sock`, `.count`, `.sum`, `.help`, `.restart`, `.rows`, `.rows.tick` | a running list: its fzf socket, row count, agent counts, `?` state, `r` flag, the rows it shows, and the rows its tick made (a reload only when they differ) |
 | `sidebar.late.<pid>` | there while a pick or `o` that took over half a second goes on in the background; the list reloads when it ends |
 | `turns/<id>.worktree`, `<id>.prompt`, `<id>.live` | the worktree of each turn chain; the prompt of the current turn; the time of the last live snapshot |
 | `lazygit/views/<id>` | the view repo of a turn chain for lazygit review (`JAY_REVIEW=lazygit`) |

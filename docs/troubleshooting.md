@@ -22,8 +22,8 @@
   list. fzf turns the mouse off when a command of the list runs over 1 s. A pick and `o` no
   longer do that (they go on in the background after half a second); when it occurs anyway, `r`
   brings the mouse back.
-- **A key in the list seems lost**: press it again. The list reloads its rows every 4 s, and fzf
-  drops a key that comes during a reload. `h` and `l` do nothing in the list: the width is `-`
+- **A key in the list seems lost**: press it again. fzf drops a key that comes during a reload.
+  The list reloads after a pick, and at its 4 s tick only when its rows changed. `h` and `l` do nothing in the list: the width is `-`
   and `+`.
 - **SendMessage fails with "No agent named X is reachable"**: the agent does not run. The list
   stops an agent after `JAY_AUTO_STOP` minutes idle, and Claude retires idle agents after some

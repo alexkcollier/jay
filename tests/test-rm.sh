@@ -99,6 +99,8 @@ eq "interactive: exit 1" 1 "$rc"
 has "interactive: says so" "term is an interactive session, not a background agent" "$out"
 out=$(jay rm 2>&1); rc=$?
 eq "no agent: exit 2" 2 "$rc"
+has "jay --help lists rm" "rm <id|name> | --self" "$(jay --help)"
+has "jay rm --help" "jay rm [--force] <id | session id | name>" "$(jay rm --help)"
 out=$(jay rm a b 2>&1); rc=$?
 eq "two agents: exit 2" 2 "$rc"
 out=$(jay rm --self 2>&1); rc=$?

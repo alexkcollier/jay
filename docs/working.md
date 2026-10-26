@@ -138,8 +138,10 @@ agent that the list stopped wakes first, in some seconds. A pick (or `o`) that t
 half a second, as at a hub start, goes on in the background, and the list reloads when it ends:
 the list keeps its mouse.
 
-The list reloads its rows every 4 s and after a pick. fzf drops a key that comes during such a
-reload: when a key in the list seems to do nothing, press it again.
+Every 4 s the list makes its rows again, in the background, and compares them with the rows it
+shows (`sidebar.<pid>.rows`). It reloads only when they changed (an agent's sign, a new row), and
+after a pick. fzf drops a key that comes during a reload; a tick with no change does not reload,
+so such a loss is rare now. When a key in the list seems to do nothing, press it again.
 
 ## The middle column
 
