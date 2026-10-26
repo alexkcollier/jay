@@ -62,6 +62,7 @@ hub_panes() { z list-panes -a -j -c | jq -r '[.[] | select((.is_plugin | not) an
 cols_are() { [[ "$(hub_panes | awk '$2 == "false" { print $5 }' | tr '\n' ' ')" == "$1" ]]; }
 pane_by_title() { hub_panes | awk -v t="$1" '$5 == t { print $1; exit }'; }
 screen_has() { z dump-screen -p "$1" 2>/dev/null | grep -q "$2"; }
+screen_hasnt() { ! screen_has "$@"; }
 held() { hub_panes | awk -v p="$1" '$1 == p && $2 == "true" { f = 1 } END { exit !f }'; }
 share_of() { hub_panes | awk -v p="$1" '{ w = $3 + $4; if (w > t) t = w } $1 == p { c = $4 } END { print int(c * 100 / t + 0.5) }'; }
 near() { (($1 >= $2 - 6 && $1 <= $2 + 6)); }
@@ -93,6 +94,35 @@ kill -9 "$fzf_pid"
 within "fzf killed: the list says so" 3 screen_has "$list" 'The list ended'
 within "fzf killed: rows again" 15 screen_has "$list" fix-login
 ok "fzf killed: a new fzf" bash -c "[[ \"\$(pgrep -f 'fzf .*--listen=$HOME/' | head -1)\" != $fzf_pid ]]"
+
+# r reloads cleanly: a new fzf with rows, never "The list ended" (the failure path), and no text
+# of an earlier d (its confirm, on the screen under fzf's).
+cursor_on() { z dump-screen -p "$list" 2>/dev/null | grep "$1" | head -1 | grep -q '▌'; }
+new_fzf() { local f; f=$(list_fzf); [[ -n "$f" && "$f" != "$1" ]]; }
+# reload_screens OLD_FZF: the list's screens until a new fzf shows rows (10 s at most).
+reload_screens() {
+  local end=$((SECONDS + 10))
+  while ((SECONDS < end)); do
+    z dump-screen -p "$list" 2>/dev/null
+    new_fzf "$1" && screen_has "$list" fix-login && return 0
+    sleep 0.1
+  done
+}
+for _ in 1 2 3 4 5 6; do
+  cursor_on '○ fix-login' && break
+  key 6a; sleep 0.3
+done
+ok "d: the cursor on fix-login" cursor_on '○ fix-login'
+key 64; within "d: the confirm" 5 screen_has "$list" 'other key: cancel'
+key 6e; within "d, n: the confirm goes" 5 screen_hasnt "$list" 'other key: cancel'
+within "d, n: the rows again" 5 cursor_on '○ fix-login'
+sleep 1 # fzf drops the keys that come during its reload
+fzf_pid=$(list_fzf)
+key 72
+reload_screens "$fzf_pid" >"$TMP/reload.screens"
+ok "r: a new fzf" new_fzf "$fzf_pid"
+ok "r: never 'The list ended'" bash -c "! grep -q 'The list ended' '$TMP/reload.screens'"
+ok "r after d, n: no old confirm" bash -c "! grep -q 'other key: cancel' '$TMP/reload.screens'"
 
 # The list's program killed: zellij holds the pane; jay brings a new list in its place.
 fzf_pid=$(list_fzf)

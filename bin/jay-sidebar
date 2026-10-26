@@ -1244,10 +1244,13 @@ rc=$?
 # too, after a pause that shows why: the list belongs to the hub. A close of the pane (HUP) or a
 # kill of this script ends it before this point. Not when the hub is gone (the multiplexer
 # ended: no parent, no terminal), and not after 5 quick ends in a row: then the pane keeps the
-# error (tmux starts the pane's program again a second later, see jay_mux_repair).
+# error (tmux starts the pane's program again a second later, see jay_mux_repair). Read r's flag
+# before cleanup removes its file.
+restart=false
+[[ -f "$JAY_SIDEBAR_RESTART" ]] && restart=true
 trap - EXIT
 cleanup
-if [[ -f "$JAY_SIDEBAR_RESTART" ]]; then
+if $restart; then
   clear
   printf '\n  Reloading...\n'
   refresh_worktrees

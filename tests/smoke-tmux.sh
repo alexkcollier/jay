@@ -473,9 +473,36 @@ ok "orchestrate: the focus stays in the list" is_pane "$list"
 has "orchestrate: the orchestrator prompt" "--name web/main --append-system-prompt You are the orchestrator of the repo web" "$(cat "$STUB/bg.calls")"
 within "orchestrate: review on the picked worktree" 5 screen_has "$review" 'TUICR .*web.fix'
 
+# r reloads cleanly: a new fzf with rows, never "The list ended" (the failure path), and no text
+# of an earlier d (its confirm, on the screen under fzf's).
+list_fzf() { pgrep -P "$(tm display -p -t "$list" '#{pane_pid}')" -x fzf; }
+new_fzf() { local f; f=$(list_fzf); [[ -n "$f" && "$f" != "$1" ]]; }
+# reload_screens OLD_FZF: the list's screens until a new fzf shows rows (10 s at most).
+reload_screens() {
+  local end=$((SECONDS + 10))
+  while ((SECONDS < end)); do
+    tm capture-pane -p -J -t "$list" 2>/dev/null
+    new_fzf "$1" && screen_has "$list" fix-login && return 0
+    sleep 0.1
+  done
+}
+key 0731; within "Ctrl g 1: the list" 2 is_pane "$list"
+click_at "$list" '○ fix-login'
+within "d: the cursor on fix-login" 3 cursor_on '○ fix-login'
+key 64; within "d: the confirm" 5 screen_has "$list" 'other key: cancel'
+key 6e; within "d, n: the confirm goes" 5 screen_hasnt "$list" 'other key: cancel'
+within "d, n: the rows again" 5 cursor_on '○ fix-login'
+sleep 1 # fzf drops the keys that come during its reload
+fzf_pid=$(list_fzf)
+key 72
+reload_screens "$fzf_pid" >"$TMP/reload.screens"
+ok "r: a new fzf" new_fzf "$fzf_pid"
+ok "r: never 'The list ended'" bash -c "! grep -q 'The list ended' '$TMP/reload.screens'"
+ok "r after d, n: no old confirm" bash -c "! grep -q 'other key: cancel' '$TMP/reload.screens'"
+within "r: rows again" 5 screen_has "$list" fix-login
+
 # The list, agent and review panes cannot be lost: fzf's quit keys do nothing, a program that
 # ends starts again in its pane, and a pane that is closed comes back with Ctrl g 1 2 3 or jay.
-list_fzf() { pgrep -P "$(tm display -p -t "$list" '#{pane_pid}')" -x fzf; }
 pane_of() { tm list-panes -t =jay:hub -F '#{pane_id} #{@jay_role}' | awk -v r="$1" '$2 == r { print $1 }'; }
 cols_are() { [[ "$(tm list-panes -t =jay:hub -F '#{@jay_role}' | tr '\n' ' ')" == "$1" ]]; }
 respawned() { [[ "$(tm display -p -t "$1" '#{pane_dead}')" == 0 && "$(tm display -p -t "$1" '#{pane_pid}')" != "$2" ]]; }
