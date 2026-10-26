@@ -1218,21 +1218,23 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The keys that ask (d b c n N p) clear their text when they end: it stays on the screen under
+# fzf's, and fzf shows that screen when it ends (r: until the reload clears it).
 rows_shown | fzf --ansi --listen="$sock" --no-input --no-sort --layout=reverse --info=hidden --no-scrollbar \
   --delimiter=$'\t' --with-nth=3 --track --id-nth=2 --pointer='▌' --marker='' --gutter=' ' --highlight-line \
   --footer="$(footer)" --color=footer:-1,pointer:173,bg+:238 \
   --bind '?:transform-footer(jay-sidebar --footer --toggle)' \
-  --bind 'd:execute(jay-sidebar --remove {1} {2})+reload-sync(jay-sidebar --rows)+clear-screen' \
-  --bind 'b:execute(jay-sidebar --bg {1} {2})+reload-sync(jay-sidebar --rows)+clear-screen' \
-  --bind 'c:execute(jay-sidebar --clear {1} {2})+reload-sync(jay-sidebar --rows)+clear-screen' \
-  --bind 'n:execute(jay-sidebar --new here {1} {2})+reload-sync(jay-sidebar --rows --fresh)+clear-screen' \
-  --bind 'N:execute(jay-sidebar --new worktree {1} {2})+reload-sync(jay-sidebar --rows --fresh)+clear-screen' \
+  --bind 'd:execute(jay-sidebar --remove {1} {2}; clear)+reload-sync(jay-sidebar --rows)+clear-screen' \
+  --bind 'b:execute(jay-sidebar --bg {1} {2}; clear)+reload-sync(jay-sidebar --rows)+clear-screen' \
+  --bind 'c:execute(jay-sidebar --clear {1} {2}; clear)+reload-sync(jay-sidebar --rows)+clear-screen' \
+  --bind 'n:execute(jay-sidebar --new here {1} {2}; clear)+reload-sync(jay-sidebar --rows --fresh)+clear-screen' \
+  --bind 'N:execute(jay-sidebar --new worktree {1} {2}; clear)+reload-sync(jay-sidebar --rows --fresh)+clear-screen' \
   --bind 'enter:transform(jay-sidebar --pick --focus {4})' \
   --bind 'double-click:transform(jay-sidebar --pick --focus {4})' \
   --bind 'r:execute-silent(: >"$JAY_SIDEBAR_RESTART")+abort' \
   --bind 'o:execute-silent(jay-sidebar --quick --view open {1} {2})' \
   --bind 'a:execute-silent(jay-sidebar --idle)+reload-sync(jay-sidebar --rows)+clear-screen' \
-  --bind 'p:execute(jay-sidebar --prune)+reload-sync(jay-sidebar --rows)+clear-screen' \
+  --bind 'p:execute(jay-sidebar --prune; clear)+reload-sync(jay-sidebar --rows)+clear-screen' \
   --bind '-:execute-silent(jay-mux resize_list decrease)' \
   --bind '+:execute-silent(jay-mux resize_list increase)' \
   --bind '=:execute-silent(jay-mux resize_list increase)' \

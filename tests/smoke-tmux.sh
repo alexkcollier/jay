@@ -477,10 +477,12 @@ within "orchestrate: review on the picked worktree" 5 screen_has "$review" 'TUIC
 # of an earlier d (its confirm, on the screen under fzf's).
 list_fzf() { pgrep -P "$(tm display -p -t "$list" '#{pane_pid}')" -x fzf; }
 new_fzf() { local f; f=$(list_fzf); [[ -n "$f" && "$f" != "$1" ]]; }
-# reload_screens OLD_FZF: the list's screens until a new fzf shows rows (10 s at most).
+# reload_screens OLD_FZF: the list's screens (each after a line with the fzf pid) until a new fzf
+# shows rows (10 s at most).
 reload_screens() {
   local end=$((SECONDS + 10))
   while ((SECONDS < end)); do
+    printf -- '--- fzf %s\n' "$(list_fzf)"
     tm capture-pane -p -J -t "$list" 2>/dev/null
     new_fzf "$1" && screen_has "$list" fix-login && return 0
     sleep 0.1

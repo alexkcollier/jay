@@ -94,15 +94,20 @@ kill -9 "$fzf_pid"
 within "fzf killed: the list says so" 3 screen_has "$list" 'The list ended'
 within "fzf killed: rows again" 15 screen_has "$list" fix-login
 ok "fzf killed: a new fzf" bash -c "[[ \"\$(pgrep -f 'fzf .*--listen=$HOME/' | head -1)\" != $fzf_pid ]]"
+# The killed fzf's rows stay on the screen until the new one draws over them (slow on a busy
+# machine): wait for that, not for rows.
+within "fzf killed: the new fzf draws" 15 screen_hasnt "$list" 'The list ended'
 
 # r reloads cleanly: a new fzf with rows, never "The list ended" (the failure path), and no text
 # of an earlier d (its confirm, on the screen under fzf's).
 cursor_on() { z dump-screen -p "$list" 2>/dev/null | grep "$1" | head -1 | grep -q '▌'; }
 new_fzf() { local f; f=$(list_fzf); [[ -n "$f" && "$f" != "$1" ]]; }
-# reload_screens OLD_FZF: the list's screens until a new fzf shows rows (10 s at most).
+# reload_screens OLD_FZF: the list's screens (each after a line with the fzf pid) until a new fzf
+# shows rows (10 s at most).
 reload_screens() {
   local end=$((SECONDS + 10))
   while ((SECONDS < end)); do
+    printf -- '--- fzf %s\n' "$(list_fzf)"
     z dump-screen -p "$list" 2>/dev/null
     new_fzf "$1" && screen_has "$list" fix-login && return 0
     sleep 0.1
