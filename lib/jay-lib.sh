@@ -497,12 +497,15 @@ jay_agent_marks() {
 # The background agents in agents JSON $1 that are blocked but ask nothing in their session now,
 # as a JSON array of ids. `claude agents` calls an agent "blocked" when it asks you something,
 # but also when it is new and waits for its first prompt (its job state says "send a prompt to
-# start"), and after a /clear that came after a question: the job keeps state blocked and the
-# old needs, while the new session (sessionId; the job's linkScanPath) has no answer of the agent
-# yet. Only agents whose process runs (a status): jay_agent_phases never calls the others input.
+# start"), when it never had a turn and was respawned or woken (the job loses needs; no
+# transcript, an empty intent), and after a /clear that came after a question: the job keeps
+# state blocked and the old needs, while the new session (sessionId; the job's linkScanPath) has
+# no answer of the agent yet. Only agents whose process runs (a status): jay_agent_phases never
+# calls the others input. Status waiting: it asks now.
 jay_fresh_ids() {
   local id sid state log cfg="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-  jq -r '.[] | select(.kind == "background" and .state == "blocked" and .status != null and .id != null)
+  jq -r '.[] | select(.kind == "background" and .state == "blocked" and .status != null
+      and .status != "waiting" and .id != null)
     | [.id, .sessionId // ""] | @tsv' <<<"$1" | while IFS=$'\t' read -r id sid; do
     state="$cfg/jobs/$id/state.json"
     if [[ "$(jq -r '.needs // ""' "$state" 2>/dev/null || true)" == "send a prompt to start" ]]; then
@@ -512,7 +515,13 @@ jay_fresh_ids() {
     [[ -n "$sid" ]] || continue
     log=$(jq -r '.linkScanPath // ""' "$state" 2>/dev/null || true)
     [[ "$log" == */"$sid.jsonl" ]] || for log in "$cfg/projects/"*/"$sid.jsonl"; do break; done
-    if [[ -f "$log" ]] && ! grep -q '"type":"assistant"' "$log"; then printf '%s\n' "$id"; fi
+    if [[ -f "$log" ]]; then
+      grep -q '"type":"assistant"' "$log" || printf '%s\n' "$id"
+    # No transcript and no first prompt: it never had a turn. A job with no intent at all stays
+    # input (nothing says it had no turn).
+    elif jq -e '.intent == ""' "$state" >/dev/null 2>&1; then
+      printf '%s\n' "$id"
+    fi
   done | jq -Rsc 'split("\n") | map(select(. != ""))'
 }
 

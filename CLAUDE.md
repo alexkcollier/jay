@@ -111,6 +111,12 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   an intent, Claude says a respawn runs that first prompt again). The transcript: linkScanPath,
   else `<resumeSessionId or sessionId>.jsonl` in any folder of `~/.claude/projects`; the folder
   named after the cwd is wrong for a session resumed in another worktree (`jay_transcript`).
+- Claude (2.1.311): an agent made with no prompt: state.json state `working`, needs "send a prompt
+  to start", detail "(idle — send a prompt to start)", intent "", no linkScanPath;
+  `claude agents` state `blocked`, status `idle`. `claude respawn` of it (also again) removes
+  needs and changes nothing else that matters; `claude agents` still says blocked, so only "no
+  transcript and intent ''" tells it from a question (`jay_fresh_ids`). After `claude stop` and a
+  wake (`claude respawn`): state.json `running`, `claude agents` state `working`, status `idle`.
 - Claude: ← in `claude attach` execs the same pid as `claude agents` (its args change; SIGTERM
   ends it). From that view Enter attaches the chosen agent. `claude --bg --resume <session-id>
   --name x` of an ended session took the same ids (no copy) and wrote the new title into that

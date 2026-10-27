@@ -94,6 +94,31 @@ eq "blocked, no process: idle" idle "$(phase "$blocked" aaaa0025)"
 eq "blocked, no process, a turn ended after seen: unread" unread "$(phase "$blocked" aaaa0026)"
 eq "fresh ids: the new agent and the cleared ones" '["aaaa0021","aaaa0023"]' "$(jay_fresh_ids "$blocked")"
 
+# A respawn or a wake of an agent that never had a turn: the job loses needs, and there is no
+# transcript. With no first prompt (intent "") it asks nothing; one with a first prompt, or with
+# a transcript that has an answer, does.
+respawned='[
+  {"kind": "background", "id": "aaaa0031", "sessionId": "s-0031", "state": "blocked", "status": "idle", "pid": 1},
+  {"kind": "background", "id": "aaaa0032", "sessionId": "s-0032", "state": "blocked", "status": "idle", "pid": 1},
+  {"kind": "background", "id": "aaaa0033", "sessionId": "s-0033", "state": "blocked", "status": "idle", "pid": 1},
+  {"kind": "background", "id": "aaaa0034", "sessionId": "s-0034", "state": "blocked", "status": "idle", "pid": 1},
+  {"kind": "background", "id": "aaaa0035", "sessionId": "s-0035", "state": "blocked", "status": "waiting", "pid": 1},
+  {"kind": "background", "id": "aaaa0036", "sessionId": "s-0036", "state": "working", "status": "idle", "pid": 1}
+]'
+job aaaa0031 '{"state": "working", "detail": "(idle — send a prompt to start)", "intent": "", "linkScanPath": null}'
+job aaaa0032 '{"state": "working", "intent": "fix the login", "linkScanPath": null}'
+job aaaa0033 "{\"state\": \"blocked\", \"intent\": \"\", \"linkScanPath\": \"$(transcript s-0033 user assistant)\"}"
+job aaaa0034 "{\"state\": \"blocked\", \"intent\": \"\", \"needs\": \"Which colour?\", \"linkScanPath\": \"$(transcript s-0034 user)\"}"
+job aaaa0035 '{"state": "working", "intent": "", "linkScanPath": null}'
+# A wake (claude respawn of a stopped agent): Claude says state working.
+job aaaa0036 '{"state": "running", "intent": "", "linkScanPath": null}'
+eq "respawned, no turn, no first prompt: idle" idle "$(phase "$respawned" aaaa0031)"
+eq "respawned, no transcript, a first prompt: input" input "$(phase "$respawned" aaaa0032)"
+eq "blocked, no first prompt, it asked in this session: input" input "$(phase "$respawned" aaaa0033)"
+eq "blocked, no first prompt, a transcript with no answer: idle" idle "$(phase "$respawned" aaaa0034)"
+eq "status waiting, no turn, no first prompt: input" input "$(phase "$respawned" aaaa0035)"
+eq "woken, no turn: idle" idle "$(phase "$respawned" aaaa0036)"
+
 # jay clear takes the phase rule of the list: it refuses an agent that asks (exit 3) and one with
 # no process; it goes on for a /clear after a question (the stub's claude attach then fails: 1).
 stub_agents "$blocked"

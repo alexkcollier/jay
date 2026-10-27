@@ -60,7 +60,7 @@ point.
 | `✗` red | agent failed |
 | `✓` bold magenta | done, unread: a turn ended after you last saw the agent |
 | `●` dim green | agent works: its process is busy |
-| `○` dim | idle: you saw it since its last turn, it is in the middle column now, it waits for its first prompt, or you ran `/clear` in it |
+| `○` dim | idle: you saw it since its last turn, it is in the middle column now, it waits for its first prompt (also after a respawn), or you ran `/clear` in it |
 | `bg 12m` (dim, after the name) | background agent; age (m, h, d) |
 | Octicon home (U+F46D), before the branch | the main checkout |
 | Octicon diff (U+F440), yellow | uncommitted changes |
