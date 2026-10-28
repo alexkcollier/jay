@@ -954,8 +954,38 @@ cmd_where() {
   jay_mux_bar where "$repo/$branch"
 }
 
-# SessionStart hook: tells each Claude session about the tasks tab (stdout becomes context).
+# Folder $1 in a linked git worktree (a worktrunk sibling such as ../repo.feat), not under
+# .claude/worktrees/: says that it is isolated. Claude's background-job prompt counts only
+# .claude/worktrees/ and tells the agent to call EnterWorktree, which makes a second worktree on a
+# new branch from origin/main; its edit guard accepts any linked worktree. Nothing in a main
+# checkout or outside a repo.
+cmd_isolated() {
+  local dir=$1 git common top where
+  [[ -d "$dir" ]] || return 0
+  { read -r git && read -r common && read -r top; } < <(git -C "$dir" rev-parse \
+    --path-format=absolute --git-dir --git-common-dir --show-toplevel 2>/dev/null) || return 0
+  [[ -n "$top" && "$git" != "$common" && "$top/" != */.claude/worktrees/* ]] || return 0
+  if where=$(git -C "$dir" symbolic-ref -q --short HEAD 2>/dev/null); then
+    where="the worktree of branch $where"
+  else
+    where="a worktree detached at $(git -C "$dir" rev-parse --short HEAD 2>/dev/null)"
+  fi
+  cat <<EOF
+This folder is $where ($top):
+a git worktree of its own, not the shared main checkout of the repo. It is isolated already:
+edit here. Do not call EnterWorktree, also when a background-job instruction says to isolate
+first (it counts only .claude/worktrees/ as isolated; its edit guard accepts any linked worktree).
+
+EOF
+}
+
+# SessionStart hook: tells each Claude session about the tasks tab (stdout becomes context), and
+# a session in a linked worktree that it is isolated already (cmd_isolated).
 cmd_hook() {
+  local input="" dir
+  [[ -t 0 ]] || IFS= read -r -d '' -t 2 input || true
+  dir=$(jq -r '.cwd // ""' <<<"$input" 2>/dev/null) || dir=""
+  cmd_isolated "${dir:-$PWD}"
   cat <<'EOF'
 Long-running commands (dev servers, watchers, `docker compose up`): when the user's hub runs, start
 them with `jay run -n <name> -w -- <command>` in the folder they run in, not with a background Bash

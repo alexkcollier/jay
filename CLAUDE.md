@@ -96,6 +96,14 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   (also after an attach wakes a retired agent): the running binary is the path after `--` in the
   parent `claude bg-pty-host` process. The daemon starts every worker from its own binary.
 - Claude: a notify_when_idle subscription to an idle session fires at once.
+- Claude (2.1.312): the background-job prompt says to call EnterWorktree before the first edit
+  unless the folder is under `.claude/worktrees/`, but its edit guard rejects an Edit only in a
+  main checkout ("This background session hasn't isolated its changes yet ... a path inside a
+  linked git worktree ... is accepted"); in a sibling worktree (`git worktree add ../x`) the Edit
+  passes. jay says so (`jay-run --hook`: cmd_isolated; the `jay new` prompt). Opt-out per repo:
+  `"worktree": {"bgIsolation": "none"}` in `.claude/settings.json`.
+- Claude: `claude --bg` in a folder that was never trusted fails ("Workspace not trusted"); a
+  linked worktree takes its main checkout's trust. The trust prompt's default is "No, exit".
 - Claude (2.1.309): a stopped background agent (`claude stop`) is not in ListAgents. SendMessage to
   it fails at once ("No agent named X is reachable", by name, old ref or id): no queue, no wake.
   A notify_when_idle that it holds never fires (not after a wake). One that another session

@@ -222,7 +222,14 @@ The orchestrator runs `jay new <branch> -t "<task>" -- <prompt>` in the main che
    caller's name is the one that `claude agents` and ListAgents show (found by
    `CLAUDE_CODE_SESSION_ID`, else in the job's `state.json`), so SendMessage finds it. No such
    line when a person runs `jay new` in a shell, for an idle worker (`-a`), or with
-   `--no-report`. Each prompt also gets: "When the user tells you to remove this worktree and
+   `--no-report`. Each prompt also gets: "This folder is the worktree of branch `<branch>`, not
+   the main checkout: it is isolated already. Edit here and do not call EnterWorktree."
+   Claude's background-job prompt tells an agent to call EnterWorktree before its first edit
+   unless its folder is under `.claude/worktrees/`; a worker that obeys gets a second worktree
+   on a new branch from `origin/main`. Claude's edit guard only stops edits in a main checkout
+   (any linked worktree passes), so the worker edits where it is. The SessionStart hook says
+   the same to every session in a linked worktree ([Install](install.md#what-the-installer-does)). And:
+   "When the user tells you to remove this worktree and
    yourself: wt remove removes the worktree, then jay rm --self removes you when this turn
    ends." A session cannot end itself; `jay rm --self` removes it after its turn
    ([Commands](commands.md)).

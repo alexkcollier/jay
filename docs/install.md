@@ -173,7 +173,7 @@ The hooks come from `config/claude-settings-hooks.json`. The installer adds a ho
 
 | Hook | Event | What it does |
 |---|---|---|
-| `jay-run --hook` | SessionStart | tells each agent to start dev servers as hub tasks ([Tasks](tasks.md)) |
+| `jay-run --hook` | SessionStart | tells each agent to start dev servers as hub tasks ([Tasks](tasks.md)); an agent in a linked worktree (a sibling such as `../shop.feat`, not under `.claude/worktrees/`) also gets that its folder is isolated already: edit there, no `EnterWorktree` ([Orchestrators](orchestrators.md#how-it-makes-workers)) |
 | `jay-snapshot` | UserPromptSubmit, PostToolUse, Stop | the turn chains for review by turn ([Review](review.md)) |
 | `jay-notify` | Stop, Notification | the macOS notices ([Working in the hub](working.md)) |
 | `jay-guard` | PreToolUse (Bash) | stops an orchestrator's git commands that change its main checkout ([Orchestrators](orchestrators.md#skills-and-slash-commands)) |
