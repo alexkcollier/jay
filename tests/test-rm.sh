@@ -164,7 +164,13 @@ pgrep -f "jay-rm --after-turn 000000s1" >/dev/null && pass "self: the process wa
 # The turn ends.
 jq -c 'map(if .id == "000000s1" then .status = "idle" | .state = "done" else . end)' "$STUB/agents.json" >"$STUB/agents.new" \
   && mv "$STUB/agents.new" "$STUB/agents.json"
-for _ in $(seq 50); do grep -q '^rm 000000s1' "$STUB/claude.calls" 2>/dev/null && break; sleep 0.1; done
+# Wait for the rm line in prune.log: jay_remove_agent writes it after `claude rm` returns, so the
+# stub's files are complete then (its call line in claude.calls comes first, at its start). Up to
+# 30 s: a busy machine slows the waiter's polls and the stub.
+done_line="000000s1 (acme/self): rm: "
+for _ in $(seq 300); do grep -qF "$done_line" "$JAY_STATE/prune.log" && break; sleep 0.1; done
+grep -qF "$done_line" "$JAY_STATE/prune.log" && pass "self: removed within 30 s" \
+  || fail "self: removed within 30 s" "no \"$done_line\" in prune.log:" "$(cat "$JAY_STATE/prune.log")"
 eq "self: stop, then rm after the turn" "$(printf 'stop 000000s1\nrm 000000s1')" "$(calls)"
 eq "self: no CLAUDE_JOB_DIR in the process" "$(printf 'stop 000000s1 none\nrm 000000s1 none')" "$(cat "$STUB/env.calls" 2>/dev/null)"
 read -r pgid ancestors <"$STUB/rm.parent"
