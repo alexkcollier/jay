@@ -19,6 +19,7 @@ repo "$shop"
 # The stub claude: `--bg` starts an agent (its id from $STUB/next-id), `stop <id>` ends its
 # attach clients and its process (no pid), `rm <id>` removes it; `attach <id>` leaves its id in
 # $STUB/attach.log and runs until stopped. jay-pane puts mise's shims first on its PATH.
+# A pkill of an attach names this HOME: the ids are the same in a test that runs at the same time.
 mkdir -p "$HOME/.local/share/mise/shims"
 for d in "$HOME/.local/bin" "$HOME/.local/share/mise/shims"; do
   cat >"$d/claude" <<'EOF'
@@ -42,7 +43,7 @@ case "${1:-} ${2:-}" in
     printf 'backgrounded · %s · %s\n' "$id" "$name" ;;
   "stop "*) jq --arg i "$2" 'map(if .id == $i then del(.pid) else . end)' "$STUB/agents.json" >"$STUB/a.tmp" \
     && mv "$STUB/a.tmp" "$STUB/agents.json"
-    pkill -f "claude attach $2\$" ;;
+    pkill -f "$HOME/.*/claude attach $2\$" ;;
   "rm "*) jq --arg i "$2" 'map(select(.id != $i))' "$STUB/agents.json" >"$STUB/a.tmp" && mv "$STUB/a.tmp" "$STUB/agents.json"
     rm -rf "${jobs:?}/$2" ;;
   "attach "*) printf '%s\n' "$2" >>"$STUB/attach.log"
@@ -152,7 +153,7 @@ leave() {
   local dir=$JAY_STATE n
   [[ "$1" == tmux ]] && dir=$JAY_STATE/tmux
   n=$(grep -c 'You left this agent' "$TMP/pane-$1.log")
-  pkill -f "claude attach $2\$"
+  pkill -f "$HOME/.*/claude attach $2\$"
   within "$3: the pane says you left" 5 bash -c \
     "[[ -z \"\$(cut -f1 '$dir/agent.target')\" && \$(grep -c 'You left this agent' '$TMP/pane-$1.log') -gt $n ]]"
 }
