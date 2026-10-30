@@ -229,6 +229,51 @@ reset
 jay_mux_fit_list 25 >/dev/null
 has "fit: narrower" "-s jaytest action resize -p terminal_1 decrease right" "$(calls)"
 
+# The list's tick (keep_width in jay-sidebar) compares the next look with the fit's own last look.
+# The stubs keep the list's and the window's widths in $T (a fit runs in a subshell); a fit sets
+# the list and prints its last look, and then (with $T/after) the window or the list changes: a
+# new window size (zellij scales the list) or a drag.
+# tick_fits [window <width> | drag <columns>]: three ticks (at the start, in a window of 150, once
+# more), the change after the second fit; prints the number of fits and the list's width.
+T=$STUB/tick
+tick_fits() {
+  (
+    eval "$(sed -n '/^last_win="" last_list=""$/p; /^keep_width() {$/,/^}$/p' "$REPO/bin/jay-sidebar")"
+    jay_mux_list_width() { echo "$(<"$T/l") $(<"$T/w")"; }
+    jay_mux_fit_list() {
+      local look kind n
+      echo "$(($(<"$T/fits") + 1))" >"$T/fits"
+      echo "$1" >"$T/l"
+      look="$1 $(<"$T/w")"
+      if [[ -f "$T/after" ]]; then
+        read -r kind n <"$T/after"
+        rm -f "$T/after"
+        case $kind in
+          window) echo "$(($1 * n / $(<"$T/w")))" >"$T/l"; echo "$n" >"$T/w" ;;
+          drag) echo "$n" >"$T/l" ;;
+        esac
+      fi
+      echo "$look"
+    }
+    rm -rf "$T"
+    mkdir -p "$T"
+    echo 0 >"$T/fits"; echo 44 >"$T/l"; echo 200 >"$T/w"
+    keep_width >/dev/null
+    echo 33 >"$T/l"; echo 150 >"$T/w"
+    [[ -z "${1:-}" ]] || echo "$1 $2" >"$T/after"
+    keep_width >/dev/null
+    keep_width >/dev/null
+    echo "$(<"$T/fits") $(<"$T/l")"
+  )
+}
+rm -f "$JAY_STATE/sidebar.cols"
+eq "tick: a fit at the start and at a new window width" "2 44" "$(tick_fits)"
+eq "tick: the window changes again during a fit: a fit at the next tick" "3 44" "$(tick_fits window 250)"
+eq "tick: a new window width saves nothing" "" "$(cat "$JAY_STATE/sidebar.cols" 2>/dev/null)"
+eq "tick: a drag during a fit: a fit at the next tick" "3 60" "$(tick_fits drag 60)"
+eq "tick: a drag during a fit: saved at the next tick" 60 "$(cat "$JAY_STATE/sidebar.cols" 2>/dev/null)"
+rm -f "$JAY_STATE/sidebar.cols"
+
 # Layout: the list at its saved columns, as % of the session's width (200 in the stub).
 printf '60\n' >"$JAY_STATE/sidebar.cols"
 has "layout: list at its columns" 'pane size="30%" name="worktrees"' "$(jay --print-layout)"
