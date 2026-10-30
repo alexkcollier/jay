@@ -1007,8 +1007,9 @@ worktree (siblings named $1.<branch>). Keep the main checkout free of work.
   push a worker's branch, stash, edit files) run in the worker of that branch, never here; the
   jay-guard hook denies such git commands here. Here you push only this checkout's own branch,
   when the user asks (\`git push\`, \`git push origin <branch>\`; never a force push or a
-  delete); the host's branch protection guards it, not jay. A skill that only the user can
-  start: tell the user which worker is ready for which command.
+  delete); the host's branch protection guards it, not jay. When the user asks, you may also
+  add a new remote here (\`git remote add <name> <url>\`), but not change or remove one. A
+  skill that only the user can start: tell the user which worker is ready for which command.
 - Workers, for the user's questions about their status: \`claude agents --json --all\` (id,
   name, cwd, state, status); recent output: \`claude logs <id>\`; what a worker did per turn:
   \`git log refs/wt-turns/<id>/base..refs/wt-turns/<id>/head\` in its worktree. Send a prompt

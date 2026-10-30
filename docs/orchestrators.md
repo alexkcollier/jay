@@ -151,8 +151,9 @@ worktree (siblings named <repo>.<branch>). Keep the main checkout free of work.
   push a worker's branch, stash, edit files) run in the worker of that branch, never here; the
   jay-guard hook denies such git commands here. Here you push only this checkout's own branch,
   when the user asks (`git push`, `git push origin <branch>`; never a force push or a
-  delete); the host's branch protection guards it, not jay. A skill that only the user can
-  start: tell the user which worker is ready for which command.
+  delete); the host's branch protection guards it, not jay. When the user asks, you may also
+  add a new remote here (`git remote add <name> <url>`), but not change or remove one. A
+  skill that only the user can start: tell the user which worker is ready for which command.
 - Workers, for the user's questions about their status: `claude agents --json --all` (id,
   name, cwd, state, status); recent output: `claude logs <id>`; what a worker did per turn:
   `git log refs/wt-turns/<id>/base..refs/wt-turns/<id>/head` in its worktree. Send a prompt
@@ -347,7 +348,8 @@ flow:
 The rule: a command that changes the branch or writes runs in a worktree. In its main checkout,
 an orchestrator only reads, plans, reviews what workers deliver and steers workers. It merges there only with
 `git merge --ff-only <branch>`, and only when you tell it to. It pushes there only the main
-checkout's own branch (no force push, no delete), when you tell it to. jay does not protect that
+checkout's own branch (no force push, no delete), and adds a new remote (not a change or a
+removal of one), when you tell it to. jay does not protect that
 branch on the remote: that is the job of the repo's settings on the host (branch protection).
 
 Why a rule for skills: Claude stops a background agent's file edits (Edit, Write) in the main
@@ -436,6 +438,9 @@ What it denies in the main checkout:
 - `git worktree add`, `remove`, `move`, `prune` (worktrees come from `jay new`, a removal from
   `wt remove`);
 - `git fetch` into a local branch (`origin a:b`), `git config` writes;
+- `git remote remove`, `rename`, `set-url`, `set-head`, `set-branches`, `prune`, `update`;
+  `git remote add` of a name that is a remote already, with `--mirror`, with an option that it
+  does not know, or with `git -c` or `GIT_CONFIG*` set;
 - `gh pr checkout`, `gh pr create`, `gh pr merge`, `gh repo sync`;
 - a git command that it does not know (an alias, say), or whose folder or subcommand it cannot
   tell (`cd "$WT"`, `git -C "$(...)"`): when in doubt, it denies.
@@ -448,6 +453,8 @@ own branch (the branch it has checked out, `main` or `master`: no fixed name): `
 `git push <remote>`, `git push [-u|--set-upstream] <remote> <branch>`, and `HEAD`,
 `HEAD:<branch>`, `<branch>:<branch>` or `refs/heads/<branch>` for that branch (jay does not
 protect main on the remote: branch protection in the repo's settings on the host does);
+`git remote add [-f] [--[no-]tags] [-t <branch>]... [-m <branch>] <name> <url>` of a new
+remote name (to push a repo with no remote to a new empty repo on the host, say);
 `git branch -d <branch>...`
 (also `--delete`) when no worktree has these local branches checked out; all `gh` commands
 except the ones above; all other programs.

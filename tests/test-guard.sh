@@ -1,8 +1,8 @@
 #!/bin/bash
 # jay-guard (the PreToolUse hook on Bash): in an orchestrator's main checkout it denies the git
 # and gh commands that change the branch, the history or the files, and allows reads,
-# `git merge --ff-only`, a push of the main checkout's own branch (no force, delete or tags) and
-# `git branch -d` of a branch with no worktree (`-D` asks). A worktree, a plain agent and an
+# `git merge --ff-only`, a push of the main checkout's own branch (no force, delete or tags),
+# `git remote add` of a new name and `git branch -d` of a branch with no worktree (`-D` asks). A worktree, a plain agent and an
 # interactive session pass.
 source "$(dirname "$0")/lib.sh"
 link_install
@@ -190,6 +190,43 @@ git -C "$shop" checkout -q --detach
 denies orch0001 "$shop" "git push origin HEAD"
 git -C "$shop" checkout -q "$cur"
 allows orch0001 "$shop" "git push origin HEAD"
+
+# A new remote passes (a repo with no remote, pushed to a new empty repo); a change or a removal
+# of one, an existing name, a mirror or an option it does not know are denied.
+url=git@github.com:acme/shop.git
+for cmd in "git remote add origin $url" "git remote add -f origin $url" "git remote add --fetch origin $url" \
+  "git remote add -t main origin $url" "git remote add -t main -t dev -m main origin $url" \
+  "git remote add --track=main --master main origin $url" "git remote add -tmain origin $url" \
+  "git remote add --no-tags origin $url" "git remote add origin $url -f" "git remote add -- origin $url" \
+  "git -C $shop remote add origin $url" "cd src && git remote add origin $url" \
+  "git remote add origin $url && git push -u origin $cur"; do
+  allows orch0001 "$shop" "$cmd"
+done
+git -C "$shop" remote add origin "$url"
+for cmd in "git remote add upstream git@github.com:acme/shop-up.git" "git remote -v add up $url" \
+  "git remote -v show origin" "git remote get-url origin" "git remote"; do
+  allows orch0001 "$shop" "$cmd"
+done
+for cmd in "git remote add origin $url" "git remote add -f origin git@github.com:acme/other.git" \
+  "git remote add --mirror up $url" "git remote add --mirror=fetch up $url" "git remote add --mirror=push up $url" \
+  "git remote add -v up $url" "git remote add -ft main up $url" "git remote add -t up $url" \
+  "git remote add -t 'refs/heads/*' up $url" "git remote add -t a:b up $url" "git remote add -m -x up $url" \
+  "git remote add up" "git remote add up $url extra" "git remote add '-x' $url" "git remote add 'a b' $url" \
+  "git remote add \$R $url" "git remote add up \"\$U\"" "git -c remote.up.mirror=true remote add up $url" \
+  "GIT_CONFIG_COUNT=1 git remote add up $url" "git -C \"\$X\" remote add up $url" \
+  "git remote remove origin" "git remote rm origin" "git remote rename origin up" \
+  "git remote set-url origin git@github.com:acme/other.git" "git remote set-url --add origin $url" \
+  "git remote set-head origin main" "git remote set-branches origin main" "git remote prune origin" \
+  "git remote update" "git remote -v remove origin" "git remote --verbose set-url origin $url"; do
+  denies orch0001 "$shop" "$cmd"
+done
+reason=$(guard orch0001 "$shop" "git remote add origin $url" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+has "the deny: the remote exists" "the remote origin exists" "$reason"
+has "the reason: it can add a remote" "add a new remote" "$reason"
+reason=$(guard orch0001 "$shop" "git remote set-url origin $url" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+has "the deny: a remote is only added" "it changes or removes a remote" "$reason"
+eq "the guard adds no remote" origin "$(git -C "$shop" remote)"
+git -C "$shop" remote remove origin
 
 # Other sessions pass.
 allows "" "$shop" "git checkout -b fix"
