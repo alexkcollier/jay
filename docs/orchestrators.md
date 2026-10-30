@@ -337,7 +337,9 @@ flow:
    rebases again. When you tell it to, it pushes main after the merge (`git push`).
 4. The worktree row now shows the dim check sign (safe to remove: integrated). `d` on the
    worktree row removes the worktree (`wt remove`), then its idle agents (`claude rm`), and
-   closes its tasks tab. The branch is deleted only when it is merged. Or ask the orchestrator to
+   closes its tasks tab. The branch is deleted only when it is merged, and with it the worker's
+   backup branches (`backup/...`, named in the confirm) and its remote-tracking ref when the
+   remote deleted the branch ([Remove and prune](working.md#remove-and-prune)). Or ask the orchestrator to
    run `wt remove` and `jay rm <worker>`, or ask the worker to remove its worktree and itself
    (`wt remove`, then `jay rm --self`: it goes when its turn ends). A branch that is left after its worktree went: the
    orchestrator can delete it with `git branch -d <branch>` (git refuses a branch that is not

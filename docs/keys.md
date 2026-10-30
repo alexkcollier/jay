@@ -22,7 +22,7 @@
 | `n` | new idle background agent in this row's worktree (on a main checkout: the repo's orchestrator; when it has one, the hub shows it) |
 | `N` | new worktree of this row's repo (asks the branch) + idle agent |
 | `o` | the row's own Ghostty tab: an interactive agent's tab, else the worktree's zellij session (`jay open`) |
-| `d` | remove the agent, or the worktree with its idle agents (asks first; agents that came from it and are in another worktree go on there first, as copies) |
+| `d` | remove the agent, or the worktree with its idle agents (asks first; agents that came from it and are in another worktree go on there first, as copies). With the merged branch go its backup branches (`backup/...`, named in the confirm) and its stale remote-tracking ref ([Remove and prune](working.md#remove-and-prune)) |
 | `b` | an idle interactive session goes on as a background agent (asks first) |
 | `c` | an idle orchestrator (`◇`) or the hub Claude (`◆ hub` row) gets a fresh context: `/clear`, same prompt, name and id (asks first). With a dim `⇡` (an older prompt than jay's), it also offers `y`: a new agent with the current prompt and the same name in place of the old one (`jay renew`) |
 | `a` | hide / show idle repos (a main checkout row stays while its repo has other rows) |

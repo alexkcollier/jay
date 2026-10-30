@@ -2101,6 +2101,103 @@ jay_prune_worktrees() {
   return 0
 }
 
+# The local branches under backup/ in the repo of folder $1 that belong to branch $2 (safety refs
+# an agent made, say before a rebase), as name<TAB>commit. A name belongs to $2 when it is
+# backup/<key> or starts with backup/<key> and one of - _ . /; the keys are $2, its last path
+# part, and the ticket-like start of that part (letters-digits: acme-185 of acme-185-fix-thing).
+# Never $2 itself, a branch that a worktree has checked out, or a name that fits a key of the
+# branch of another worktree as long as its own (or longer): it can belong to that one.
+# backup/acme-185-pre-rebase is not one when another worktree has acme-185 too, but
+# backup/acme-185-fix-thing-old still is.
+jay_backup_branches() {
+  local IFS=$' \t\n' dir=$1 branch=$2 others name sha b len theirs mine
+  [[ -n "$branch" ]] || return 0
+  others=$(git -C "$dir" worktree list --porcelain 2>/dev/null | sed -n 's#^branch refs/heads/##p' \
+    | grep -vxF -- "$branch")
+  while IFS=$'\t' read -r name sha; do
+    [[ -n "$name" && "$name" != "$branch" ]] || continue
+    len=$(_jay_backup_of "${name#backup/}" "$branch") || continue
+    mine=true
+    while IFS= read -r b; do
+      [[ -n "$b" ]] || continue
+      [[ "$name" == "$b" ]] && { mine=false; break; }
+      theirs=$(_jay_backup_of "${name#backup/}" "$b") || continue
+      ((theirs >= len)) && { mine=false; break; }
+    done <<<"$others"
+    [[ "$mine" == true ]] && printf '%s\t%s\n' "$name" "$sha"
+  done < <(git -C "$dir" for-each-ref --format='%(refname:short)%09%(objectname)' refs/heads/backup/ 2>/dev/null)
+  return 0
+}
+
+# When backup name $1 (without backup/) fits a key of branch $2 (jay_backup_branches): print the
+# length of the longest key it fits and return 0.
+_jay_backup_of() {
+  local name=$1 branch=$2 last=${2##*/} key ticket="" re='^([A-Za-z]+-[0-9]+)(-|_|$)'
+  [[ $last =~ $re ]] && ticket=${BASH_REMATCH[1]}
+  for key in "$branch" "$last" "$ticket"; do
+    [[ -n "$key" ]] || continue
+    if [[ "$name" == "$key" || "$name" == "$key"[-_./]* ]]; then
+      printf '%s\n' "${#key}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Delete the backup branches name<TAB>commit in $2 (from jay_backup_branches) in the repo of
+# folder $1, each only while it still points at that commit. Notes each in prune.log, with the
+# command that brings it back. Prints the ones that failed.
+jay_drop_backups() {
+  local IFS=$' \t\n' dir=$1 name sha out
+  jay_state_dir
+  while IFS=$'\t' read -r name sha; do
+    [[ -n "$name" ]] || continue
+    if [[ "$(git -C "$dir" rev-parse -q --verify "refs/heads/$name" 2>/dev/null)" != "$sha" ]]; then
+      printf '  %s: it moved, kept\n' "$name"
+      continue
+    fi
+    if out=$(git -C "$dir" branch -D "$name" 2>&1 </dev/null); then
+      printf '%s backup branch %s deleted in %s (git branch %s %s brings it back)\n' "$(date '+%F %T')" \
+        "$name" "$(jay_primary "$dir")" "$name" "$sha" >>"$JAY_STATE/prune.log"
+    else
+      printf '  %s: %s\n' "$name" "$(tr '\n' ' ' <<<"$out" | sed 's/ *$//')"
+    fi
+  done <<<"$2"
+  return 0
+}
+
+# Drop remote-tracking ref $4 (refs/remotes/<remote>/<branch>) in the repo of folder $1 when
+# remote $2 has no branch $3 (refs/heads/<branch>) any more: a branch the forge deleted after the
+# merge. Only that one ref, never a prune of the repo: `git ls-remote` asks for that branch
+# alone (exit 2: the remote has none), then `git update-ref -d` drops $4 only while it points
+# where it did. No prompt (no terminal, GIT_TERMINAL_PROMPT=0) and at most JAY_FETCH_TIMEOUT
+# seconds (20): the list runs it in the background. Notes the result in prune.log.
+jay_drop_gone_upstream() {
+  local IFS=$' \t\n' dir=$1 remote=$2 rref=$3 tref=$4 old out rc=0
+  [[ -n "$remote" && "$remote" != . && "$rref" == refs/heads/* && "$tref" == refs/remotes/* ]] || return 0
+  old=$(git -C "$dir" rev-parse -q --verify "$tref" 2>/dev/null) || return 0
+  jay_state_dir
+  # setsid: no controlling terminal, so ssh cannot ask for a passphrase in the list's pane. At
+  # the timeout the whole group goes (exit 124): a hung ssh would keep the output pipe open.
+  out=$(GIT_TERMINAL_PROMPT=0 perl -MPOSIX -e '
+    POSIX::setsid(); my $t = shift; my $pid = fork // exit 127;
+    if (!$pid) { exec @ARGV or exit 127 }
+    $SIG{ALRM} = sub { $SIG{TERM} = "IGNORE"; kill "TERM", (getpgrp() == $$ ? -$$ : $pid); exit 124 };
+    alarm $t; waitpid $pid, 0; exit($? & 127 ? 128 + ($? & 127) : $? >> 8)' \
+    "${JAY_FETCH_TIMEOUT:-20}" git -C "$dir" ls-remote --exit-code "$remote" "$rref" 2>&1 </dev/null) || rc=$?
+  case $rc in
+    0) ;;
+    2) if git -C "$dir" update-ref -d "$tref" "$old" 2>/dev/null </dev/null; then
+         printf '%s stale ref %s dropped in %s (%s has no %s)\n' "$(date '+%F %T')" "$tref" \
+           "$(jay_primary "$dir")" "$remote" "${rref#refs/heads/}" >>"$JAY_STATE/prune.log"
+       fi ;;
+    *) ((rc == 124)) && out="no answer in ${JAY_FETCH_TIMEOUT:-20} s"
+       printf '%s ref %s kept in %s: git ls-remote %s failed: %s\n' "$(date '+%F %T')" "$tref" \
+         "$(jay_primary "$dir")" "$remote" "$(tr '\n' ' ' <<<"$out" | sed 's/ *$//')" >>"$JAY_STATE/prune.log" ;;
+  esac
+  return 0
+}
+
 # Remove background agent $1 (an id; name $2): `claude stop` when it runs (a turn that runs is
 # lost) and a wait (up to 10 s) until its process is gone, then its scratch worktrees
 # (jay_remove_scratch), then `claude rm`; the stop and the rm without the caller's

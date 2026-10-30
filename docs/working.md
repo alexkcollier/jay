@@ -251,6 +251,27 @@ to `~/.local/state/jay/notify.log`.
   the agents and the tasks tab stay. A dim check sign and a dim name mark a worktree that is safe
   to remove. Agents that came from this worktree and are in another one now go on there first
   ([When the folder an agent came from goes](#when-the-folder-an-agent-came-from-goes)).
+  - **Backup branches**: local branches under `backup/` that an agent made for the branch (a
+    safety ref before a rebase, say). The confirm names them, and they go with the branch: when
+    `wt remove` deletes it, `git branch -D` deletes them too, each only while it still points at
+    the commit the confirm showed. When the branch stays (not merged), they stay. A backup
+    belongs to the branch when its name is `backup/<key>` or starts with `backup/<key>` and one
+    of `-` `_` `.` `/`; the keys are the branch name, its last path part, and the ticket-like
+    start of that part (letters-digits): for `someone/acme-185-fix-thing`,
+    `backup/someone/acme-185-fix-thing`, `backup/acme-185-fix-thing-old` and
+    `backup/acme-185-pre-rebase`. Never a branch that a worktree has checked out, and never a
+    name that fits a key of another worktree's branch as well (as long a key or longer):
+    `backup/acme-185-pre-rebase` stays while another worktree has `acme-185` too.
+    `~/.local/state/jay/prune.log` keeps each deleted backup's commit, with the
+    `git branch <name> <commit>` that brings it back.
+  - **Stale remote-tracking ref**: when the branch had an upstream (`origin/<branch>`) and the
+    remote deleted the branch after the merge (GitHub does), its ref goes after the removal:
+    `git ls-remote` asks the remote for that one branch, and when it has none,
+    `git update-ref -d` drops that one ref. Never a `git fetch --prune` of the repo: other stale
+    refs stay. It runs in the background (the list never waits on the network), with no
+    terminal and no prompt, for at most `JAY_FETCH_TIMEOUT` seconds (20). When the remote
+    still has the branch, the ref stays. When it does not answer, the ref stays and prune.log
+    says why; a dropped ref is in prune.log too.
 - **Removed worktree** (a dim `(gone)` row): `claude rm` for each of its agents, with the same
   rules.
 
