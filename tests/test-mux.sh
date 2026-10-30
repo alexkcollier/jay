@@ -184,10 +184,55 @@ pkill -P "$pid" 2>/dev/null
 kill "$pid" 2>/dev/null
 wait "$pid" 2>/dev/null
 
-# Layout: the list keeps its width.
+# The list's width in columns (sidebar.cols): the same in any window, at most 60 % of it.
+rm -f "$JAY_STATE/sidebar.cols" "$JAY_STATE/sidebar.pct"
+eq "list width: the default" 44 "$(jay_list_cols)"
+eq "widths: the default in 200 columns" "44 86 70" "$(jay_hub_widths 200)"
+eq "widths: no window width, 200" "44 86 70" "$(jay_hub_widths)"
+printf '30\n' >"$JAY_STATE/sidebar.cols"
+eq "widths: saved columns in 200 columns" "30 93 77" "$(jay_hub_widths 200)"
+eq "widths: the same columns in 120" "30 49 41" "$(jay_hub_widths 120)"
+printf '100\n' >"$JAY_STATE/sidebar.cols"
+eq "list width: at most 60 % of the window" 90 "$(jay_list_cols 150)"
+eq "list width: the saved one with no window" 100 "$(jay_list_cols)"
+printf '5\n' >"$JAY_STATE/sidebar.cols"
+eq "list width: at least 24" 24 "$(jay_list_cols 200)"
+jay_list_save 10
+eq "save: at least 24" 24 "$(cat "$JAY_STATE/sidebar.cols")"
+jay_list_save 52
+eq "save: the columns" 52 "$(cat "$JAY_STATE/sidebar.cols")"
+jay_list_save abc
+eq "save: no number, no change" 52 "$(cat "$JAY_STATE/sidebar.cols")"
+# An older jay's sidebar.pct: columns of the first window width it meets, once.
+rm -f "$JAY_STATE/sidebar.cols"
 printf '30\n' >"$JAY_STATE/sidebar.pct"
-eq "widths" "30 38 32" "$(jay_hub_widths)"
-has "layout: list at its share" 'pane size="30%" name="worktrees"' "$(jay --print-layout)"
+eq "sidebar.pct, no window: the default" 44 "$(jay_list_cols)"
+ok "sidebar.pct, no window: it stays" test -f "$JAY_STATE/sidebar.pct"
+eq "sidebar.pct: columns of the window" 54 "$(jay_list_cols 180)"
+eq "sidebar.pct: saved as columns" 54 "$(cat "$JAY_STATE/sidebar.cols")"
+ok "sidebar.pct: removed" test ! -e "$JAY_STATE/sidebar.pct"
+eq "sidebar.pct: the columns stay in another window" 54 "$(jay_list_cols 250)"
+rm -f "$JAY_STATE/sidebar.cols"
+printf '80\n' >"$JAY_STATE/sidebar.pct"
+eq "sidebar.pct out of range: the default" 44 "$(jay_list_cols 200)"
+rm -f "$JAY_STATE/sidebar.pct"
+
+# The list's width and its fit (the stub's list: 40 of 200 columns; zellij resizes in steps of
+# 5 % of the tab, so a fit stops within 3 %: 6 columns).
+eq "list width: list and tab" "40 200" "$(ZELLIJ_PANE_ID=1 jay_mux_list_width)"
+reset
+jay_mux_fit_list 46
+ok "fit: within 3 % of the tab, no resize" bash -c "! grep -q 'action resize' '$STUB/zellij.calls'"
+jay_mux_fit_list 60
+has "fit: wider" "-s jaytest action resize -p terminal_1 increase right" "$(calls)"
+reset
+jay_mux_fit_list 25
+has "fit: narrower" "-s jaytest action resize -p terminal_1 decrease right" "$(calls)"
+
+# Layout: the list at its saved columns, as % of the session's width (200 in the stub).
+printf '60\n' >"$JAY_STATE/sidebar.cols"
+has "layout: list at its columns" 'pane size="30%" name="worktrees"' "$(jay --print-layout)"
+has "layout: agent and review 43:35 of the rest" 'pane size="38%" name="hub"' "$(jay --print-layout)"
 has "layout: the agent pane" 'args "agent"' "$(jay --print-layout)"
 has "layout without zjstatus: the compact bar" 'zellij:compact-bar' "$(jay --print-layout)"
 mkdir -p "$HOME/.local/share/jay" && : >"$HOME/.local/share/jay/zjstatus-v0.25.0.wasm"

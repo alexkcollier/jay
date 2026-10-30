@@ -13,8 +13,9 @@ In `~/.local/state/jay/`:
 | `hub.lock/` | held while a pick moves the hub's panes (taken over after 5 s) |
 | `hub-claude` | the short id of the hub Claude (`hub-claude.lock/` while it starts) |
 | `review.mode` | `turns` or `commits` |
-| `review.hidden` | there while review is hidden (Ctrl g `v`): its share of the width, and 1 when files was open |
-| `sidebar.pct` | the list's share of the width |
+| `review.hidden` | there while review is hidden (Ctrl g `v`): its share of the width, and 1 when files was open (tmux: also its columns and the window's) |
+| `sidebar.cols` | the list's width in columns (a drag, `-`, `+`); it stays when the window changes its size |
+| `sidebar.pct` | an older version's share of the width: the list changes it to `sidebar.cols` once |
 | `sidebar.hide-idle` | there while `a` hides idle repos |
 | `orchestrate.<n>` | a pick started the orchestrator of a repo in `JAY_ORCHESTRATE` (one file per main checkout); for a minute, a second pick does not start another one |
 | `worktrees.ndjson` | cache of `jay all --json` (refreshed after 30 s) |

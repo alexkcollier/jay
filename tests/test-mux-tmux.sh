@@ -107,6 +107,18 @@ has "focus review: the pane right of the agent (files over review)" "select-pane
 printf '%%1 agent\n%%2 review\n' >"$STUB/roles.txt"
 reset; jay_mux_focus list
 hasnt "focus: no list pane, no move" "select-pane" "$(calls)"
+# The list's fit: the saved columns for the window-resized hook, then the list at most 60 % of
+# its window.
+printf 'list %%0 200\nagent %%1 200\n' >"$STUB/roles.txt"
+reset; jay_mux_fit_list 44
+has "fit: the columns for the hook" "set-option -g @jay_list_cols 44" "$(calls)"
+has "fit: the list pane" "resize-pane -t %0 -x 44" "$(calls)"
+reset; jay_mux_fit_list 150
+has "fit: the hook keeps the saved columns" "set-option -g @jay_list_cols 150" "$(calls)"
+has "fit: at most 60 % of the window" "resize-pane -t %0 -x 120" "$(calls)"
+printf 'agent %%1 200\n' >"$STUB/roles.txt"
+reset; jay_mux_fit_list 44
+hasnt "fit: no list pane, no resize" "resize-pane" "$(calls)"
 rm -f "$STUB/roles.txt"
 reset
 jay_mux_rename "" x

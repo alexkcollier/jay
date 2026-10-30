@@ -103,7 +103,6 @@ jay_mux_repair() {
     printf 'list agent review\n'
     return 0
   fi
-  read -r lw mw rw < <(jay_hub_widths)
   if [[ -z "$list" ]]; then
     list=$(_jay_zj_split "${agent:-${files:-$review}}" "$1" "$HOME/.local/bin/jay-sidebar") || return 1
     zellij -s "$JAY_SESSION" action move-pane -p "$list" left >/dev/null 2>&1
@@ -119,6 +118,7 @@ jay_mux_repair() {
     made+="review "
   fi
   [[ -n "$made" ]] || return 0
+  read -r lw mw rw < <(jay_hub_widths "$(jay_mux_width)")
   _jay_zj_fit "$list" "$lw"
   [[ -f "$JAY_HIDDEN" ]] || _jay_zj_fit "$agent" "$mw"
   printf '%s\n' "${made% }"
@@ -142,7 +142,9 @@ _jay_zj_split() {
   printf '%s\n' "$pane"
 }
 
-# Pane $1 to share $2 % of its tab's width, at its right border (zellij resizes in steps of 5 %).
+# Pane $1 $2 columns wide, at its right border, as near as zellij allows: it resizes in steps of
+# 5 % of the tab's width, so the pane ends within 3 % of the tab of $2 (a step from outside that
+# lands inside it, never over it).
 _jay_zj_fit() {
   local i cols total
   for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -151,9 +153,9 @@ _jay_zj_fit() {
       | [$r.cols, ([.[] | select(.tab_id == $r.tab_id and (.floating | not)) | .x + .cols] | max)]
       | @tsv')
     [[ -n "${total:-}" ]] || return 0
-    if ((cols * 100 / total > $2 + 2)); then
+    if (((cols - $2) * 100 > total * 3)); then
       zellij -s "$JAY_SESSION" action resize -p "$1" decrease right >/dev/null 2>&1
-    elif ((cols * 100 / total < $2 - 2)); then
+    elif ((($2 - cols) * 100 > total * 3)); then
       zellij -s "$JAY_SESSION" action resize -p "$1" increase right >/dev/null 2>&1
     else
       return 0
@@ -270,13 +272,27 @@ jay_mux_resize_list() {
   zellij -s "$JAY_SESSION" action resize -p "$(jay_mux_self)" "$1" right >/dev/null 2>&1
 }
 
-# The caller's pane's share of its tab's width, in %.
-jay_mux_list_share() {
-  zellij -s "$JAY_SESSION" action list-panes -a -j 2>/dev/null | jq --argjson me "${ZELLIJ_PANE_ID:--1}" '
+# The caller's pane's width and its tab's, in columns.
+jay_mux_list_width() {
+  zellij -s "$JAY_SESSION" action list-panes -a -j 2>/dev/null | jq -r --argjson me "${ZELLIJ_PANE_ID:--1}" '
     (map(select(.is_plugin | not)) | map(select(.id == $me)) | first) as $pane
     | select($pane != null)
     | [.[] | select(.tab_id == $pane.tab_id and (.is_floating | not)) | .pane_x + .pane_columns] | max
-    | ($pane.pane_columns * 100 / .) | round'
+    | "\($pane.pane_columns) \(.)"'
+}
+
+# The list $1 columns wide (at most 60 % of the tab), within 3 % of the tab (_jay_zj_fit).
+# zellij has no hook for a new window size: the list's tick calls this when the tab's width
+# changed. (A pane of a fixed size in the layout keeps its columns, but then nothing can resize it.)
+jay_mux_fit_list() {
+  local cols=$1 list w
+  read -r list w < <(jay_mux_panes | jq -rs '
+    (map(select(.tab == "hub" and (.floating | not))) | [.[] | .x + .cols] | max) as $w
+    | map(select(.tab == "hub" and (.exited | not) and ((.launch // "") | test("jay-sidebar$")))) | first
+    | select(. != null) | "\(.pane) \($w)"')
+  [[ -n "${w:-}" ]] || return 0
+  ((cols > w * 3 / 5)) && cols=$((w * 3 / 5))
+  _jay_zj_fit "$list" "$cols"
 }
 
 # Set the height of the caller's floating pane $1 (the launcher) to $2 rows.
@@ -440,7 +456,7 @@ _jay_zj_bottom() {
   printf 'pane size=1 borderless=true {\n            %s\n        }\n' "$(_jay_zj_status hub)"
 }
 
-# The hub's layout: list | agent | review, the list at its saved share of the width.
+# The hub's layout: list | agent | review, the list at its saved width.
 _jay_zj_layout() {
   cat <<KDL
 layout {
@@ -466,10 +482,17 @@ KDL
 }
 
 # The hub tab's columns, titled $1, $2 and $3: list | agent | review, the list at its saved
-# share of the width.
+# width. A layout takes %: of the session's width while it runs, else of this terminal's. (A
+# size in columns would keep the list's width, but nothing could resize it then.)
 _jay_zj_hub_columns() {
-  local list middle right t1 t2 t3
-  read -r list middle right < <(jay_hub_widths)
+  local list middle right t1 t2 t3 w
+  w=$(jay_mux_panes 2>/dev/null | jq -s '[.[] | select(.floating | not) | .x + .cols] | max // empty' 2>/dev/null)
+  [[ "$w" =~ ^[0-9]+$ ]] || w=$(stty size </dev/tty 2>/dev/null | cut -d' ' -f2)
+  [[ "$w" =~ ^[0-9]+$ ]] && ((w > 0)) || w=200
+  read -r list middle right < <(jay_hub_widths "$w")
+  list=$(((list * 100 + w / 2) / w))
+  middle=$(((100 - list) * 43 / 78))
+  right=$((100 - list - middle))
   t1=$(sed 's/[\\"]/\\&/g' <<<"$1") t2=$(sed 's/[\\"]/\\&/g' <<<"$2") t3=$(sed 's/[\\"]/\\&/g' <<<"$3")
   cat <<KDL
 pane split_direction="vertical" {

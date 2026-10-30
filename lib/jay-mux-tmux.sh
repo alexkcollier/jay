@@ -57,22 +57,23 @@ jay_mux_old_hub() {
 }
 
 # Start the hub in this terminal (exec): the server, the hub window (list | agent | review, the
-# list at its saved share), then attach. The panes get JAY_MUX, JAY_SESSION and
-# JAY_TMUX_SOCKET from the server's environment.
+# list at its saved width), then attach. The panes get JAY_MUX, JAY_SESSION and
+# JAY_TMUX_SOCKET from the server's environment. A border between two panes takes a column.
 jay_mux_start() {
   local list middle right lines cols root=${JAY_ROOTS%%:*} p0 p1 p2
-  read -r list middle right < <(jay_hub_widths)
   read -r lines cols < <(stty size 2>/dev/null) || true
   [[ "${cols:-}" =~ ^[0-9]+$ ]] || cols=200
   [[ "${lines:-}" =~ ^[0-9]+$ ]] || lines=50
+  read -r list middle right < <(jay_hub_widths "$cols")
   export JAY_MUX=tmux JAY_SESSION JAY_TMUX_SOCKET
   [[ -f "$JAY_TMUX_CONF" ]] || { echo "jay: $JAY_TMUX_CONF is missing: run ./install.sh in jay" >&2; exit 1; }
   p0=$(_jay_tm new-session -d -s "$JAY_SESSION" -n hub -x "$cols" -y "$((lines - 2))" -c "$root" \
     -P -F '#{pane_id}' "$HOME/.local/bin/jay-sidebar") || { echo "jay: tmux did not start" >&2; exit 1; }
-  p1=$(_jay_tm split-window -h -d -t "$p0" -l "$((100 - list))%" -c "$root" -P -F '#{pane_id}' \
+  p1=$(_jay_tm split-window -h -d -t "$p0" -l "$((cols - list - 1))" -c "$root" -P -F '#{pane_id}' \
     "$HOME/.local/bin/jay-pane" agent)
-  p2=$(_jay_tm split-window -h -d -t "$p1" -l "$((right * 100 / (middle + right)))%" -c "$root" \
+  p2=$(_jay_tm split-window -h -d -t "$p1" -l "$((right - 1))" -c "$root" \
     -P -F '#{pane_id}' "$HOME/.local/bin/jay-pane" review)
+  _jay_tm set-option -g @jay_list_cols "$(jay_list_cols)" >/dev/null 2>&1
   _jay_tm_keep "$p0" list
   _jay_tm_keep "$p1" agent
   _jay_tm_keep "$p2" review
@@ -108,7 +109,6 @@ _jay_tm_role_of() {
 jay_mux_repair() {
   local root=${JAY_ROOTS%%:*} id win role dead covers start list="" agent="" review="" rwin="" files="" fcovers=""
   local w lw mw rw made="" restarted="" right
-  read -r lw mw rw < <(jay_hub_widths)
   while IFS=$'\t' read -r id win role dead covers start; do
     case $win in hub | _review | _cover) ;; *) continue ;; esac
     if [[ -z "$role" ]]; then
@@ -134,7 +134,7 @@ jay_mux_repair() {
   if [[ -z "$list" ]]; then
     if _jay_tm list-windows -t "=$JAY_SESSION" -F '#{window_name}' 2>/dev/null | grep -qx hub; then
       w=$(_jay_tm display-message -p -t "=$JAY_SESSION:hub" '#{window_width}' 2>/dev/null)
-      list=$(_jay_tm split-window -h -b -f -d -t "=$JAY_SESSION:hub" -l "$((${w:-200} * lw / 100))" -c "$root" \
+      list=$(_jay_tm split-window -h -b -f -d -t "=$JAY_SESSION:hub" -l "$(jay_list_cols "${w:-200}")" -c "$root" \
         -P -F '#{pane_id}' "$HOME/.local/bin/jay-sidebar")
     else
       list=$(_jay_tm new-window -d -b -t "=$JAY_SESSION:^" -n hub -c "$root" -P -F '#{pane_id}' "$HOME/.local/bin/jay-sidebar")
@@ -146,15 +146,16 @@ jay_mux_repair() {
   fi
   w=$(_jay_tm display-message -p -t "$list" '#{window_width}' 2>/dev/null)
   w=${w:-200}
+  read -r lw mw rw < <(jay_hub_widths "$w")
   # The column right of the agent: review, or files over it.
   right=$files
   [[ "$rwin" == hub ]] && right=$review
   if [[ -z "$agent" ]]; then
     if [[ -n "$right" ]]; then
-      agent=$(_jay_tm split-window -h -b -d -t "$right" -l "$((w * mw / 100))" -c "$root" \
+      agent=$(_jay_tm split-window -h -b -d -t "$right" -l "$mw" -c "$root" \
         -P -F '#{pane_id}' "$HOME/.local/bin/jay-pane" agent)
     else
-      agent=$(_jay_tm split-window -h -d -t "$list" -l "$((w * (100 - lw) / 100))" -c "$root" \
+      agent=$(_jay_tm split-window -h -d -t "$list" -l "$((w - lw - 1))" -c "$root" \
         -P -F '#{pane_id}' "$HOME/.local/bin/jay-pane" agent)
     fi
     [[ -n "$agent" ]] || return 1
@@ -164,7 +165,7 @@ jay_mux_repair() {
   fi
   if [[ -z "$review" ]]; then
     rm -f "$JAY_HIDDEN"
-    review=$(_jay_tm split-window -h -d -t "$agent" -l "$((w * rw / 100))" -c "$root" \
+    review=$(_jay_tm split-window -h -d -t "$agent" -l "$((rw - 1))" -c "$root" \
       -P -F '#{pane_id}' "$HOME/.local/bin/jay-pane" review \; set-option -gu @jay_hidden)
     [[ -n "$review" ]] || return 1
     _jay_tm_keep "$review" review
@@ -172,15 +173,15 @@ jay_mux_repair() {
     rwin=hub right=$review
     made+="review "
   elif [[ "$rwin" == _cover && -z "$files" ]]; then
-    _jay_tm join-pane -d -h -l "$((w * rw / 100))" -s "$review" -t "$agent" >/dev/null 2>&1
+    _jay_tm join-pane -d -h -l "$((rw - 1))" -s "$review" -t "$agent" >/dev/null 2>&1
     rwin=hub right=$review
     made+="review "
   fi
   # A pane that came back: the columns at their saved widths (the agent's right edge only while
   # a column is right of it).
   if [[ -n "$made" ]]; then
-    _jay_tm resize-pane -t "$list" -x "$((w * lw / 100))" >/dev/null 2>&1
-    [[ -n "$right" ]] && _jay_tm resize-pane -t "$agent" -x "$((w * mw / 100))" >/dev/null 2>&1
+    _jay_tm resize-pane -t "$list" -x "$lw" >/dev/null 2>&1
+    [[ -n "$right" ]] && _jay_tm resize-pane -t "$agent" -x "$((mw - 2))" >/dev/null 2>&1
   fi
   made+=$restarted
   [[ -z "$made" ]] || printf '%s\n' "${made% }"
@@ -208,13 +209,16 @@ jay_mux_gh_tab() {
 
 # What `jay --print-layout` prints: the tmux commands that make the hub window.
 jay_mux_print_layout() {
-  local list middle right
-  read -r list middle right < <(jay_hub_widths)
+  local list middle right cols
+  cols=$(stty size </dev/tty 2>/dev/null | cut -d' ' -f2)
+  [[ "${cols:-}" =~ ^[0-9]+$ ]] || cols=200
+  read -r list middle right < <(jay_hub_widths "$cols")
   cat <<EOF
-# tmux -L $JAY_TMUX_SOCKET -f $JAY_TMUX_CONF
-new-session -d -s $JAY_SESSION -n hub $HOME/.local/bin/jay-sidebar           # list, $list%
-split-window -h -l $((100 - list))% $HOME/.local/bin/jay-pane agent          # agent, $middle%
-split-window -h -l $((right * 100 / (middle + right)))% $HOME/.local/bin/jay-pane review   # review, $right%
+# tmux -L $JAY_TMUX_SOCKET -f $JAY_TMUX_CONF, a window $cols columns wide
+new-session -d -s $JAY_SESSION -n hub -x $cols $HOME/.local/bin/jay-sidebar   # list, $list columns
+split-window -h -l $((cols - list - 1)) $HOME/.local/bin/jay-pane agent
+split-window -h -l $((right - 1)) $HOME/.local/bin/jay-pane review
+set-option -g @jay_list_cols $(jay_list_cols)   # the window-resized hook keeps the list at it
 # each of the three: set-option -p @jay_role list|agent|review, remain-on-exit on, and a
 # pane-died hook: run-shell -b -d 1 -C 'respawn-pane -t #{hook_pane}'
 EOF
@@ -350,12 +354,25 @@ jay_mux_resize_list() {
   _jay_tm resize-pane -t "$self" -x "$w" >/dev/null 2>&1
 }
 
-jay_mux_list_share() {
-  local self w ww
+# The caller's pane's width and its window's, in columns.
+jay_mux_list_width() {
+  local self
   self=$(jay_mux_self)
   [[ -n "$self" ]] || return 0
-  read -r w ww < <(_jay_tm display-message -p -t "$self" '#{pane_width} #{window_width}')
-  [[ -n "${ww:-}" && "$ww" -gt 0 ]] && printf '%s\n' "$(((w * 100 + ww / 2) / ww))"
+  _jay_tm display-message -p -t "$self" '#{pane_width} #{window_width}' 2>/dev/null
+}
+
+# The list $1 columns wide (at most 60 % of the window). @jay_list_cols keeps it for the
+# window-resized hook (config/tmux/jay.conf), which puts the list back at it when the window
+# changes its size.
+jay_mux_fit_list() {
+  local cols=$1 list w
+  _jay_tm set-option -g @jay_list_cols "$cols" >/dev/null 2>&1
+  read -r list w < <(_jay_tm list-panes -t "=$JAY_SESSION:hub" -F '#{@jay_role} #{pane_id} #{window_width}' 2>/dev/null \
+    | awk '$1 == "list" { print $2, $3; exit }')
+  [[ -n "${w:-}" ]] || return 0
+  ((cols > w * 3 / 5)) && cols=$((w * 3 / 5))
+  _jay_tm resize-pane -t "$list" -x "$cols" >/dev/null 2>&1
 }
 
 # The launcher runs in a popup of a fixed size.
@@ -514,21 +531,22 @@ jay_mux_hide_review() {
   fi
   read -r cols total < <(_jay_tm display-message -p -t "$review" '#{pane_width} #{window_width}' 2>/dev/null)
   [[ -n "${total:-}" ]] || return 0
-  printf '%s %s\n' "$((cols * 100 / total))" "$files" >"$JAY_HIDDEN"
+  printf '%s %s %s %s\n' "$((cols * 100 / total))" "$files" "$cols" "$total" >"$JAY_HIDDEN"
   _jay_tm break-pane -d -s "$review" -n _review \; set-option -g @jay_hidden 1 >/dev/null 2>&1
 }
 
-# Show the hidden review (pane $1) right of the agent pane, at its old share. --focus ($2): the
-# focus goes to review; else it stays.
+# Show the hidden review (pane $1) right of the agent pane, at its old width (its old share
+# when the window has another width now). --focus ($2): the focus goes to review; else it stays.
 jay_mux_unhide_review() {
-  local review=$1 share files agent total
+  local review=$1 share files cols was agent total
   jay_mux_review_hidden "$review" >/dev/null || { rm -f "$JAY_HIDDEN"; return 0; }
-  read -r share files <"$JAY_HIDDEN" 2>/dev/null
+  read -r share files cols was <"$JAY_HIDDEN" 2>/dev/null
   [[ "${share:-}" =~ ^[0-9]+$ ]] || share=35
   IFS=$'\t' read -r agent _ < <(jay_hub_role agent) || return 0
   total=$(_jay_tm display-message -p -t "$agent" '#{window_width}' 2>/dev/null)
   [[ -n "$total" ]] || return 0
-  _jay_tm join-pane -d -h -l "$((total * share / 100))" -s "$review" -t "$agent" \; set-option -gu @jay_hidden >/dev/null 2>&1
+  [[ "${cols:-}" =~ ^[0-9]+$ && "${was:-}" == "$total" ]] || cols=$((total * share / 100))
+  _jay_tm join-pane -d -h -l "$cols" -s "$review" -t "$agent" \; set-option -gu @jay_hidden >/dev/null 2>&1
   rm -f "$JAY_HIDDEN"
   [[ "${files:-0}" == 1 ]] && jay_hub_show_files
   [[ "${2:-}" == --focus ]] && jay_mux_focus review

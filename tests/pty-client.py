@@ -1,11 +1,12 @@
 #!/usr/bin/python3 -I
 # pty-client.py OUT COLS ROWS CMD...: run CMD (a terminal client: jay, tmux attach, zellij) in a
 # pty of COLS x ROWS and write its output to OUT. Keys to type: lines of hex appended to OUT.keys
-# ("0731" is Ctrl g, then 1). Runs until killed or CMD ends.
+# ("0731" is Ctrl g, then 1); a line "size COLS ROWS" there gives the pty a new size. Runs until
+# killed or CMD ends.
 # PTY_GHOSTTY=<secs>: answer the terminal queries in the output as Ghostty 1.3.2 does (XTVERSION,
 # DA1, DA2, kitty graphics, colors, sizes). The first query of each kind at once (tmux's own, at
 # the start), each later one <secs> late. The answers go to OUT.answers too.
-import binascii, fcntl, os, pty, re, select, struct, sys, termios, time
+import binascii, fcntl, os, pty, re, select, signal, struct, sys, termios, time
 
 out, cols, rows, cmd = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4:]
 late = os.environ.get("PTY_GHOSTTY")
@@ -82,6 +83,11 @@ with open(out, "ab") as f:
         pending = [p for p in pending if p[0] > now]
         lines = open(keys).read().splitlines()
         for line in lines[sent:]:
+            if line.startswith("size "):
+                cols, rows = (int(n) for n in line.split()[1:3])
+                fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+                os.kill(pid, signal.SIGWINCH)
+                continue
             os.write(fd, binascii.unhexlify(line.strip()))
             time.sleep(0.05)
         sent = len(lines)

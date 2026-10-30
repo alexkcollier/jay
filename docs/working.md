@@ -440,8 +440,14 @@ its process: the path of the binary under Claude's `claude bg-pty-host` process.
 - `a` hides the idle repos (dim rows), and shows them again. A last row says how many are
   hidden. The main checkout row of a repo stays while the repo shows other rows, also when it is
   idle: the repo's home sign, git state and `n` are on it.
-- `-` / `+` (or `=`, `+` without Shift) make the list narrower or wider. A mouse drag on the
-  border works too. The hub keeps the width (`sidebar.pct`, 10–60 %) for its next fresh start.
+- `-` / `+` (or `=`, `+` without Shift) make the list narrower or wider (by 5 % of the window). A
+  mouse drag on the border works too. The hub keeps the width in columns (`sidebar.cols`, at least
+  24, 44 at first), also for its next fresh start. When the window changes its size, the list
+  keeps its columns and only agent and review change; on a small window the list takes at most
+  60 % of it. In tmux the list is back at its columns at once; zellij has no hook for that and
+  resizes in steps of 5 % of the window, so its list comes back within a few seconds, to about
+  its columns. A drag less than about 4 s after a change of the window's size can be undone: drag
+  again. A `sidebar.pct` of an older version becomes columns once.
 - `r` reloads the list: fresh git signs now, and the list starts again as the newest version of
   `jay-sidebar` (new keys apply). Else git signs update every 30 s.
 

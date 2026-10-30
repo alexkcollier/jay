@@ -62,7 +62,8 @@ config/
   lazygit/diff-*.yml           another diff renderer first (JAY_REVIEW_DIFF=difft, plain)
   tmux/jay.conf                the tmux hub's own config (~/.config/jay/tmux.conf): Ctrl g keys,
                                one status line at the top, mouse, extended keys; stops Alt+P,
-                               Alt+O and the terminal's replies (passthrough off)
+                               Alt+O and the terminal's replies (passthrough off); the list
+                               keeps its columns when the window changes its size
   tuicr/config.toml            q_quits: q in review goes back
   worktrunk/config.toml        hub settings to copy into ~: worktree path <repo>.<branch>, Task column, task alias
   yazi/keymap.toml             hub-only yazi keys: e, O, W

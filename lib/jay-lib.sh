@@ -563,7 +563,8 @@ JAY_SESSION=${JAY_SESSION:-jay}
 #   panes    jay_mux_panes (JSON lines), jay_mux_self, jay_mux_rename, jay_mux_read, jay_mux_type,
 #            jay_mux_close, jay_mux_cover / jay_mux_uncover (a pane over a pane and back),
 #            jay_mux_wait_shown, jay_mux_wait_gone, jay_mux_focus <list|agent|review>,
-#            jay_mux_resize_list, jay_mux_list_share, jay_mux_float_height, jay_mux_popup_text
+#            jay_mux_resize_list, jay_mux_list_width, jay_mux_fit_list <columns>,
+#            jay_mux_float_height, jay_mux_popup_text
 #   review   jay_mux_hide_review, jay_mux_unhide_review, jay_mux_review_hidden, jay_mux_rehide,
 #            jay_mux_keep_hidden
 #   tabs     jay_mux_tabs (JSON lines), jay_mux_tab_id, jay_mux_active_tab, jay_mux_tab_go,
@@ -643,14 +644,47 @@ jay_without_claude() {
   )
 }
 
-# The hub's columns in % (list, middle, right): the list at its saved share (10 to 60, else 22),
-# the rest split 43:35.
+# The list's width in columns: it stays when the window changes its size. $JAY_STATE/sidebar.cols
+# holds it (a drag of its border, - and +; jay-sidebar's tick saves it), at least JAY_LIST_MIN.
+# Without it: sidebar.pct of an older jay (the list's share in %), changed once to columns of
+# window width $1, else JAY_LIST_COLS. With window width $1, at most 60 % of it: agent and
+# review keep room on a small window.
+JAY_LIST_COLS=44
+JAY_LIST_MIN=24
+jay_list_cols() {
+  local w=${1:-} cols pct
+  cols=$(cat "$JAY_STATE/sidebar.cols" 2>/dev/null || true)
+  if ! [[ "$cols" =~ ^[0-9]+$ ]]; then
+    pct=$(cat "$JAY_STATE/sidebar.pct" 2>/dev/null || true)
+    if [[ "$w" =~ ^[0-9]+$ && "$pct" =~ ^[0-9]+$ ]] && ((pct >= 10 && pct <= 60)); then
+      jay_list_save "$((w * pct / 100))"
+      rm -f "$JAY_STATE/sidebar.pct"
+      cols=$(cat "$JAY_STATE/sidebar.cols" 2>/dev/null || true)
+    fi
+  fi
+  [[ "$cols" =~ ^[0-9]+$ ]] || cols=$JAY_LIST_COLS
+  ((cols >= JAY_LIST_MIN)) || cols=$JAY_LIST_MIN
+  [[ "$w" =~ ^[0-9]+$ ]] && ((w > 0 && cols > w * 3 / 5)) && cols=$((w * 3 / 5))
+  printf '%s\n' "$cols"
+}
+
+# Save $1 as the list's width (columns, at least JAY_LIST_MIN).
+jay_list_save() {
+  local cols=$1
+  [[ "$cols" =~ ^[0-9]+$ ]] || return 0
+  ((cols >= JAY_LIST_MIN)) || cols=$JAY_LIST_MIN
+  jay_state_dir
+  printf '%s\n' "$cols" >"$JAY_STATE/sidebar.cols.$$" && mv "$JAY_STATE/sidebar.cols.$$" "$JAY_STATE/sidebar.cols"
+}
+
+# The hub's columns in a window $1 columns wide (list, middle, right; their sum is $1): the list
+# at its saved width (jay_list_cols), the rest split 43:35. No width: 200.
 jay_hub_widths() {
-  local list middle
-  list=$(cat "$JAY_STATE/sidebar.pct" 2>/dev/null || true)
-  [[ "$list" =~ ^[0-9]+$ ]] && ((list >= 10 && list <= 60)) || list=22
-  middle=$(((100 - list) * 43 / 78))
-  printf '%s %s %s\n' "$list" "$middle" "$((100 - list - middle))"
+  local w=${1:-} list middle
+  [[ "$w" =~ ^[0-9]+$ ]] && ((w > 0)) || w=200
+  list=$(jay_list_cols "$w")
+  middle=$(((w - list) * 43 / 78))
+  printf '%s %s %s\n' "$list" "$middle" "$((w - list - middle))"
 }
 
 # --- The status line: one line at the top of each tab, the same in both hubs ---

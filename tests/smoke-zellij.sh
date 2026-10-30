@@ -147,6 +147,39 @@ list=$(pane_by_title worktrees)
 within "jay: rows" 15 screen_has "$list" fix-login
 ok "jay: at its width" near "$(share_of "$list")" "$share"
 
+# A new window width: zellij scales the panes, and the list's tick puts the list back near its
+# columns (zellij resizes in steps of 5 % of the tab: within 3 % of it). Nothing is saved.
+cols_of() { hub_panes | awk -v p="$1" '$1 == p { print $4 }'; }
+tab_is() { [[ "$(hub_panes | awk '{ w = $3 + $4; if (w > t) t = w } END { print t }')" == "$1" ]]; }
+cols_near() { # cols_near PANE COLS TAB_WIDTH
+  local c t=$(($3 * 3 / 100 + 1))
+  c=$(cols_of "$1")
+  ((c >= $2 - t && c <= $2 + t))
+}
+saved=$(cat "$HOME/.local/state/jay/sidebar.cols" 2>/dev/null || echo none)
+want=$(cat "$HOME/.local/state/jay/sidebar.cols" 2>/dev/null || echo 44)
+ok "window at 200: the list near its $want columns" cols_near "$list" "$want" 200
+for w in 150 250 200; do
+  key "size $w 50"
+  within "window at $w: the tab" 5 tab_is "$w"
+  within "window at $w: the list near its $want columns" 12 cols_near "$list" "$want" "$w"
+done
+sleep 5 # a tick
+eq "window sizes: the saved columns stay" "$saved" "$(cat "$HOME/.local/state/jay/sidebar.cols" 2>/dev/null || echo none)"
+# - and + in the list: its new columns are saved.
+saved_is_list() { [[ "$(cat "$HOME/.local/state/jay/sidebar.cols" 2>/dev/null)" == "$(cols_of "$list")" ]]; }
+narrower() { (($(cols_of "$list") < $1)); }
+wider() { (($(cols_of "$list") > $1)); }
+z move-focus left; z move-focus left
+before=$(cols_of "$list")
+key 2d
+within "list -: narrower" 3 narrower "$before"
+within "list -: saved" 10 saved_is_list
+narrow=$(cols_of "$list")
+key 2b
+within "list +: wider" 3 wider "$narrow"
+within "list +: saved" 10 saved_is_list
+
 # The agent and review: closed, or their program killed.
 z close-pane --pane-id "$agent"
 within "agent closed" 3 cols_are "worktrees review "

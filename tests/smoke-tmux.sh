@@ -298,6 +298,11 @@ ok "list h l: the list stays" screen_has "$list" fix-login
 key 2b; within "list +: wider" 2 width_is "$w0"
 key 2d; within "list -: narrower again" 2 width_is "$w1"
 key 3d; within "list =: wider, as +" 2 width_is "$w0"
+key 2d; within "list -: narrower, for the save" 2 width_is "$w1"
+within "list -: the list's tick saves its columns" 10 bash -c "[[ \$(cat '$HOME/.local/state/jay/sidebar.cols' 2>/dev/null) == $w1 ]]"
+within "list -: the hook's columns too" 3 bash -c "[[ \$(tmux -L $SOCK show -gv @jay_list_cols) == $w1 ]]"
+key 2b; within "list +: wider again" 2 width_is "$w0"
+within "list +: saved" 10 bash -c "[[ \$(cat '$HOME/.local/state/jay/sidebar.cols' 2>/dev/null) == $w0 ]]"
 
 # The list's ticks (every 4 s) reload only when the rows change: fzf drops the keys that come
 # during a reload (--track with --id-nth). With no change, no reload over two ticks, and each key
@@ -421,6 +426,46 @@ for cols in 140 80 64; do
   kill "$extra" 2>/dev/null
   wait "$extra" 2>/dev/null
 done
+# The list keeps its columns when the window changes its size (the window-resized hook), at most
+# 60 % of the window; a drag of its border and - save its new columns (the list's tick).
+list_w() { tm display -p -t "$list" '#{pane_width}'; }
+list_is() { [[ "$(list_w)" == "$1" ]]; }
+saved_is() { [[ "$(cat "$HOME/.local/state/jay/sidebar.cols" 2>/dev/null)" == "$1" ]]; }
+hook_is() { [[ "$(tm show -gv @jay_list_cols)" == "$1" ]]; }
+window_is() { [[ "$(tm display -p -t "$hubw" '#{window_width}')" == "$1" ]]; }
+with_client() { # with_client COLS LIST_COLS: a second client COLS wide, the list then LIST_COLS wide
+  /usr/bin/python3 -I "$REPO/tests/pty-client.py" "$TMP/client-w$1.out" "$1" 40 tmux -L "$SOCK" attach -t =jay &
+  extra=$!
+  within "window at $1 columns" 5 window_is "$1"
+  within "window at $1 columns: the list $2 wide" 3 list_is "$2"
+  kill "$extra" 2>/dev/null
+  wait "$extra" 2>/dev/null
+}
+within "window at 200 columns again" 5 window_is 200
+within "list: its default columns" 3 list_is 44
+eq "list: the columns for the hook" 44 "$(tm show -gv @jay_list_cols)"
+saved=$(cat "$HOME/.local/state/jay/sidebar.cols" 2>/dev/null || echo none)
+with_client 150 44
+with_client 64 38
+with_client 230 44
+within "window at 200 again: the list 44 wide" 5 list_is 44
+sleep 5 # a tick
+eq "window sizes: the saved columns stay" "$saved" "$(cat "$HOME/.local/state/jay/sidebar.cols" 2>/dev/null || echo none)"
+tm select-window -t "$hubw"
+focused=$(active_pane)
+read -r top left < <(tm display -p -t "$list" '#{pane_top} #{pane_left}')
+# A drag of the list's right border (column 45 of the screen) to column 55.
+y=$((top + 8))
+key "$(printf '\e[<0;45;%dM\e[<32;50;%dM\e[<32;55;%dM\e[<0;55;%dm' "$y" "$y" "$y" "$y" | xxd -p | tr -d '\n')"
+within "a drag of its border: the list wider" 3 list_is 54
+within "a drag: the list's tick saves its columns" 10 saved_is 54
+within "a drag: the hook's columns too" 3 hook_is 54
+with_client 150 54
+within "window at 200 again: the list 54 wide" 5 list_is 54
+key 0731; within "Ctrl g 1: the list" 2 is_pane "$list"
+key 2d; within "-: the list narrower by 5 % of the window" 3 list_is 44
+within "-: saved" 10 saved_is 44
+tm select-pane -t "$focused"
 eq "tasks window: console and task side by side, as zellij's tab" "1 1" \
   "$(tm list-panes -t "$wid" -F '#{pane_top}' | sort -u | wc -l | tr -d ' ') $(tm list-panes -t "$wid" -F '#{pane_left}' | grep -c '^0$')"
 eq "pane titles centered in the border, as zellij's frames" '#[align=centre] #{pane_title} ' "$(tm show -gv pane-border-format)"
@@ -525,14 +570,14 @@ pkill -9 -P "$pid"; kill -9 "$pid"
 within "list program killed: the pane starts it again" 8 respawned "$list" "$pid"
 within "list program killed: rows again" 10 screen_has "$list" fix-login
 eq "list program killed: its title" worktrees "$(tm display -p -t "$list" '#{pane_title}')"
-share=$(cat "$HOME/.local/state/jay/sidebar.pct" 2>/dev/null || echo 22)
+saved=$(cat "$HOME/.local/state/jay/sidebar.cols" 2>/dev/null || echo 44)
 tm kill-pane -t "$list"
 key 0731
 within "list closed, Ctrl g 1: a list again, left" 5 cols_are "list agent review "
 list=$(pane_of list)
 within "Ctrl g 1: the focus in the new list" 2 is_pane "$list"
 eq "the new list: its title" worktrees "$(tm display -p -t "$list" '#{pane_title}')"
-ok "the new list: its saved width" width_near "$list" $((200 * share / 100))
+ok "the new list: its saved width" width_near "$list" "$saved"
 within "the new list: rows" 15 screen_has "$list" fix-login
 tm kill-pane -t "$list"
 jay >/dev/null 2>&1

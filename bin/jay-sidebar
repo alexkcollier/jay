@@ -1194,23 +1194,30 @@ send_tasks() {
   (jay_mux_bar tasks "$tasks" &)
 }
 
-# Save the list's share of the hub's width when it changes (mouse drag, - and +), so `jay`
-# starts it at that width.
-last_cols=""
-remember_width() {
-  local cols share
-  cols=$(stty size </dev/tty 2>/dev/null | cut -d' ' -f2)
-  [[ -n "$cols" && "$cols" != "$last_cols" ]] || return 0
-  last_cols=$cols
-  share=$(jay_mux_list_share)
-  [[ -n "$share" ]] && printf '%s\n' "$share" >"$STATE/sidebar.pct"
+# The list keeps its width in columns (jay_list_cols). A new width of the list in a window of the
+# same width is the user's (mouse drag, - and +): save it. A new window width (tmux and zellij
+# scale the panes): put the list back at its saved width; in tmux the window-resized hook did
+# that already. The first tick puts it there too (a list that started again, an older
+# sidebar.pct).
+last_win="" last_list=""
+keep_width() {
+  local list win
+  read -r list win < <(jay_mux_list_width)
+  [[ "${list:-}" =~ ^[0-9]+$ && "${win:-}" =~ ^[0-9]+$ ]] || return 0
+  if [[ "$win" == "$last_win" ]]; then
+    [[ "$list" == "$last_list" ]] && return 0
+    jay_list_save "$list"
+  fi
+  jay_list_cols "$win" >/dev/null # an older sidebar.pct becomes columns of this window
+  jay_mux_fit_list "$(jay_list_cols)"
+  read -r last_list last_win < <(jay_mux_list_width)
 }
 
 (
   tick=0 tick_rows="$JAY_SIDEBAR_ROWS.tick" rows_pid=""
   while sleep 3; do
     tick=$((tick + 1))
-    jay_in_hub && remember_width
+    jay_in_hub && keep_width
     before=$(cat "$JAY_SIDEBAR_COUNT" 2>/dev/null)
     # A reload only when the rows changed: while a reload runs, fzf drops the keys (--track with
     # --id-nth blocks its input). The rows from the newest jay-sidebar, as fzf's reloads have, and
