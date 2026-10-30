@@ -129,7 +129,8 @@ touch "$STUB/keep-branch"
 git -C "$shop" remote add slow "ssh://example.invalid/shop.git"
 git -C "$shop" update-ref refs/remotes/slow/someone/acme-200-keep someone/acme-200-keep
 git -C "$shop" config branch.someone/acme-200-keep.remote slow
-export GIT_SSH_COMMAND='sleep 31.7;:' JAY_FETCH_TIMEOUT=6
+# The sleep names this test's pid: the same test can run at the same time.
+export GIT_SSH_COMMAND="sleep 31.$$;:" JAY_FETCH_TIMEOUT=6
 start=$SECONDS
 tty_run y jay-sidebar --remove wt "$keep" >/dev/null
 took=$((SECONDS - start))
@@ -140,7 +141,7 @@ ok "keep: its backup stays with it" git -C "$shop" rev-parse -q --verify refs/he
 ok "keep: the timeout ends it" wait_log "git ls-remote slow failed: no answer in 6 s"
 ok "keep: the ref stays" git -C "$shop" rev-parse -q --verify refs/remotes/slow/someone/acme-200-keep
 sleep 0.3
-eq "keep: no ssh is left" "" "$(pgrep -f 'sleep 31.7')"
+eq "keep: no ssh is left" "" "$(pgrep -f "sleep 31\\.$$([^0-9]|\$)")"
 unset GIT_SSH_COMMAND JAY_FETCH_TIMEOUT
 
 # jay_drop_gone_upstream: the remote still has the branch: the ref stays; not a remote ref: nothing.
