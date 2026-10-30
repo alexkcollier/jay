@@ -1198,7 +1198,8 @@ send_tasks() {
 # same width is the user's (mouse drag, - and +): save it. A new window width (tmux and zellij
 # scale the panes): put the list back at its saved width; in tmux the window-resized hook did
 # that already. The first tick puts it there too (a list that started again, an older
-# sidebar.pct).
+# sidebar.pct). The widths to compare with are the fit's own last look: a change after it (a new
+# window size, a drag) shows at the next tick, also one that came while the fit ran.
 last_win="" last_list=""
 keep_width() {
   local list win
@@ -1209,8 +1210,7 @@ keep_width() {
     jay_list_save "$list"
   fi
   jay_list_cols "$win" >/dev/null # an older sidebar.pct becomes columns of this window
-  jay_mux_fit_list "$(jay_list_cols)"
-  read -r last_list last_win < <(jay_mux_list_width)
+  read -r last_list last_win < <(jay_mux_fit_list "$(jay_list_cols)")
 }
 
 (

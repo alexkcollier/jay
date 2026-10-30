@@ -221,12 +221,12 @@ rm -f "$JAY_STATE/sidebar.pct"
 # 5 % of the tab, so a fit stops within 3 %: 6 columns).
 eq "list width: list and tab" "40 200" "$(ZELLIJ_PANE_ID=1 jay_mux_list_width)"
 reset
-jay_mux_fit_list 46
+eq "fit: prints the list's width and the tab's at its last look" "40 200" "$(jay_mux_fit_list 46)"
 ok "fit: within 3 % of the tab, no resize" bash -c "! grep -q 'action resize' '$STUB/zellij.calls'"
-jay_mux_fit_list 60
+jay_mux_fit_list 60 >/dev/null
 has "fit: wider" "-s jaytest action resize -p terminal_1 increase right" "$(calls)"
 reset
-jay_mux_fit_list 25
+jay_mux_fit_list 25 >/dev/null
 has "fit: narrower" "-s jaytest action resize -p terminal_1 decrease right" "$(calls)"
 
 # Layout: the list at its saved columns, as % of the session's width (200 in the stub).

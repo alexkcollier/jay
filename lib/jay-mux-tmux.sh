@@ -364,7 +364,7 @@ jay_mux_list_width() {
 
 # The list $1 columns wide (at most 60 % of the window). @jay_list_cols keeps it for the
 # window-resized hook (config/tmux/jay.conf), which puts the list back at it when the window
-# changes its size.
+# changes its size. Prints the list's width and the window's after it, as jay_mux_list_width.
 jay_mux_fit_list() {
   local cols=$1 list w
   _jay_tm set-option -g @jay_list_cols "$cols" >/dev/null 2>&1
@@ -373,6 +373,7 @@ jay_mux_fit_list() {
   [[ -n "${w:-}" ]] || return 0
   ((cols > w * 3 / 5)) && cols=$((w * 3 / 5))
   _jay_tm resize-pane -t "$list" -x "$cols" >/dev/null 2>&1
+  _jay_tm display-message -p -t "$list" '#{pane_width} #{window_width}' 2>/dev/null
 }
 
 # The launcher runs in a popup of a fixed size.

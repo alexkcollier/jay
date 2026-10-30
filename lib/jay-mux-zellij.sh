@@ -144,23 +144,26 @@ _jay_zj_split() {
 
 # Pane $1 $2 columns wide, at its right border, as near as zellij allows: it resizes in steps of
 # 5 % of the tab's width, so the pane ends within 3 % of the tab of $2 (a step from outside that
-# lands inside it, never over it).
+# lands inside it, never over it). At most 10 steps. --print ($3): print the pane's width and the
+# tab's at the last look (after the last step).
 _jay_zj_fit() {
   local i cols total
-  for i in 1 2 3 4 5 6 7 8 9 10; do
+  for i in 0 1 2 3 4 5 6 7 8 9 10; do
     read -r cols total < <(jay_mux_panes | jq -rs --arg p "$1" '
       (map(select(.pane == $p)) | first) as $r | select($r != null)
       | [$r.cols, ([.[] | select(.tab_id == $r.tab_id and (.floating | not)) | .x + .cols] | max)]
       | @tsv')
     [[ -n "${total:-}" ]] || return 0
-    if (((cols - $2) * 100 > total * 3)); then
+    if ((i < 10 && (cols - $2) * 100 > total * 3)); then
       zellij -s "$JAY_SESSION" action resize -p "$1" decrease right >/dev/null 2>&1
-    elif ((($2 - cols) * 100 > total * 3)); then
+    elif ((i < 10 && ($2 - cols) * 100 > total * 3)); then
       zellij -s "$JAY_SESSION" action resize -p "$1" increase right >/dev/null 2>&1
     else
-      return 0
+      break
     fi
   done
+  [[ "${3:-}" == --print ]] && printf '%s %s\n' "$cols" "$total"
+  return 0
 }
 
 # What `jay --print-layout` prints.
@@ -284,6 +287,7 @@ jay_mux_list_width() {
 # The list $1 columns wide (at most 60 % of the tab), within 3 % of the tab (_jay_zj_fit).
 # zellij has no hook for a new window size: the list's tick calls this when the tab's width
 # changed. (A pane of a fixed size in the layout keeps its columns, but then nothing can resize it.)
+# Prints the list's width and the tab's at the fit's last look, as jay_mux_list_width.
 jay_mux_fit_list() {
   local cols=$1 list w
   read -r list w < <(jay_mux_panes | jq -rs '
@@ -292,7 +296,7 @@ jay_mux_fit_list() {
     | select(. != null) | "\(.pane) \($w)"')
   [[ -n "${w:-}" ]] || return 0
   ((cols > w * 3 / 5)) && cols=$((w * 3 / 5))
-  _jay_zj_fit "$list" "$cols"
+  _jay_zj_fit "$list" "$cols" --print
 }
 
 # Set the height of the caller's floating pane $1 (the launcher) to $2 rows.
