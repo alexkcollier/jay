@@ -135,8 +135,8 @@ starting it again in its folder forgets it too.
 | `jay run ls [--json]` | the tasks: pane, tab, name, state (running, idle, exited; gone after a hub restart), ports, worktree, command; in JSON also `agent` (who started it) and, for a gone task, `start` |
 | `jay run log <task> [-n lines \| --all]` | the pane's text (default: the last 100 lines) |
 | `jay run wait <task> [-t s]` | wait until the task listens (default 120 s); print its URLs, or its last lines when it ends |
-| `jay run stop <task>` | Ctrl-C to the command (TERM after 10 s, KILL after 5 s more); a pane that `jay run` started closes, a shell stays |
-| `jay run restart <task>` | stop and start again in the same pane (panes that `jay run` started) |
+| `jay run stop <task>` | Ctrl-C to the command (TERM after 10 s, KILL after 5 s more); a pane that `jay run` started closes, a shell stays. In a pane that `jay run` started, it also waits for the processes that ran under the command (turbo's dev servers can end after turbo) |
+| `jay run restart <task>` | stop as `stop` does, then start again in the same pane (panes that `jay run` started): the new run starts only when all of the old one ended |
 | `jay run port <n>` | who listens on a port |
 
 `<task>` is a name, a pane id (`terminal_3` or `3`), or a part of the command, folder or

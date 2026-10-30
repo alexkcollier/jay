@@ -64,11 +64,13 @@ short_name() {
 
 # The command runs in the foreground, in the pane's process group (no job control here), so
 # Ctrl-C reaches it and all its children; this loop ignores it and goes on. `jay run restart`
-# writes <pid>.again and stops the command from outside; the loop then starts it again.
+# writes <pid>.stopping and <pid>.again and stops the command from outside; the loop then waits
+# until the restart has stopped all of it (<pid>.stopping goes, at most 30 s) and starts it
+# again. Else the restart, which waits for this loop's children to end, would stop the new run.
 # The command runs as you would type it: zsh and bash read your rc file (aliases, mise), with
 # job control off (+m), so the command stays in this group. JAY_TASK_SHELL overrides it.
 run_pane() {
-  local cmd=$1 rc r var line sh=()
+  local cmd=$1 rc r var line i sh=()
   for var in $(compgen -e | grep -E '^(CLAUDE|ANTHROPIC)'); do unset "$var"; done
   if [[ -n "${JAY_TASK_SHELL:-}" ]]; then
     read -ra sh <<<"$JAY_TASK_SHELL"
@@ -81,7 +83,8 @@ run_pane() {
   mkdir -p "$STATE_DIR"
   trap ':' INT
   while :; do
-    rm -f "$STATE_DIR/$$.exit" "$STATE_DIR/$$.again"
+    for i in $(seq 300); do [[ -f "$STATE_DIR/$$.stopping" ]] || break; sleep 0.1; done
+    rm -f "$STATE_DIR/$$.exit" "$STATE_DIR/$$.again" "$STATE_DIR/$$.stopping"
     printf '\e[2m$ %s\e[0m\n' "$cmd"
     "${sh[@]}" "$cmd"
     rc=$?
@@ -100,17 +103,36 @@ run_pane() {
   done
 }
 
+# The pids of the processes under pid $1, one per line.
+descendants() {
+  local child IFS=$' \t\n'
+  for child in $(pgrep -P "$1"); do
+    printf '%s\n' "$child"
+    descendants "$child"
+  done
+}
+
 # Stop a command: Ctrl-C (SIGINT) to process group $1 first, so docker compose stops its
 # containers; after 10 s TERM, after 5 s more KILL. With $2 (the pid of a jay run pane, which is
-# in that group and ignores Ctrl-C), only its children are stopped. Fails when they still run.
+# in that group and ignores Ctrl-C), only its children are stopped, and the processes under them
+# now: turbo's dev servers, on ptys of their own, can stop after turbo. Fails when they still run.
 stop_group() {
-  local group=$1 keep=${2:-} step
-  alive() { if [[ -n "$keep" ]]; then pgrep -P "$keep" >/dev/null; else kill -0 -- "-$group" 2>/dev/null; fi; }
+  local group=$1 keep=${2:-} step tree=""
+  [[ -n "$keep" ]] && tree=$(descendants "$keep")
+  alive() {
+    local p
+    if [[ -n "$keep" ]]; then
+      pgrep -P "$keep" >/dev/null && return 0
+      for p in $tree; do kill -0 "$p" 2>/dev/null && return 0; done
+      return 1
+    fi
+    kill -0 -- "-$group" 2>/dev/null
+  }
   for step in INT TERM KILL; do
     case $step in
       INT) kill -INT -- "-$group" 2>/dev/null ;;
-      TERM) if [[ -n "$keep" ]]; then jay_kill_children "$keep"; else kill -TERM -- "-$group" 2>/dev/null; fi ;;
-      KILL) if [[ -n "$keep" ]]; then pkill -KILL -P "$keep"; else kill -KILL -- "-$group" 2>/dev/null; fi ;;
+      TERM) if [[ -n "$keep" ]]; then jay_kill_children "$keep"; kill -TERM $tree 2>/dev/null; else kill -TERM -- "-$group" 2>/dev/null; fi ;;
+      KILL) if [[ -n "$keep" ]]; then pkill -KILL -P "$keep"; kill -KILL $tree 2>/dev/null; else kill -KILL -- "-$group" 2>/dev/null; fi ;;
     esac
     for _ in $(seq $([[ $step == INT ]] && echo 100 || echo 50)); do alive || return 0; sleep 0.1; done
   done
@@ -806,8 +828,14 @@ cmd_restart() {
   fi
   [[ -n "$root" ]] || die "$name: its pane does not run"
   mkdir -p "$STATE_DIR"
+  # The pane loop starts the command again only after .stopping goes (see run_pane).
+  : >"$STATE_DIR/$root.stopping"
   : >"$STATE_DIR/$root.again"
-  stop_group "$root" "$root" || die "$name: still runs after Ctrl-C, TERM and KILL"
+  if ! stop_group "$root" "$root"; then
+    rm -f "$STATE_DIR/$root.stopping" "$STATE_DIR/$root.again"
+    die "$name: still runs after Ctrl-C, TERM and KILL"
+  fi
+  rm -f "$STATE_DIR/$root.stopping"
   printf '%s: restarted in %s\n' "$name" "$pane"
 }
 

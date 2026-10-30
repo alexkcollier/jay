@@ -33,7 +33,7 @@ In `~/.local/state/jay/`:
 | `respawn.stamp` | time of the list's last respawn step (at most one each minute) |
 | `claude-version` | the installed Claude Code version, under the binary's path and mtime (`claude --version` runs again after an update) |
 | `notify.log` | one line per notify hook call, and the output of notice clicks |
-| `tasks/<pid>.exit`, `<pid>.again` | the exit code of a `jay run` pane whose command ended; a restart request (no output is stored) |
+| `tasks/<pid>.exit`, `<pid>.again`, `<pid>.stopping` | the exit code of a `jay run` pane whose command ended; a restart request; a restart that still stops the old run (the pane waits for it, at most 30 s; no output is stored) |
 | `tasks/started` | a record of each task that `jay run` started (by hub server and pane id): who started it and its command line; after a hub restart, its tasks are `gone` for a day |
 | `tasks/zdotdir/` | the launcher's zsh startup files: they load yours, then add its Enter |
 | `tasks/console-<pane>.line` | the line the launcher typed into a console, while it runs (its name in the bar, `restart`) |
