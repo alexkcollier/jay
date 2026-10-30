@@ -113,6 +113,7 @@ printf 'list %%0 200\nagent %%1 200\n' >"$STUB/roles.txt"
 reset; jay_mux_fit_list 44
 has "fit: the columns for the hook" "set-option -g @jay_list_cols 44" "$(calls)"
 has "fit: the list pane" "resize-pane -t %0 -x 44" "$(calls)"
+has "fit: then the widths it left" "display-message -p -t %0 #{pane_width} #{window_width}" "$(calls | sed -n '/resize-pane/,$p')"
 reset; jay_mux_fit_list 150
 has "fit: the hook keeps the saved columns" "set-option -g @jay_list_cols 150" "$(calls)"
 has "fit: at most 60 % of the window" "resize-pane -t %0 -x 120" "$(calls)"
