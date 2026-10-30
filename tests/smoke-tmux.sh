@@ -370,6 +370,7 @@ within "hide: the agent takes its width" 2 bash -c "(( \$(tmux -L $SOCK display 
 key 0776
 within "show: review back right of the agent" 3 is_at "$review" hub.2
 eq "show: its old width" "$before" "$(tm display -p -t "$review" '#{pane_width}')"
+within "show: the focus on review" 2 is_pane "$review"
 
 # Tasks: a window per worktree, the bar (sign, project, name; the picked worktree bright, no
 # ports), the note of tasks elsewhere, the pane titles with ports, the picker.

@@ -30,7 +30,7 @@
 # Ctrl-Q, Ctrl-D) do nothing, and when fzf ends anyway (killed, failed) the list starts again.
 # jay-sidebar --files: show files over review (e in the review pane, through jay-keys).
 # jay-sidebar --review toggle|show|back: hide or show review (Ctrl g v), show it (Ctrl g 3), close
-# files over it (e in yazi).
+# files over it (e in yazi). Show moves the focus to review.
 # jay-sidebar --focus list|agent|review: bring back the hub's panes that are gone, then the focus
 # to that column (Ctrl g 1 2 3 of the tmux hub, when a pane is missing).
 set -uo pipefail
@@ -307,8 +307,8 @@ agent_json() {
   jay_claude_agents | jq -c --arg s "$1" 'first(.[] | select(.sessionId == $s)) // empty'
 }
 
-# Ctrl g v (toggle: hide or show review) and Ctrl g 3 (show: a hidden review comes back with
-# the focus): zellij Run bindings, in a floating pane of one cell that closes when this ends.
+# Ctrl g v (toggle: hide or show review) and Ctrl g 3 (show): a hidden review comes back with
+# the focus. zellij Run bindings, in a floating pane of one cell that closes when this ends.
 # The work waits in the background until that pane is gone, so the focus moves act on the hub's
 # own panes. back: e in files (the hub's yazi keys, config/yazi) closes files at once; yazi's
 # own quit can wait 5 s for its terminal probe in the tmux hub. The call comes from yazi in the

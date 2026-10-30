@@ -1636,8 +1636,9 @@ jay_hub_unhide_review() {
   jay_mux_unhide_review "$review" "${1:-}"
 }
 
+# Hide review, or show the hidden review with the focus (Ctrl g v).
 jay_hub_toggle_review() {
-  if jay_hub_review_hidden >/dev/null; then jay_hub_unhide_review; else jay_hub_hide_review; fi
+  if jay_hub_review_hidden >/dev/null; then jay_hub_unhide_review --focus; else jay_hub_hide_review; fi
 }
 
 # Hide review again when something showed it by accident (zellij: a new floating pane shows the

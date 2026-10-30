@@ -36,8 +36,9 @@ bin/
                          (Ctrl g r), --tick, --bar, --note, --hook, --exec
   jay-setup              jay setup: optional worktrunk pre-start hook: ignored files, dependencies
   jay-sidebar            the list (fzf): rows, keys, remove, prune, new agents, the stop of idle
-                         agents (JAY_AUTO_STOP); --review (Ctrl g v, 3: hide or show review; e
-                         in files: back to review); --quick (a slow pick goes on in the background)
+                         agents (JAY_AUTO_STOP); --review (Ctrl g v, 3: hide review, or show it
+                         with the focus; e in files: back to review); --quick (a slow pick goes
+                         on in the background)
   jay-snapshot           hook (UserPromptSubmit, Stop, PostToolUse): turn chains; --list, --prune
   jay-wake               jay wake: start a background agent that does not run, without a turn
                          (the list stops idle ones: JAY_AUTO_STOP)

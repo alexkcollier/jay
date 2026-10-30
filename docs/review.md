@@ -180,8 +180,8 @@ In files:
 ## Hide review
 
 Ctrl g `v` hides review, and the agent viewer gets its width. Ctrl g `v` again shows review on
-the right, at the width it had. The focus stays in the column that has it. Ctrl g `3` and Enter
-on a worktree row also show a hidden review, and move the focus to it.
+the right, at the width it had, and moves the focus to it. Ctrl g `3` and Enter on a worktree
+row also show a hidden review, and move the focus to it.
 
 - tuicr runs on while review is hidden: your place and draft comments stay. New turns come in
   when review shows again.
