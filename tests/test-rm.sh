@@ -160,7 +160,9 @@ has "self: says it goes after the turn" "is this agent: it goes when this turn e
 has "self: prune.log: waits" "000000s1 (acme/self): rm after its turn: a process waits" "$(cat "$JAY_STATE/prune.log")"
 sleep 1
 eq "self: nothing while the turn runs" "" "$(calls)"
-pgrep -f "jay-rm --after-turn 000000s1" >/dev/null && pass "self: the process waits" || fail "self: the process waits" "no jay-rm --after-turn process"
+# The pgrep and pkill of the process name this HOME: the ids are the same in a test that runs at
+# the same time.
+pgrep -f "$HOME/.*jay-rm --after-turn 000000s1 " >/dev/null && pass "self: the process waits" || fail "self: the process waits" "no jay-rm --after-turn process"
 # The turn ends.
 jq -c 'map(if .id == "000000s1" then .status = "idle" | .state = "done" else . end)' "$STUB/agents.json" >"$STUB/agents.new" \
   && mv "$STUB/agents.new" "$STUB/agents.json"
@@ -188,7 +190,7 @@ jq -c --argjson a "$(bg 000000s2 acme/me 1012 '{"status": "busy"}')" '. + [$a]' 
 out=$(CLAUDE_JOB_DIR="$HOME/.claude/jobs/000000s2/" JAY_RM_POLL=0.2 jay rm acme/me 2>&1); rc=$?
 eq "self by name: exit 0" 0 "$rc"
 has "self by name: after the turn" "it goes when this turn ends" "$out"
-pkill -f "jay-rm --after-turn 000000s2"
+pkill -f "$HOME/.*jay-rm --after-turn 000000s2 "
 out=$(jay wake dup 2>&1); rc=$?
 eq "jay wake: ambiguous name still found" 1 "$rc"
 has "jay wake: lists them" "000000a3  dup" "$out"
