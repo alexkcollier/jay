@@ -854,10 +854,24 @@ jay_hub_role_ready() {
 # Callers run it inside `IFS=$'\t' read … < <(…)`, whose IFS bash 3.2 passes on: split the pids
 # with the usual IFS. A child can end between pgrep and kill (a `sleep` of a watcher loop): under
 # `set -e` (jay go) that failed kill would end the pick, so it may fail.
+# A process that leads a process group of its own (pgid == pid; also a setsid one) is not the
+# pane's: it stays, with all under it. Claude's daemon (2.1.318) is such a child of the client
+# that started it, often the `claude attach` of the agent pane, and the background agents run
+# under it. The pane's own programs (claude attach, tuicr, jay-keys) share jay-pane's group.
 jay_kill_children() {
   local child IFS=$' \t\n'
-  for child in $(pgrep -P "$1"); do
-    jay_kill_children "$child"
+  for child in $(ps -axo pid=,ppid=,pgid= 2>/dev/null | awk -v root="$1" '
+    { kids[$2] = kids[$2] " " $1; group[$1] = $3 }
+    # Children first, deepest first, as before.
+    function walk(p,   n, i, c) {
+      n = split(kids[p], c, " ")
+      for (i = 1; i <= n; i++) {
+        if (group[c[i]] == c[i]) continue
+        walk(c[i])
+        print c[i]
+      }
+    }
+    END { walk(root) }'); do
     kill -TERM "$child" 2>/dev/null || true
   done
   return 0

@@ -70,6 +70,11 @@ at a time). Be careful with `wt step prune` in your own repos: in one repo it wo
 
 ## Known faults
 
+- `jay run stop` of a task (jay-run `stop_group` with a kept pane) still stops every process
+  under the task, also one in a group of its own: turbo's dev servers need that. A `claude`
+  started in a task can start Claude's daemon (2.1.318) under it, and the stop then ends the
+  daemon and its background agents (2026-11-04). Not fixed: rare, and a fix must still stop
+  the dev servers.
 - The agent viewer sometimes stops taking the mouse (item 5 below; closed, not seen since the
   clean restart). If it comes back: quit the hub (Ctrl g, Ctrl q) and run `jay` in a terminal
   that no agent started. Notes: "Item 5 (closed): what we know".

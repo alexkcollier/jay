@@ -96,6 +96,13 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   (also after an attach wakes a retired agent): the running binary is the path after `--` in the
   parent `claude bg-pty-host` process. The daemon starts every worker from its own binary.
 - Claude: a notify_when_idle subscription to an idle session fires at once.
+- Claude (2.1.318): no daemon service ("the daemon runs on demand", `claude daemon --help`). The
+  first client that needs one starts `claude daemon run --origin transient` as its own child (in
+  the hub often the `claude attach` of the agent pane), in a process group and session of its
+  own (pgid = pid, no tty); the background agents (`claude bg-pty-host`) run under it, each in a
+  group of its own. A kill of a pane's process tree kills them all: `jay_kill_children` does not
+  go into a group leader. tmux kill-pane/kill-server and zellij close-pane/server kill -9 leave
+  such a process alive (tested with stubs).
 - Claude (2.1.312): the background-job prompt says to call EnterWorktree before the first edit
   unless the folder is under `.claude/worktrees/`, but its edit guard rejects an Edit only in a
   main checkout ("This background session hasn't isolated its changes yet ... a path inside a
