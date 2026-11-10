@@ -1,21 +1,36 @@
 #!/usr/bin/env bash
-# jay new <branch|pr:N> [-b base] [-t "task note"] [-n name] [-a] [--no-report] [-- prompt...]
+# jay new <branch|pr:N> [-b base] [-t "task note"] [-n name] [-a] [--model m] [--effort e]
+#         [--no-report] [-- prompt...]
 # Create (or reuse) the worktree (worktrunk's wt switch) and store the task note. With a prompt,
 # or -a for an idle one, start a background Claude agent there (see it in the hub list or
 # `claude agents`), named <repo>/<branch> or <repo>/<name> (-n). Without -t, the first line of
 # the prompt becomes the task note. Run by a Claude agent, the prompt tells the new agent to
 # report back to it (--no-report: not). A prompt also tells the agent how to remove its worktree
 # and itself (wt remove, jay rm --self). The main checkout's branch: no (it is the orchestrator's).
+# --model (sonnet, opus, haiku, fable or a full id) and --effort (low, medium, high, xhigh, max)
+# go to claude as they are; without them the agent gets the default of the settings.
 set -euo pipefail
 source "$HOME/.local/lib/jay-lib.sh"
 
-usage() { sed -n '2,8s/^# \{0,1\}//p' "$0"; }
-branch="" base="" task="" name="" agent=false report=true prompt=()
+usage() { sed -n '2,11s/^# \{0,1\}//p' "$0"; }
+# need OPTION ARGS...: the option has a value (not empty, not the next option). Else a usage error.
+need() {
+  if (($# < 2)) || [[ -z "$2" || "$2" == -* ]]; then
+    echo "jay new: $1 needs a value" >&2
+    usage >&2
+    exit 2
+  fi
+}
+branch="" base="" task="" name="" agent=false report=true prompt=() model="" effort=""
 while (($#)); do
   case $1 in
-    -b|--base) base=$2; shift 2 ;;
-    -t|--task) task=$2; shift 2 ;;
-    -n|--name) name=$2; shift 2 ;;
+    -b|--base) need "$@"; base=$2; shift 2 ;;
+    -t|--task) need "$@"; task=$2; shift 2 ;;
+    -n|--name) need "$@"; name=$2; shift 2 ;;
+    --model) need "$@"; model=$2; shift 2 ;;
+    --effort) need "$@"; effort=$2; shift 2 ;;
+    --model=*) model=${1#*=}; need --model "$model"; shift ;;
+    --effort=*) effort=${1#*=}; need --effort "$effort"; shift ;;
     -a|--agent) agent=true; shift ;;
     --no-report) report=false; shift ;;
     --) shift; prompt=("$@"); break ;;
@@ -24,6 +39,10 @@ while (($#)); do
   esac
 done
 [[ -n "$branch" ]] || { usage >&2; exit 2; }
+if [[ -n "$model$effort" && "$agent" != true ]] && ((${#prompt[@]} == 0)); then
+  echo "jay new: --model and --effort are for an agent: give a prompt (-- ...) or -a" >&2
+  exit 2
+fi
 
 # The main checkout belongs to the repo's orchestrator (or to you): jay new starts no worker
 # there. A branch name is checked before wt switch, a pr:N after it (by the path).
@@ -130,8 +149,17 @@ else
 fi
 name=$(jay_unique_name "$name" "$agents")
 args=(--bg --name "$name")
+# No check of the values here: claude takes them as they are. A model that does not exist
+# fails at the agent's first turn (its state: failed); an effort it does not know, claude
+# ignores (2.1.322). The respawnFlags in state.json keep both (claude respawn, jay wake).
+[[ -z "$model" ]] || args+=(--model "$model")
+[[ -z "$effort" ]] || args+=(--effort "$effort")
 if ((${#prompt[@]})); then args+=("${prompt[*]}"); fi
-out=$(cd "$path" && env ${strip[@]+"${strip[@]}"} claude "${args[@]}" 2>&1) || { rc=$?; printf '%s\n' "$out"; exit "$rc"; }
+# On a failure, claude's output goes to stderr: /jay new (the mod) shows only stderr then.
+out=$(cd "$path" && env ${strip[@]+"${strip[@]}"} claude "${args[@]}" 2>&1) || { rc=$?; printf '%s\n' "$out" >&2; exit "$rc"; }
 printf '%s\n' "$out"
+if [[ -n "$model$effort" ]]; then
+  echo "Started with: model ${model:-default}, effort ${effort:-default}"
+fi
 id=$(jay_bg_id "$out" || true)
 [[ -z "$id" || -z "$task" ]] || jay_agent_note "$id" "$task"

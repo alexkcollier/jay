@@ -123,7 +123,8 @@ after its turn. See [Orchestrators](docs/orchestrators.md).
    column: type its first prompt. Or, in a shell, `c` in place of `claude`.
 4. The first worker: press `n` on the `main` row of a repo (the home sign). That starts the
    repo's orchestrator. Ask it for a change; it starts a worker in a new worktree with
-   `jay new <branch> -- <prompt>`, and the worker shows in the list. Or press `N` on the repo
+   `jay new <branch> -- <prompt>` (`--model sonnet --effort low` gives a worker its own model
+   and effort), and the worker shows in the list. Or press `N` on the repo
    row: the list asks for a branch and starts an idle agent in a new worktree.
 5. Pick an agent (Enter or a double click; a click selects) to see it in the middle column and
    its turns in review.
