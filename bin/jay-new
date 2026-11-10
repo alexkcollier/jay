@@ -7,8 +7,8 @@
 # the prompt becomes the task note. Run by a Claude agent, the prompt tells the new agent to
 # report back to it (--no-report: not). A prompt also tells the agent how to remove its worktree
 # and itself (wt remove, jay rm --self). The main checkout's branch: no (it is the orchestrator's).
-# --model (sonnet, opus, haiku, fable or a full id) and --effort (low, medium, high, xhigh, max)
-# go to claude as they are; without them the agent gets the default of the settings.
+# --model (sonnet, opus, haiku, fable or a full id, not checked) and --effort (low, medium,
+# high, xhigh, max; else a usage error) go to claude; without them, the settings' default.
 set -euo pipefail
 source "$HOME/.local/lib/jay-lib.sh"
 
@@ -43,6 +43,15 @@ if [[ -n "$model$effort" && "$agent" != true ]] && ((${#prompt[@]} == 0)); then
   echo "jay new: --model and --effort are for an agent: give a prompt (-- ...) or -a" >&2
   exit 2
 fi
+# claude --bg takes any --effort and ignores one it does not know (2.1.322): the agent then
+# runs on the default effort with no message. The levels of `claude --help`.
+case $effort in
+  "" | low | medium | high | xhigh | max) ;;
+  *)
+    echo "jay new: --effort must be one of low, medium, high, xhigh, max" >&2
+    usage >&2
+    exit 2 ;;
+esac
 
 # The main checkout belongs to the repo's orchestrator (or to you): jay new starts no worker
 # there. A branch name is checked before wt switch, a pr:N after it (by the path).
@@ -149,9 +158,9 @@ else
 fi
 name=$(jay_unique_name "$name" "$agents")
 args=(--bg --name "$name")
-# No check of the values here: claude takes them as they are. A model that does not exist
-# fails at the agent's first turn (its state: failed); an effort it does not know, claude
-# ignores (2.1.322). The respawnFlags in state.json keep both (claude respawn, jay wake).
+# No check of the model: claude takes it as it is, and a model that does not exist fails at the
+# agent's first turn (its state: failed). The effort was checked above. The respawnFlags in
+# state.json keep both (claude respawn, jay wake).
 [[ -z "$model" ]] || args+=(--model "$model")
 [[ -z "$effort" ]] || args+=(--effort "$effort")
 if ((${#prompt[@]})); then args+=("${prompt[*]}"); fi

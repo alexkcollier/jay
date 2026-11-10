@@ -108,6 +108,29 @@ eq "--model without an agent: exit 2" 2 "$?"
 has "it says why" "give a prompt (-- ...) or -a" "$out"
 eq "no agent starts for it" 0 "$(bg_count)"
 
+# --- --effort: only the levels of claude --help; another is a usage error before wt switch ---
+for bad in bogus LOW "high " medium-high 5; do
+  : >"$STUB/claude.calls"; : >"$STUB/wt.calls"
+  out=$(new eval -a --effort "$bad" 2>&1)
+  eq "--effort '$bad': exit 2" 2 "$?"
+  has "--effort '$bad': it says the levels" "jay new: --effort must be one of low, medium, high, xhigh, max" "$out"
+  has "--effort '$bad': the usage text" "jay new <branch|pr:N>" "$out"
+  eq "--effort '$bad': no wt switch" "" "$(cat "$STUB/wt.calls")"
+  eq "--effort '$bad': no agent" 0 "$(bg_count)"
+done
+out=$(new newbranch --effort=bogus -- a prompt 2>&1)
+eq "--effort=bogus with a new branch: exit 2" 2 "$?"
+eq "no worktree for it" "" "$(cat "$STUB/wt.calls")"
+for level in low medium high xhigh max; do
+  : >"$STUB/claude.calls"
+  out=$(new eval -a --effort "$level" 2>&1)
+  eq "--effort $level: exit 0" 0 "$?"
+  eq "--effort $level: goes to claude" "--bg|--name|shop/eval|--effort|$level" "$(last_bg | paste -sd '|' -)"
+  has "--effort $level: the output" "Started with: model default, effort $level" "$out"
+done
+out=$(new eval -a --model any-thing-at-all 2>&1)
+eq "--model is not checked" "--bg|--name|shop/eval|--model|any-thing-at-all" "$(last_bg | paste -sd '|' -)"
+
 # --- A failure of claude: its output on stderr, its exit code ---
 touch "$STUB/bg.fail"
 err=$(new eval -a --model bogus 2>&1 >/dev/null)

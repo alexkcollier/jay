@@ -133,9 +133,9 @@ worktree (siblings named <repo>.<branch>). Keep the main checkout free of work.
 - New worker: here, `jay new <branch> -t "<task>" -- <prompt>` (a new worktree and a
   background agent in it). Give it a prompt it can act on alone: the goal, the files, how to
   test. Start workers only when the user asks or agrees. `--model <m>` and `--effort <e>`
-  (low, medium, high, xhigh, max) start a worker on its own model and effort, as claude takes
-  them (`--model sonnet --effort low` for a cheap stage, `--model opus` to judge); without
-  them it gets the user's default.
+  (low, medium, high, xhigh, max) start a worker on its own model and effort; the model goes
+  as claude takes it (`--model sonnet --effort low` for a cheap stage, `--model opus` to
+  judge); without them it gets the user's default.
 - One worktree per code change (`jay new <new branch>`). Read-only or report tasks on the same
   code, and a follow-up on another worker's output (a critique after an evaluation), share a
   worktree: `jay new <its branch> -n <role> -- <prompt>` (name the agent by its role). Agents in
@@ -241,18 +241,20 @@ The orchestrator runs `jay new <branch> -t "<task>" -- <prompt>` in the main che
    in place of a prompt starts an idle worker. `-n <name>` names it by its role:
    `<repo>/<name>` (a name with a `/` stays as it is). The name goes through `jay_unique_name`:
    a taken one gets `-2`, `-3`, ...
-6. `--model <m>` and `--effort <e>` go to `claude --bg` as they are (`claude --model <m>
-   --effort <e>`), also with `-a` and for a second agent in a worktree. jay does not check the
-   values: an alias (`sonnet`, `opus`, `haiku`, `fable`) or a full id (`claude-sonnet-5-5`), an
-   effort of `low`, `medium`, `high`, `xhigh` or `max`. `jay new` then prints `Started with:
-   model <m>, effort <e>`. Without them the worker gets the default of your settings; the
-   orchestrator's own `ANTHROPIC_MODEL` does not reach it (`jay new` starts the worker without
-   the caller's `CLAUDE*` and `ANTHROPIC*` variables, see below).
-   `claude --bg` itself does not check the values either (2.1.322): a model that does not
-   exist starts the worker, and its first turn fails ("There's an issue with the selected
-   model", state `failed` in the list); an effort it does not know, it ignores (the worker runs
-   on the default effort). Claude keeps both flags in the worker's `respawnFlags`, so
-   `claude respawn` and `jay wake` start it again on the same model and effort.
+6. `--model <m>` and `--effort <e>` go to `claude --bg` (`claude --model <m> --effort <e>`),
+   also with `-a` and for a second agent in a worktree. The model goes as it is, not checked:
+   an alias (`sonnet`, `opus`, `haiku`, `fable`) or a full id (`claude-sonnet-5-5`). The effort
+   must be `low`, `medium`, `high`, `xhigh` or `max` (the levels of `claude --help`); another
+   one is a usage error (exit 2, before `wt switch`, no worker). `jay new` then prints
+   `Started with: model <m>, effort <e>`. Without them the worker gets the default of your
+   settings; the orchestrator's own `ANTHROPIC_MODEL` does not reach it (`jay new` starts the
+   worker without the caller's `CLAUDE*` and `ANTHROPIC*` variables, see below).
+   `claude --bg` itself does not check the values (2.1.322): a model that does not exist
+   starts the worker, and its first turn fails ("There's an issue with the selected model",
+   state `failed` in the list); an effort it does not know, it ignores with no message (the
+   worker would run on the default effort), so jay checks the effort. Claude keeps both flags
+   in the worker's `respawnFlags`, so `claude respawn` and `jay wake` start it again on the
+   same model and effort.
 
 A cheap stage and a judge in one shared worktree:
 

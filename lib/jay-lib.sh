@@ -975,8 +975,8 @@ $JAY_ROOTS (a folder per client, then the repo; worktrees are siblings named <re
 - New worktree with an agent: in the repo's main checkout, \`jay new <branch> -t "<task>" -- <prompt>\`
   (-a: an idle agent); for a branch whose worktree exists, the same command starts an agent in
   that worktree. It gives the agent a name no other agent has. \`--model <m>\` and
-  \`--effort <e>\` start it on its own model and effort (\`--model sonnet --effort low\` for a
-  cheap stage); without them it gets the user's default. Start agents only when the user
+  \`--effort <e>\` (low, medium, high, xhigh, max) start it on its own model and effort
+  (\`--model sonnet --effort low\` for a cheap stage); without them it gets the user's default. Start agents only when the user
   asks or agrees.
 - To an agent goes every change and every in-depth task, also one that only reads (an
   evaluation, audit, research, a report), and each task the user gives to "an agent". Use the
@@ -1039,9 +1039,9 @@ worktree (siblings named $1.<branch>). Keep the main checkout free of work.
 - New worker: here, \`jay new <branch> -t "<task>" -- <prompt>\` (a new worktree and a
   background agent in it). Give it a prompt it can act on alone: the goal, the files, how to
   test. Start workers only when the user asks or agrees. \`--model <m>\` and \`--effort <e>\`
-  (low, medium, high, xhigh, max) start a worker on its own model and effort, as claude takes
-  them (\`--model sonnet --effort low\` for a cheap stage, \`--model opus\` to judge); without
-  them it gets the user's default.
+  (low, medium, high, xhigh, max) start a worker on its own model and effort; the model goes
+  as claude takes it (\`--model sonnet --effort low\` for a cheap stage, \`--model opus\` to
+  judge); without them it gets the user's default.
 - One worktree per code change (\`jay new <new branch>\`). Read-only or report tasks on the same
   code, and a follow-up on another worker's output (a critique after an evaluation), share a
   worktree: \`jay new <its branch> -n <role> -- <prompt>\` (name the agent by its role). Agents in
