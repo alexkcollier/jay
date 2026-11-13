@@ -223,6 +223,11 @@ Facts about your own machine (where the live install is, how your mod loads) go 
   to the focused pane raw. tmux has no option to drop them. tmux holds a lone Esc 500 ms (not
   escape-time) while a query to the terminal has no answer (a test pty with no pixel size gets
   `\e[18t\e[14t`; answer them or set the size).
+- Rex (Option set to compose characters) sends an Option-composed character with the Alt bit
+  under modifyOtherKeys: `/` from Option+é (Canadian CSA) arrives as `\e[27;3;47~`, tmux reads
+  M-/ and sends it on as M-/ (`^[/` in a plain shell), not `/`. jay.conf binds M-/ to `/`.
+  A test: `tests/pty-client.py` on a throwaway socket, those bytes in `<out>.keys`, `cat -v` in
+  the pane.
 - `extended-keys on` with `terminal-features …:extkeys`: `claude attach` in a pane asks for
   mode 2 (`#{pane_key_mode}` = `Ext 2`); Shift+Enter from the terminal as CSI u (`\e[13;2u`) or
   xterm's `\e[27;2;13~` reaches Claude as a new line. `claude attach` turns on the mouse modes

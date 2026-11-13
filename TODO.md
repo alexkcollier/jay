@@ -34,6 +34,15 @@ bin/jay-pane) ⇄ files (yazi).
   wait: jay closes the files pane itself (`jay-sidebar --review back`). Yazi's main branch
   (9561890a, 2026-10-18) ends the probe 2 s after the start: with the next yazi release the 5 s
   of `q` and `o` should go. Check it then.
+- tmux hub in Rex (2026-11-13): Rex sends each Option-composed character with the Alt bit
+  (CLAUDE.md, tmux facts), and jay.conf turns only M-/ back into its character. On the Canadian
+  CSA layout (macOS `com.apple.keylayout.Canadian-CSA`, read with UCKeyTranslate) Option also
+  types `` @ [ ] { } | \ ~ ` < > `` (Option+2, 9, 0, 7, 8, - or the key left of 1, è or ù, ç, à,
+  comma, period). These very likely reach the pane as M-<char> too: `^[[` in a plain shell (a CSI
+  start), an Alt key in Claude, not text. `Ctrl g [` (copy-mode) gets M-[ and does nothing. Not
+  tested with Rex itself. The M-p, M-P, M-o binds do not collide: no Option key on CSA types p,
+  P or o. Choices: one `send-keys` bind per character (each takes away that real Alt key), a
+  Rex setting that sends composed characters as plain text, or the zellij hub (not checked).
 - An agent whose home is gone goes on as a copy with a new id (docs/working.md, "When the folder
   an agent came from goes"): its turn chain starts again, and an old entry whose recorded
   worktree is on disk stays hidden until that worktree goes. Claude has no option to move an
