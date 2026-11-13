@@ -34,15 +34,24 @@ bin/jay-pane) ⇄ files (yazi).
   wait: jay closes the files pane itself (`jay-sidebar --review back`). Yazi's main branch
   (9561890a, 2026-10-18) ends the probe 2 s after the start: with the next yazi release the 5 s
   of `q` and `o` should go. Check it then.
-- tmux hub in Rex (2026-11-13): Rex sends each Option-composed character with the Alt bit
-  (CLAUDE.md, tmux facts), and jay.conf turns only M-/ back into its character. On the Canadian
-  CSA layout (macOS `com.apple.keylayout.Canadian-CSA`, read with UCKeyTranslate) Option also
-  types `` @ [ ] { } | \ ~ ` < > `` (Option+2, 9, 0, 7, 8, - or the key left of 1, è or ù, ç, à,
-  comma, period). These very likely reach the pane as M-<char> too: `^[[` in a plain shell (a CSI
-  start), an Alt key in Claude, not text. `Ctrl g [` (copy-mode) gets M-[ and does nothing. Not
-  tested with Rex itself. The M-p, M-P, M-o binds do not collide: no Option key on CSA types p,
-  P or o. Choices: one `send-keys` bind per character (each takes away that real Alt key), a
-  Rex setting that sends composed characters as plain text, or the zellij hub (not checked).
+- tmux hub in Rex (2026-11-13): a Rex fault. Under modifyOtherKeys 2 only, Rex sends every
+  character that Option composes as Alt+<char> (CLAUDE.md, tmux facts). Legacy and kitty modes are
+  correct. A bug report for Rex is written but not sent yet (`rex-option-bug.local.md` in the
+  rex-option-slash worktree, not in git). On the Canadian CSA layout
+  (`com.apple.keylayout.Canadian-CSA`) this is 43 Option and 44 Shift+Option characters, for
+  example `` / @ [ ] { } | \ ~ ` < > `` and `± π « »`. Dead keys are correct. jay.conf turns only
+  M-/ back into `/`. In the tmux hub the others reach the pane as M-<char>: `^[[` in a plain shell
+  (a CSI start), an Alt key in Claude, not text. `Ctrl g [` (copy-mode) gets M-[ and does
+  nothing. Not affected: the zellij hub (zellij asks the terminal for kitty flags 1), and a plain
+  Rex pane with Claude (Claude asks for kitty `>5u` and for modifyOtherKeys 2, and kitty wins).
+  The M-p, M-P, M-o binds do not collide (no CSA Option key types p, P or o). Possible jay
+  workarounds until Rex fixes it (not built):
+  - A bind for each CSA character (`bind -n M-± send-keys ±`, `bind -n M-S-± …`: tmux 3.8 takes
+    these names). The bind applies only to Rex clients (`#{m:rex *,#{client_termtype}}`, from
+    Rex's XTVERSION reply `rex 0.1.0-preview.18`), else it sends the M- key on. About 90 binds,
+    and they work for CSA only.
+  - Not possible: tmux asks the terminal for kitty flags (`terminal-overrides
+    Eneks=\E[>1u`). tmux 3.8 does not read the kitty Esc `\e[27u` and passes it raw to the pane.
 - An agent whose home is gone goes on as a copy with a new id (docs/working.md, "When the folder
   an agent came from goes"): its turn chain starts again, and an old entry whose recorded
   worktree is on disk stays hidden until that worktree goes. Claude has no option to move an
