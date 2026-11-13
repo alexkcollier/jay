@@ -39,19 +39,23 @@ bin/jay-pane) ⇄ files (yazi).
   correct. A bug report for Rex is written but not sent yet (`rex-option-bug.local.md` in the
   rex-option-slash worktree, not in git). On the Canadian CSA layout
   (`com.apple.keylayout.Canadian-CSA`) this is 43 Option and 44 Shift+Option characters, for
-  example `` / @ [ ] { } | \ ~ ` < > `` and `± π « »`. Dead keys are correct. jay.conf turns only
-  M-/ back into `/`. In the tmux hub the others reach the pane as M-<char>: `^[[` in a plain shell
-  (a CSI start), an Alt key in Claude, not text. `Ctrl g [` (copy-mode) gets M-[ and does
-  nothing. Not affected: the zellij hub (zellij asks the terminal for kitty flags 1), and a plain
-  Rex pane with Claude (Claude asks for kitty `>5u` and for modifyOtherKeys 2, and kitty wins).
-  The M-p, M-P, M-o binds do not collide (no CSA Option key types p, P or o). Possible jay
-  workarounds until Rex fixes it (not built):
-  - A bind for each CSA character (`bind -n M-± send-keys ±`, `bind -n M-S-± …`: tmux 3.8 takes
-    these names). The bind applies only to Rex clients (`#{m:rex *,#{client_termtype}}`, from
-    Rex's XTVERSION reply `rex 0.1.0-preview.18`), else it sends the M- key on. About 90 binds,
-    and they work for CSA only.
-  - Not possible: tmux asks the terminal for kitty flags (`terminal-overrides
-    Eneks=\E[>1u`). tmux 3.8 does not read the kitty Esc `\e[27u` and passes it raw to the pane.
+  example `` / @ [ ] { } | \ ~ ` < > `` and `± π « »`. Dead keys are correct. Without a workaround,
+  in the tmux hub they reach the pane as M-<char>: `^[[` in a plain shell (a CSI start), an Alt
+  key in Claude, not text. Not affected: the zellij hub (zellij asks the terminal for kitty flags
+  1), and a plain Rex pane with Claude (Claude asks for kitty `>5u` and for modifyOtherKeys 2, and
+  kitty wins).
+  Done (2026-11-13, Alex's choice): jay.conf's "Rex workaround" block, made by
+  `tools/rex-keys.swift` from the layout. For Rex clients only (`#{m:rex *,#{client_termtype}}`,
+  from Rex's XTVERSION reply), M-<char> and M-S-<char> type the 84 characters that Option and
+  Shift+Option compose on CSA. Other terminals keep their M- keys. `Ctrl g` then Option+9 (`[`)
+  opens copy-mode for Rex too. Tested by `tests/test-keys-tmux.sh`. The M-p, M-P, M-o binds do
+  not collide (no CSA Option key types p, P or o). Limits that are left: the Apple logo (U+F8FF;
+  tmux cannot bind it), a tmux popup (the launcher `Ctrl g r`, the tasks `Ctrl g t`: the popup
+  takes the keys before the key tables, so Option+é gives `\e/` there), and tmux's own prompts
+  (not tested). When Rex fixes the fault: remove the block, the `bind -T jay M-[` line under it,
+  and `tools/rex-keys.swift`; keep `tests/test-keys-tmux.sh`'s M-p, M-P, M-o and Ctrl g checks.
+  Not possible: tmux asks the terminal for kitty flags (`terminal-overrides Eneks=\E[>1u`).
+  tmux 3.8 does not read the kitty Esc `\e[27u` and passes it raw to the pane.
 - An agent whose home is gone goes on as a copy with a new id (docs/working.md, "When the folder
   an agent came from goes"): its turn chain starts again, and an old entry whose recorded
   worktree is on disk stays hidden until that worktree goes. Claude has no option to move an

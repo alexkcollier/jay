@@ -6,13 +6,16 @@
 # PTY_GHOSTTY=<secs>: answer the terminal queries in the output as Ghostty 1.3.2 does (XTVERSION,
 # DA1, DA2, kitty graphics, colors, sizes). The first query of each kind at once (tmux's own, at
 # the start), each later one <secs> late. The answers go to OUT.answers too.
+# PTY_XTVERSION=<name>: the XTVERSION answer in place of "ghostty 1.3.2" ("rex 0.1.0": a Rex client).
 import binascii, fcntl, os, pty, re, select, signal, struct, sys, termios, time
 
 out, cols, rows, cmd = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4:]
 late = os.environ.get("PTY_GHOSTTY")
+xtversion = os.environ.get("PTY_XTVERSION", "ghostty 1.3.2").encode()
 pid, fd = pty.fork()
 if pid == 0:
     os.environ.pop("PTY_GHOSTTY", None)
+    os.environ.pop("PTY_XTVERSION", None)
     os.execvp(cmd[0], cmd)
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 keys = out + ".keys"
@@ -31,7 +34,7 @@ tail = b""
 def answer(m):
     q = m.group(0)
     if q.startswith(b"\x1b[>") and q.endswith(b"q"):
-        return b"\x1bP>|ghostty 1.3.2" + ST
+        return b"\x1bP>|" + xtversion + ST
     if q.endswith(b"c"):
         return b"\x1b[>1;10;0c" if b">" in q else b"\x1b[?62;22;52c"
     if m.group(1) is not None:

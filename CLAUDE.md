@@ -226,7 +226,12 @@ Facts about your own machine (where the live install is, how your mod loads) go 
 - Rex (0.1.0-preview.18; Option set to "composes text") sends an Option-composed character with
   the Alt bit only under modifyOtherKeys 2: `/` from Option+é (Canadian CSA) arrives as
   `\e[27;3;47~`, tmux reads M-/ and sends it on as M-/ (`^[/` in a plain shell), not `/`. Legacy
-  and kitty modes send the text. jay.conf binds M-/ to `/` (TODO.md has the rest). tmux asks the
+  and kitty modes send the text. jay.conf's "Rex workaround" block binds M-<char> and
+  M-S-<char> of each Canadian CSA Option character to type it, for Rex clients only
+  (`#{m:rex *,#{client_termtype}}`). `swift tools/rex-keys.swift --write config/tmux/jay.conf`
+  makes the block again (another layout: its id as an argument). `tests/test-keys-tmux.sh` tests
+  it. Remove the block when Rex fixes the fault (TODO.md). tmux 3.8 cannot bind a private-use
+  character (U+F8FF, the Apple logo: "unknown key"). tmux asks the
   terminal for modifyOtherKeys 2 (`Eneks`) only while the focused pane asks for extended keys.
   tmux 3.8 does not read the kitty Esc `\e[27u` (it passes it raw; `\e[27;1u` it reads). zellij
   0.45 asks the terminal for kitty flags 1 (`\e[>1u`). Claude asks for both kitty `>5u` and
